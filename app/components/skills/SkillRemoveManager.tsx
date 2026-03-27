@@ -34,8 +34,9 @@ export default function SkillRemoveManager({ items }: SkillRemoveManagerProps) {
       .contains('core_skills', [skill])
 
     const classIds = new Set(
-      ((data ?? []) as Array<{ class_blocks: { class_id: string } }>)
-        .map((row) => row.class_blocks?.class_id)
+      ((data ?? []) as Array<{ class_blocks: { class_id: string }[] }>)
+        .flatMap((row) => row.class_blocks ?? [])
+        .map((cb) => cb.class_id)
         .filter(Boolean)
     )
 

@@ -22,7 +22,9 @@
       "Bash(Remove-Item -Recurse -Force \"C:\\\\Users\\\\river\\\\OneDrive\\\\Documents\\\\ninja-heros-app\\\\.next\\\\cache\" -ErrorAction SilentlyContinue)",
       "Bash(Write-Output \"Cache cleared\")",
       "Bash(npx tsc:*)",
-      "Bash(ipconfig)"
+      "Bash(ipconfig)",
+      "Bash(git config:*)",
+      "Bash(npm run:*)"
     ]
   }
 }

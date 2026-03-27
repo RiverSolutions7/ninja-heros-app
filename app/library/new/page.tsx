@@ -104,7 +104,7 @@ export default function NewClassPage() {
     setDraft((prev) => ({
       ...prev,
       blocks: prev.blocks.map((b) =>
-        b.localId === localId ? { ...b, ...changes } : b
+        b.localId === localId ? { ...b, ...changes } as DraftBlock : b
       ),
     }))
   }

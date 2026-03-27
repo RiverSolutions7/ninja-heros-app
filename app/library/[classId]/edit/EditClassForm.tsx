@@ -151,7 +151,7 @@ export default function EditClassForm({ cls, initialSkills }: EditClassFormProps
     setDraft((prev) => ({
       ...prev,
       blocks: prev.blocks.map((b) =>
-        b.localId === localId ? { ...b, ...changes } : b
+        b.localId === localId ? { ...b, ...changes } as DraftBlock : b
       ),
     }))
   }
@@ -542,6 +542,7 @@ export default function EditClassForm({ cls, initialSkills }: EditClassFormProps
           onRemove={removeBlock}
           availableSkills={availableSkills}
           onAddSkill={handleAddSkill}
+          ageGroup={draft.age_group}
         />
       </div>
 
