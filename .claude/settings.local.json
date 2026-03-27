@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(npm install:*)",
+      "Read(//usr/local/**)",
+      "Bash(echo \"PATH: $PATH\")",
+      "Bash(cmd.exe /c \"where node 2>&1 && where npm 2>&1\")",
+      "Bash(cmd.exe /c \"where node\")",
+      "Bash(cmd.exe /c \"where npm\")",
+      "Bash(cmd.exe /c \"where npx\")",
+      "Read(//c//**)",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Program Files \\(x86\\)/**)",
+      "Read(//c/Users/river/**)",
+      "Read(//c/Users/river/scoop/shims/**)",
+      "Read(//c/Users/river/AppData/Roaming/**)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(export PATH=\"/c/Program Files/nodejs:$PATH\")",
+      "Bash(ls \"C:\\\\Users\\\\river\\\\OneDrive\\\\Documents\\\\ninja-heros-app\\\\node_modules\\\\.bin\"\" 2>/dev/null | grep next | head -5; ls \"/c/Users/river/OneDrive/Documents/ninja-heros-app/node_modules/.bin/ \")",
+      "Bash(Remove-Item -Recurse -Force \"C:\\\\Users\\\\river\\\\OneDrive\\\\Documents\\\\ninja-heros-app\\\\.next\\\\server\\\\chunks\" -ErrorAction SilentlyContinue)",
+      "Bash(Remove-Item -Recurse -Force \"C:\\\\Users\\\\river\\\\OneDrive\\\\Documents\\\\ninja-heros-app\\\\.next\\\\cache\" -ErrorAction SilentlyContinue)",
+      "Bash(Write-Output \"Cache cleared\")",
+      "Bash(npx tsc:*)",
+      "Bash(ipconfig)"
+    ]
+  }
+}
