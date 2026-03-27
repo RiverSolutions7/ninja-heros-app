@@ -147,3 +147,12 @@
     @apply badge bg-bg-border/80 text-text-dim border border-bg-border;
   }
 }
+
+/* Mobile-only: force date inputs to match other field widths */
+@media (max-width: 640px) {
+  input[type="date"] {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+}

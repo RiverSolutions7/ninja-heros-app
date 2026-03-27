@@ -28,6 +28,7 @@ function formatDate(dateStr: string) {
 
 export default function ClassCard({ cls, showActions = true, showHandoffRemove = false }: ClassCardProps) {
   const [expanded, setExpanded] = useState(false)
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
 
   const photoUrls = cls.blocks.flatMap((b) =>
     b.type === 'lane' ? b.stations.map((s) => s.photo_url).filter(Boolean) : []
@@ -174,11 +175,10 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
                         {block.stations.map((station, stIdx) => (
                           <div key={station.id} className="flex gap-3.5">
                             {station.photo_url && (
-                              <a
-                                href={station.photo_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                              <button
+                                type="button"
                                 className="flex-shrink-0"
+                                onClick={(e) => { e.stopPropagation(); setLightboxUrl(station.photo_url) }}
                               >
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
@@ -186,7 +186,7 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
                                   alt={`Station ${stIdx + 1}`}
                                   className="w-20 h-20 rounded-xl object-cover border border-bg-border shadow-card hover:scale-105 transition-transform duration-200 cursor-pointer"
                                 />
-                              </a>
+                              </button>
                             )}
                             <div className="flex-1 min-w-0">
                               <p className="text-xs font-heading text-text-dim mb-0.5">
@@ -297,6 +297,30 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
           )}
         </div>
       </div>
+      {/* Photo lightbox */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <button
+            type="button"
+            className="absolute top-4 right-4 text-white/70 hover:text-white p-2"
+            onClick={() => setLightboxUrl(null)}
+          >
+            <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={lightboxUrl}
+            alt="Station photo"
+            className="max-w-full max-h-full object-contain rounded-xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   )
 }
