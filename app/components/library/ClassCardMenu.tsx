@@ -39,7 +39,7 @@ export default function ClassCardMenu({
   const [loadingFolders, setLoadingFolders] = useState(false)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
-  const [menuPos, setMenuPos] = useState({ top: 0, right: 0 })
+  const [menuPos, setMenuPos] = useState({ bottom: 0, right: 0 })
 
   // Close on outside click — must exclude both the trigger button AND the
   // portal dropdown itself, otherwise mousedown fires before click and
@@ -65,7 +65,7 @@ export default function ClassCardMenu({
   function handleToggle() {
     if (buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect()
-      setMenuPos({ top: rect.bottom + 6, right: window.innerWidth - rect.right })
+      setMenuPos({ bottom: window.innerHeight - rect.top + 6, right: window.innerWidth - rect.right })
     }
     setView('main')
     setOpen((v) => !v)
@@ -195,7 +195,7 @@ export default function ClassCardMenu({
             <div
               ref={menuRef}
               className="fixed z-50 min-w-[160px] bg-bg-card border border-bg-border rounded-xl shadow-2xl overflow-hidden"
-              style={{ top: menuPos.top, right: menuPos.right }}
+              style={{ bottom: menuPos.bottom, right: menuPos.right }}
             >
               {view === 'main' ? (
                 <>
