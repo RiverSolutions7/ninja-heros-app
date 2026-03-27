@@ -18,7 +18,7 @@ export type Difficulty =
 
 export type BlockType = 'warmup' | 'lane' | 'game'
 
-export type WarmupTime = '5 min' | '6 min' | '7 min'
+export type WarmupTime = '1 min' | '2 min' | '3 min' | '4 min' | '5 min' | '6 min' | '7 min' | '8 min' | '9 min' | '10 min'
 
 // Skills are now dynamic (stored in the `skills` table).
 // Skill is a plain string so custom skills work seamlessly.
@@ -55,7 +55,7 @@ export const DIFFICULTIES: Difficulty[] = [
   'Advanced',
 ]
 
-export const WARMUP_TIMES: WarmupTime[] = ['5 min', '6 min', '7 min']
+export const WARMUP_TIMES: WarmupTime[] = ['1 min', '2 min', '3 min', '4 min', '5 min', '6 min', '7 min', '8 min', '9 min', '10 min']
 
 // ============================================================
 // Raw DB Row Types
