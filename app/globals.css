@@ -148,11 +148,13 @@
   }
 }
 
-/* Mobile-only: force date inputs to match other field widths */
+/* Mobile-only: constrain date input to parent width */
 @media (max-width: 640px) {
   input[type="date"] {
-    width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
+    display: block;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
   }
 }
