@@ -60,12 +60,11 @@ export default function VideoCapture({ preview, onFileSelected }: VideoCapturePr
         </div>
       )}
 
-      {/* Camera input — forces video capture */}
+      {/* Camera/library input */}
       <input
         ref={cameraRef}
         type="file"
         accept="video/*"
-        capture="environment"
         onChange={handleChange}
         className="hidden"
         aria-label="Record video"

@@ -124,8 +124,8 @@ export default function StationCard({ station, onChange, onRemove }: StationCard
             </button>
           </div>
 
-          <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={handleFileAdded} className="hidden" />
-          <input ref={libraryRef} type="file" accept="image/*" onChange={handleFileAdded} className="hidden" />
+          <input ref={cameraRef} type="file" accept="image/*,video/*" onChange={handleFileAdded} className="hidden" />
+          <input ref={libraryRef} type="file" accept="image/*,video/*" onChange={handleFileAdded} className="hidden" />
         </div>
       </div>
     </div>

@@ -60,12 +60,11 @@ export default function CameraUpload({ preview, onFileSelected }: CameraUploadPr
         )}
       </div>
 
-      {/* Camera input — forces camera capture */}
+      {/* Camera/library input */}
       <input
         ref={cameraRef}
         type="file"
-        accept="image/*"
-        capture="environment"
+        accept="image/*,video/*"
         onChange={handleChange}
         className="hidden"
         aria-label="Take station photo"
@@ -75,7 +74,7 @@ export default function CameraUpload({ preview, onFileSelected }: CameraUploadPr
       <input
         ref={libraryRef}
         type="file"
-        accept="image/*"
+        accept="image/*,video/*"
         onChange={handleChange}
         className="hidden"
         aria-label="Choose photo from library"
