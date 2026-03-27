@@ -8,7 +8,8 @@ interface CameraUploadProps {
 }
 
 export default function CameraUpload({ preview, onFileSelected }: CameraUploadProps) {
-  const inputRef = useRef<HTMLInputElement>(null)
+  const cameraRef = useRef<HTMLInputElement>(null)
+  const libraryRef = useRef<HTMLInputElement>(null)
   const [fullscreen, setFullscreen] = useState(false)
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -16,24 +17,35 @@ export default function CameraUpload({ preview, onFileSelected }: CameraUploadPr
     if (!file) return
     const objectUrl = URL.createObjectURL(file)
     onFileSelected(file, objectUrl)
-    // Reset input so same file can be re-selected
     e.target.value = ''
   }
 
   return (
     <>
-      <div className="flex items-center gap-3 mt-1">
-        {/* Camera button */}
+      <div className="flex items-center gap-3 mt-1 flex-wrap">
+        {/* Take Photo — triggers camera directly */}
         <button
           type="button"
-          onClick={() => inputRef.current?.click()}
+          onClick={() => cameraRef.current?.click()}
           className="flex items-center gap-1.5 text-sm font-semibold text-accent-blue hover:text-accent-blue/80 transition-colors py-2"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
-          {preview ? 'Change Photo' : 'Add Photo'}
+          {preview ? 'Retake Photo' : 'Take Photo'}
+        </button>
+
+        {/* Choose from Library */}
+        <button
+          type="button"
+          onClick={() => libraryRef.current?.click()}
+          className="flex items-center gap-1.5 text-sm font-semibold text-text-muted hover:text-text-primary transition-colors py-2"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          Choose from Library
         </button>
 
         {/* Thumbnail */}
@@ -48,15 +60,25 @@ export default function CameraUpload({ preview, onFileSelected }: CameraUploadPr
         )}
       </div>
 
-      {/* Hidden file input — triggers camera on mobile */}
+      {/* Camera input — forces camera capture */}
       <input
-        ref={inputRef}
+        ref={cameraRef}
         type="file"
         accept="image/*"
         capture="environment"
         onChange={handleChange}
         className="hidden"
-        aria-label="Take or upload station photo"
+        aria-label="Take station photo"
+      />
+
+      {/* Library input — opens photo library */}
+      <input
+        ref={libraryRef}
+        type="file"
+        accept="image/*"
+        onChange={handleChange}
+        className="hidden"
+        aria-label="Choose photo from library"
       />
 
       {/* Fullscreen photo preview */}
