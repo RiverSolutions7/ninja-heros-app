@@ -23,9 +23,7 @@ function createEmptyStation(sortOrder: number): DraftStation {
     sort_order: sortOrder,
     equipment: '',
     description: '',
-    photo_url: null,
-    photoFile: null,
-    photoPreview: null,
+    photos: [],
   }
 }
 
@@ -44,14 +42,8 @@ export default function LaneBlockForm({
   const [addSkillSaving, setAddSkillSaving] = useState(false)
   const newSkillInputRef = useRef<HTMLInputElement>(null)
 
-  // Details section (coach name + skills) starts open only if data already exists
-  const [showDetails, setShowDetails] = useState(
-    !!block.instructor_name || block.core_skills.length > 0
-  )
-
-  const heading = block.instructor_name
-    ? `Lane ${laneNumber} — ${block.instructor_name}`
-    : `Lane ${laneNumber}`
+  // Skills section starts open only if skills already exist
+  const [showDetails, setShowDetails] = useState(block.core_skills.length > 0)
 
   function toggleSkill(skill: string) {
     const current = block.core_skills
@@ -121,11 +113,8 @@ export default function LaneBlockForm({
 
   return (
     <div className="card overflow-hidden border-l-4 border-accent-fire">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-accent-fire/[0.12] to-transparent border-b border-bg-border">
-        <span className="font-heading text-accent-fire text-sm tracking-wide">
-          {heading}
-        </span>
+      {/* Header — just the X button */}
+      <div className="flex items-center justify-end px-4 py-2.5 bg-gradient-to-r from-accent-fire/[0.12] to-transparent border-b border-bg-border">
         <button
           type="button"
           onClick={onRemove}
@@ -139,6 +128,18 @@ export default function LaneBlockForm({
       </div>
 
       <div className="px-4 py-4 space-y-5">
+        {/* Lane Name */}
+        <div>
+          <label className="field-label">Lane Name</label>
+          <input
+            type="text"
+            value={block.instructor_name}
+            onChange={(e) => onChange({ instructor_name: e.target.value })}
+            placeholder="e.g. Parkour Lane, Tumbling Lane..."
+            className="field-input"
+          />
+        </div>
+
         {/* Stations — primary focus */}
         <div>
           <div className="flex items-center justify-between mb-3">
@@ -188,15 +189,10 @@ export default function LaneBlockForm({
             className="w-full flex items-center justify-between text-left group"
           >
             <span className="text-xs font-semibold text-text-dim uppercase tracking-wider group-hover:text-text-muted transition-colors">
-              Coach &amp; Skills
-              {(block.instructor_name || block.core_skills.length > 0) && (
+              Skills
+              {block.core_skills.length > 0 && (
                 <span className="ml-2 text-accent-fire/70 normal-case tracking-normal font-normal">
-                  {[
-                    block.instructor_name,
-                    block.core_skills.length > 0 ? `${block.core_skills.length} skill${block.core_skills.length !== 1 ? 's' : ''}` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
+                  {block.core_skills.length} skill{block.core_skills.length !== 1 ? 's' : ''}
                 </span>
               )}
             </span>
@@ -213,18 +209,6 @@ export default function LaneBlockForm({
 
           {showDetails && (
             <div className="mt-4 space-y-4">
-              {/* Instructor name */}
-              <div>
-                <label className="field-label">Coach Name</label>
-                <input
-                  type="text"
-                  value={block.instructor_name}
-                  onChange={(e) => onChange({ instructor_name: e.target.value })}
-                  placeholder="e.g. Coach Mike"
-                  className="field-input"
-                />
-              </div>
-
               {/* Core skills */}
               <div>
                 <label className="field-label">Core Skills</label>

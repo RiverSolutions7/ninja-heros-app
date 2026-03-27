@@ -207,16 +207,21 @@ export default function NewClassPage() {
 
           if (lErr) throw lErr
 
-          // Insert stations (with photo upload)
+          // Insert stations (with photo uploads)
           for (let j = 0; j < draftBlock.stations.length; j++) {
             const station = draftBlock.stations[j]
-            let photoUrl: string | null = null
+            const uploadedUrls: string[] = []
 
-            if (station.photoFile) {
-              try {
-                photoUrl = await uploadStationPhoto(station.photoFile)
-              } catch (uploadErr) {
-                console.error('Photo upload failed for station', j + 1, uploadErr)
+            for (const photo of station.photos) {
+              if (photo.photoFile) {
+                try {
+                  const url = await uploadStationPhoto(photo.photoFile)
+                  uploadedUrls.push(url)
+                } catch (uploadErr) {
+                  console.error('Photo upload failed for station', j + 1, uploadErr)
+                }
+              } else if (photo.photo_url) {
+                uploadedUrls.push(photo.photo_url)
               }
             }
 
@@ -225,7 +230,8 @@ export default function NewClassPage() {
               sort_order: j,
               equipment: station.equipment,
               description: station.description,
-              photo_url: photoUrl,
+              photo_url: uploadedUrls[0] ?? null,
+              photo_urls: uploadedUrls,
             })
             if (sErr) throw sErr
           }

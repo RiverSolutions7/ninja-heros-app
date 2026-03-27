@@ -31,8 +31,14 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
 
   const photoUrls = cls.blocks.flatMap((b) =>
-    b.type === 'lane' ? b.stations.map((s) => s.photo_url).filter(Boolean) : []
-  ) as string[]
+    b.type === 'lane'
+      ? b.stations.flatMap((s) =>
+          s.photo_urls?.length > 0
+            ? s.photo_urls
+            : s.photo_url ? [s.photo_url] : []
+        )
+      : []
+  )
   const laneVideoUrls = cls.blocks
     .filter((b): b is Extract<typeof b, { type: 'lane' }> => b.type === 'lane')
     .map((b) => b.data.video_url)
@@ -173,25 +179,34 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
                     {block.stations.length > 0 && (
                       <div className="px-4 pb-4 space-y-3.5">
                         {block.stations.map((station, stIdx) => (
-                          <div key={station.id} className="flex gap-3.5">
-                            {station.photo_url && (
-                              <button
-                                type="button"
-                                className="flex-shrink-0"
-                                onClick={(e) => { e.stopPropagation(); setLightboxUrl(station.photo_url) }}
-                              >
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={station.photo_url}
-                                  alt={`Station ${stIdx + 1}`}
-                                  className="w-20 h-20 rounded-xl object-cover border border-bg-border shadow-card hover:scale-105 transition-transform duration-200 cursor-pointer"
-                                />
-                              </button>
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-heading text-text-dim mb-0.5">
-                                Station {stIdx + 1}
-                              </p>
+                          <div key={station.id} className="space-y-2">
+                            {/* Photos row */}
+                            {(() => {
+                              const urls = station.photo_urls?.length > 0
+                                ? station.photo_urls
+                                : station.photo_url ? [station.photo_url] : []
+                              return urls.length > 0 ? (
+                                <div className="flex flex-wrap gap-2">
+                                  {urls.map((url, photoIdx) => (
+                                    <button
+                                      key={photoIdx}
+                                      type="button"
+                                      className="flex-shrink-0"
+                                      onClick={(e) => { e.stopPropagation(); setLightboxUrl(url) }}
+                                    >
+                                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                                      <img
+                                        src={url}
+                                        alt={`Station ${stIdx + 1} photo ${photoIdx + 1}`}
+                                        className="w-20 h-20 rounded-xl object-cover border border-bg-border shadow-card hover:scale-105 transition-transform duration-200 cursor-pointer"
+                                      />
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : null
+                            })()}
+                            {/* Text */}
+                            <div className="min-w-0">
                               {station.equipment && (
                                 <p className="text-xs font-bold text-accent-blue mb-1">
                                   {station.equipment}

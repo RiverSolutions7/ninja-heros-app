@@ -44,17 +44,25 @@ function fullClassToDraft(cls: FullClass): ClassDraft {
         localId: crypto.randomUUID(),
         instructor_name: block.data.instructor_name ?? '',
         core_skills: [...block.data.core_skills],
-        stations: block.stations.map((s): DraftStation => ({
-          id: s.id,
-          localId: crypto.randomUUID(),
-          sort_order: s.sort_order,
-          equipment: s.equipment,
-          description: s.description,
-          photo_url: s.photo_url,
-          photoFile: null,
-          // Use existing URL as the preview so the thumbnail shows immediately
-          photoPreview: s.photo_url,
-        })),
+        stations: block.stations.map((s): DraftStation => {
+          // Use photo_urls if available, otherwise fall back to single photo_url
+          const urls = s.photo_urls?.length > 0
+            ? s.photo_urls
+            : s.photo_url ? [s.photo_url] : []
+          return {
+            id: s.id,
+            localId: crypto.randomUUID(),
+            sort_order: s.sort_order,
+            equipment: s.equipment,
+            description: s.description,
+            photos: urls.map((url) => ({
+              localId: crypto.randomUUID(),
+              photoFile: null,
+              photoPreview: url,
+              photo_url: url,
+            })),
+          }
+        }),
         videoFile: null,
         // Use existing video URL as preview so the player shows immediately
         videoPreview: block.data.video_url,
@@ -252,19 +260,22 @@ export default function EditClassForm({ cls, initialSkills }: EditClassFormProps
 
             for (let j = 0; j < draftBlock.stations.length; j++) {
               const station = draftBlock.stations[j]
+              const uploadedUrls: string[] = []
 
-              // Upload new photo only if a new file was selected
-              let photoUrl = station.photo_url
-              if (station.photoFile) {
-                try {
-                  photoUrl = await uploadStationPhoto(station.photoFile)
-                } catch (err) {
-                  console.error('Station photo upload failed:', err)
+              for (const photo of station.photos) {
+                if (photo.photoFile) {
+                  try {
+                    const url = await uploadStationPhoto(photo.photoFile)
+                    uploadedUrls.push(url)
+                  } catch (err) {
+                    console.error('Station photo upload failed:', err)
+                  }
+                } else if (photo.photo_url) {
+                  uploadedUrls.push(photo.photo_url)
                 }
               }
 
               if (station.id) {
-                // Existing station — update in place
                 keptStationIds.add(station.id)
                 const { error: sErr } = await supabase
                   .from('stations')
@@ -272,12 +283,12 @@ export default function EditClassForm({ cls, initialSkills }: EditClassFormProps
                     sort_order: j,
                     equipment: station.equipment,
                     description: station.description,
-                    photo_url: photoUrl,
+                    photo_url: uploadedUrls[0] ?? null,
+                    photo_urls: uploadedUrls,
                   })
                   .eq('id', station.id)
                 if (sErr) throw sErr
               } else {
-                // New station — insert
                 const { data: newStation, error: sErr } = await supabase
                   .from('stations')
                   .insert({
@@ -285,7 +296,8 @@ export default function EditClassForm({ cls, initialSkills }: EditClassFormProps
                     sort_order: j,
                     equipment: station.equipment,
                     description: station.description,
-                    photo_url: photoUrl,
+                    photo_url: uploadedUrls[0] ?? null,
+                    photo_urls: uploadedUrls,
                   })
                   .select()
                   .single()
@@ -375,12 +387,17 @@ export default function EditClassForm({ cls, initialSkills }: EditClassFormProps
 
             for (let j = 0; j < draftBlock.stations.length; j++) {
               const station = draftBlock.stations[j]
-              let photoUrl: string | null = null
-              if (station.photoFile) {
-                try {
-                  photoUrl = await uploadStationPhoto(station.photoFile)
-                } catch (err) {
-                  console.error('Station photo upload failed:', err)
+              const uploadedUrls: string[] = []
+              for (const photo of station.photos) {
+                if (photo.photoFile) {
+                  try {
+                    const url = await uploadStationPhoto(photo.photoFile)
+                    uploadedUrls.push(url)
+                  } catch (err) {
+                    console.error('Station photo upload failed:', err)
+                  }
+                } else if (photo.photo_url) {
+                  uploadedUrls.push(photo.photo_url)
                 }
               }
               const { error: sErr } = await supabase.from('stations').insert({
@@ -388,7 +405,8 @@ export default function EditClassForm({ cls, initialSkills }: EditClassFormProps
                 sort_order: j,
                 equipment: station.equipment,
                 description: station.description,
-                photo_url: photoUrl,
+                photo_url: uploadedUrls[0] ?? null,
+                photo_urls: uploadedUrls,
               })
               if (sErr) throw sErr
             }

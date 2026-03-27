@@ -126,6 +126,7 @@ export interface StationRow {
   equipment: string
   description: string
   photo_url: string | null
+  photo_urls: string[]
 }
 
 export interface GameBlockRow {
@@ -154,15 +155,20 @@ export interface FullClass extends ClassRow {
 // Draft Types for the block builder form
 // ============================================================
 
+export interface DraftPhotoItem {
+  localId: string
+  photoFile: File | null      // null when loaded from existing URL
+  photoPreview: string | null // local object URL or existing remote URL
+  photo_url: string | null    // null until uploaded, then the Supabase URL
+}
+
 export interface DraftStation {
   id?: string           // existing station DB row id (set when editing)
   localId: string
   sort_order: number
   equipment: string
   description: string
-  photo_url: string | null
-  photoFile: File | null
-  photoPreview: string | null
+  photos: DraftPhotoItem[]
 }
 
 export interface DraftWarmupBlock {
