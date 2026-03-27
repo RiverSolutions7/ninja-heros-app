@@ -1,14 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/app/lib/supabase'
 import { uploadStationPhoto } from '@/app/lib/uploadPhoto'
 import { uploadLaneVideo, uploadGameVideo } from '@/app/lib/uploadVideo'
 import {
-  AGE_GROUPS,
   type AgeGroup,
+  type CurriculumRow,
   type BlockType,
   type FullClass,
   type ClassDraft,
@@ -139,6 +139,17 @@ export default function EditClassForm({ cls, initialSkills }: EditClassFormProps
   const [availableSkills, setAvailableSkills] = useState<string[]>(
     initialSkills.length > 0 ? initialSkills : []
   )
+  const [curriculums, setCurriculums] = useState<CurriculumRow[]>([])
+
+  // Fetch curriculums on mount
+  useEffect(() => {
+    supabase
+      .from('curriculums')
+      .select('*')
+      .order('sort_order')
+      .order('created_at')
+      .then(({ data }) => setCurriculums((data as CurriculumRow[]) ?? []))
+  }, [])
 
   // ── Block mutations ──────────────────────────────────────────
 
@@ -505,8 +516,8 @@ export default function EditClassForm({ cls, initialSkills }: EditClassFormProps
               }
               className="field-select pr-8"
             >
-              {AGE_GROUPS.map((ag) => (
-                <option key={ag} value={ag}>{ag}</option>
+              {curriculums.map((c) => (
+                <option key={c.id} value={c.age_group}>{c.label}</option>
               ))}
             </select>
             <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-dim pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

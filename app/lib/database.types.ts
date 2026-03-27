@@ -2,12 +2,9 @@
 // Ninja H.E.R.O.S. Coach Hub — Database Types
 // ============================================================
 
-export type AgeGroup =
-  | 'Mini Ninjas (3.5-5)'
-  | 'Junior Ninjas (5-9)'
-  | 'All Ages'
-  | 'Tiny Ninjas (3.5-5)'   // legacy — existing DB rows only
-  | 'Elite Ninjas (9-11)'   // legacy — existing DB rows only
+// AgeGroup is now dynamic — values come from the `curriculums` table.
+// Kept as string so any curriculum name works seamlessly.
+export type AgeGroup = string
 
 export type Difficulty =
   | 'Beginner'
@@ -41,11 +38,8 @@ export const ALL_SKILLS = [
   'Core Strength',
 ] as const
 
-export const AGE_GROUPS: AgeGroup[] = [
-  'Mini Ninjas (3.5-5)',
-  'Junior Ninjas (5-9)',
-  'All Ages',
-]
+// AGE_GROUPS removed — curriculums are now fetched from the `curriculums` table in Supabase.
+// Use fetchCurriculums() from queries.ts instead.
 
 export const DIFFICULTIES: Difficulty[] = [
   'Beginner',
@@ -60,6 +54,14 @@ export const WARMUP_TIMES: WarmupTime[] = ['1 min', '2 min', '3 min', '4 min', '
 // ============================================================
 // Raw DB Row Types
 // ============================================================
+
+export interface CurriculumRow {
+  id: string
+  label: string
+  age_group: string
+  sort_order: number
+  created_at: string
+}
 
 export interface SkillRow {
   id: string

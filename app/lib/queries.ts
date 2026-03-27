@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import type {
   ClassRow,
+  CurriculumRow,
   FullClass,
   FullBlock,
   ClassBlockRow,
@@ -13,6 +14,19 @@ import type {
   HandoffNoteRow,
   SkillRecency,
 } from './database.types'
+
+// ============================================================
+// Fetch all curriculums (ordered by sort_order, then created_at)
+// ============================================================
+export async function fetchCurriculums(): Promise<CurriculumRow[]> {
+  const { data, error } = await supabase
+    .from('curriculums')
+    .select('*')
+    .order('sort_order')
+    .order('created_at')
+  if (error) throw error
+  return (data ?? []) as CurriculumRow[]
+}
 
 // ============================================================
 // Fetch all skills from the skills table

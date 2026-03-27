@@ -1,13 +1,15 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback } from 'react'
+import { supabase } from '@/app/lib/supabase'
+import type { CurriculumRow } from '@/app/lib/database.types'
 
-const AGE_PILLS = [
-  { label: 'All', value: '' },
-  { label: 'Jr. Ninjas', value: 'Junior Ninjas (5-9)' },
-  { label: 'Mini Ninjas', value: 'Mini Ninjas (3.5-5)' },
-]
+interface AgePill {
+  label: string
+  value: string
+}
 
 interface ClassFiltersProps {
   basePath?: string
@@ -16,10 +18,26 @@ interface ClassFiltersProps {
 export default function ClassFilters({ basePath = '/library' }: ClassFiltersProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const [agePills, setAgePills] = useState<AgePill[]>([{ label: 'All', value: '' }])
 
   const q = searchParams.get('q') ?? ''
   const age = searchParams.get('age') ?? ''
   const dateRange = searchParams.get('dateRange') ?? ''
+
+  useEffect(() => {
+    supabase
+      .from('curriculums')
+      .select('*')
+      .order('sort_order')
+      .order('created_at')
+      .then(({ data }) => {
+        const rows = (data as CurriculumRow[]) ?? []
+        setAgePills([
+          { label: 'All', value: '' },
+          ...rows.map((c) => ({ label: c.label, value: c.age_group })),
+        ])
+      })
+  }, [])
 
   const update = useCallback(
     (key: string, value: string) => {
@@ -63,8 +81,8 @@ export default function ClassFilters({ basePath = '/library' }: ClassFiltersProp
       {/* Age pills + Date dropdown on same row */}
       <div className="flex items-center gap-2">
         {/* Age group pills */}
-        <div className="flex gap-1.5 flex-1">
-          {AGE_PILLS.map(({ label, value }) => (
+        <div className="flex gap-1.5 flex-1 flex-wrap">
+          {agePills.map(({ label, value }) => (
             <button
               key={label}
               onClick={() => update('age', value)}

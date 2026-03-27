@@ -7,8 +7,8 @@ import { supabase } from '@/app/lib/supabase'
 import { uploadStationPhoto } from '@/app/lib/uploadPhoto'
 import { uploadLaneVideo, uploadGameVideo } from '@/app/lib/uploadVideo'
 import {
-  AGE_GROUPS,
   type AgeGroup,
+  type CurriculumRow,
   type BlockType,
   type ClassDraft,
   type DraftBlock,
@@ -71,8 +71,30 @@ export default function NewClassPage() {
   const [error, setError] = useState<string | null>(null)
   const [titleError, setTitleError] = useState<string | null>(null)
 
+  // Curriculums fetched from DB
+  const [curriculums, setCurriculums] = useState<CurriculumRow[]>([])
+
   // Dynamic skills fetched from the DB, filtered by selected curriculum
   const [availableSkills, setAvailableSkills] = useState<string[]>([])
+
+  // Fetch curriculums once on mount
+  useEffect(() => {
+    supabase
+      .from('curriculums')
+      .select('*')
+      .order('sort_order')
+      .order('created_at')
+      .then(({ data }) => {
+        const rows = (data as CurriculumRow[]) ?? []
+        setCurriculums(rows)
+        // Default to first curriculum if available
+        if (rows.length > 0 && draft.age_group === 'Junior Ninjas (5-9)') {
+          // Only override if current default isn't in the list
+          const inList = rows.some((c) => c.age_group === draft.age_group)
+          if (!inList) setDraft((d) => ({ ...d, age_group: rows[0].age_group }))
+        }
+      })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     supabase
@@ -340,9 +362,9 @@ export default function NewClassPage() {
               }
               className="field-select pr-8"
             >
-              {AGE_GROUPS.map((ag) => (
-                <option key={ag} value={ag}>
-                  {ag}
+              {curriculums.map((c) => (
+                <option key={c.id} value={c.age_group}>
+                  {c.label}
                 </option>
               ))}
             </select>

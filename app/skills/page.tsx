@@ -1,5 +1,4 @@
-import { fetchSkillRecency, fetchRecentClassesWithSkills } from '@/app/lib/queries'
-import { CURRICULUMS } from '@/app/lib/curriculums'
+import { fetchCurriculums, fetchSkillRecency, fetchRecentClassesWithSkills } from '@/app/lib/queries'
 import SkillRemoveManager from '@/app/components/skills/SkillRemoveManager'
 import AddSkillButton from '@/app/components/skills/AddSkillButton'
 import CurriculumSelector from '@/app/components/skills/CurriculumSelector'
@@ -17,7 +16,11 @@ export default async function SkillsPage({
   searchParams: Promise<{ curriculum?: string }>
 }) {
   const { curriculum: curriculumId } = await searchParams
-  const curriculum = CURRICULUMS.find((c) => c.id === curriculumId) ?? null
+  const curriculums = await fetchCurriculums().catch(() => [])
+  const curriculumRow = curriculums.find((c) => c.id === curriculumId) ?? null
+  const curriculum = curriculumRow
+    ? { id: curriculumRow.id, label: curriculumRow.label, ageGroup: curriculumRow.age_group }
+    : null
 
   let skillRecency = null
   let recentClasses = null

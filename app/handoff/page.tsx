@@ -1,6 +1,5 @@
 import { Suspense } from 'react'
 import { fetchHandoffClasses, fetchHandoffNotes } from '@/app/lib/queries'
-import { AGE_GROUPS } from '@/app/lib/database.types'
 import ClassCard from '@/app/components/library/ClassCard'
 import ClassFilters from '@/app/components/library/ClassFilters'
 import HandoffNotes from '@/app/components/handoff/HandoffNotes'
