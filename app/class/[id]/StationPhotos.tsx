@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 interface StationPhotosProps {
   urls: string[]
@@ -8,9 +8,17 @@ interface StationPhotosProps {
 }
 
 export default function StationPhotos({ urls, stationLabel }: StationPhotosProps) {
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const touchStartX = useRef(0)
 
   if (urls.length === 0) return null
+
+  function prev() {
+    setLightboxIndex((i) => (i !== null ? (i - 1 + urls.length) % urls.length : null))
+  }
+  function next() {
+    setLightboxIndex((i) => (i !== null ? (i + 1) % urls.length : null))
+  }
 
   return (
     <>
@@ -27,7 +35,7 @@ export default function StationPhotos({ urls, stationLabel }: StationPhotosProps
               alt={`${stationLabel} photo ${pi + 1}`}
               className="flex-shrink-0 w-full rounded-xl object-contain cursor-pointer bg-black/20"
               style={{ scrollSnapAlign: 'start' }}
-              onClick={() => setLightboxUrl(url)}
+              onClick={() => setLightboxIndex(pi)}
             />
           ))}
         </div>
@@ -41,15 +49,21 @@ export default function StationPhotos({ urls, stationLabel }: StationPhotosProps
       </div>
 
       {/* Lightbox */}
-      {lightboxUrl && (
+      {lightboxIndex !== null && (
         <div
           className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
-          onClick={() => setLightboxUrl(null)}
+          onClick={() => setLightboxIndex(null)}
+          onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX }}
+          onTouchEnd={(e) => {
+            const diff = touchStartX.current - e.changedTouches[0].clientX
+            if (diff > 50) next()
+            else if (diff < -50) prev()
+          }}
         >
           <button
             type="button"
-            className="absolute top-4 right-4 text-white/70 hover:text-white p-2"
-            onClick={() => setLightboxUrl(null)}
+            className="absolute top-4 right-4 text-white/70 hover:text-white p-2 z-10"
+            onClick={() => setLightboxIndex(null)}
           >
             <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -57,11 +71,26 @@ export default function StationPhotos({ urls, stationLabel }: StationPhotosProps
           </button>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={lightboxUrl}
-            alt="Station photo"
+            src={urls[lightboxIndex]}
+            alt={`${stationLabel} photo ${lightboxIndex + 1}`}
             className="max-w-full max-h-full object-contain rounded-xl"
             onClick={(e) => e.stopPropagation()}
           />
+          {urls.length > 1 && (
+            <div
+              className="absolute bottom-6 left-0 right-0 flex justify-center gap-2"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {urls.map((_, i) => (
+                <span
+                  key={i}
+                  className={`w-2 h-2 rounded-full transition-colors ${
+                    i === lightboxIndex ? 'bg-white' : 'bg-white/30'
+                  }`}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </>

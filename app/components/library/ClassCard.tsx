@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { FullClass } from '@/app/lib/database.types'
 import ClassCardMenu from './ClassCardMenu'
 import RemoveFromHandoffButton from '@/app/components/handoff/RemoveFromHandoffButton'
@@ -28,7 +28,15 @@ function formatDate(dateStr: string) {
 
 export default function ClassCard({ cls, showActions = true, showHandoffRemove = false }: ClassCardProps) {
   const [expanded, setExpanded] = useState(false)
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  const [lightbox, setLightbox] = useState<{ urls: string[]; index: number } | null>(null)
+  const touchStartX = useRef(0)
+
+  function lbPrev() {
+    setLightbox((lb) => lb ? { ...lb, index: (lb.index - 1 + lb.urls.length) % lb.urls.length } : null)
+  }
+  function lbNext() {
+    setLightbox((lb) => lb ? { ...lb, index: (lb.index + 1) % lb.urls.length } : null)
+  }
 
   const photoUrls = cls.blocks.flatMap((b) =>
     b.type === 'lane'
@@ -192,7 +200,7 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
                                       key={photoIdx}
                                       type="button"
                                       className="flex-shrink-0"
-                                      onClick={(e) => { e.stopPropagation(); setLightboxUrl(url) }}
+                                      onClick={(e) => { e.stopPropagation(); setLightbox({ urls, index: photoIdx }) }}
                                     >
                                       {/* eslint-disable-next-line @next/next/no-img-element */}
                                       <img
@@ -313,15 +321,21 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
         </div>
       </div>
       {/* Photo lightbox */}
-      {lightboxUrl && (
+      {lightbox && (
         <div
           className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
-          onClick={() => setLightboxUrl(null)}
+          onClick={() => setLightbox(null)}
+          onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX }}
+          onTouchEnd={(e) => {
+            const diff = touchStartX.current - e.changedTouches[0].clientX
+            if (diff > 50) lbNext()
+            else if (diff < -50) lbPrev()
+          }}
         >
           <button
             type="button"
-            className="absolute top-4 right-4 text-white/70 hover:text-white p-2"
-            onClick={() => setLightboxUrl(null)}
+            className="absolute top-4 right-4 text-white/70 hover:text-white p-2 z-10"
+            onClick={() => setLightbox(null)}
           >
             <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -329,11 +343,26 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
           </button>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={lightboxUrl}
+            src={lightbox.urls[lightbox.index]}
             alt="Station photo"
             className="max-w-full max-h-full object-contain rounded-xl"
             onClick={(e) => e.stopPropagation()}
           />
+          {lightbox.urls.length > 1 && (
+            <div
+              className="absolute bottom-6 left-0 right-0 flex justify-center gap-2"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {lightbox.urls.map((_, i) => (
+                <span
+                  key={i}
+                  className={`w-2 h-2 rounded-full transition-colors ${
+                    i === lightbox.index ? 'bg-white' : 'bg-white/30'
+                  }`}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
