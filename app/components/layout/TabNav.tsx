@@ -46,6 +46,9 @@ const tabs = [
 export default function TabNav() {
   const pathname = usePathname()
 
+  // Hide nav on public share pages
+  if (pathname.startsWith('/class/')) return null
+
   return (
     <nav className="fixed bottom-0 inset-x-0 z-50 glass safe-area-pb">
       <div className="max-w-2xl mx-auto flex">
