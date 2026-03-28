@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import { fetchFullClass } from '@/app/lib/queries'
+import StationPhotos from './StationPhotos'
 import type { Metadata } from 'next'
 
 interface Props {
@@ -151,33 +152,7 @@ export default async function ShareClassPage({ params }: Props) {
                                 <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-2 px-4">
                                   Station {stIdx + 1}
                                 </p>
-                                {/* Photos — full-width swipeable */}
-                                {urls.length > 0 && (
-                                  <div className="mb-3">
-                                    <div
-                                      className="flex overflow-x-auto gap-2 px-4"
-                                      style={{ scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}
-                                    >
-                                      {urls.map((url, pi) => (
-                                        // eslint-disable-next-line @next/next/no-img-element
-                                        <img
-                                          key={pi}
-                                          src={url}
-                                          alt={`Station ${stIdx + 1} photo ${pi + 1}`}
-                                          className="flex-shrink-0 w-full rounded-xl object-cover"
-                                          style={{ scrollSnapAlign: 'start', maxHeight: '240px' }}
-                                        />
-                                      ))}
-                                    </div>
-                                    {urls.length > 1 && (
-                                      <div className="flex justify-center gap-1 mt-1.5">
-                                        {urls.map((_, pi) => (
-                                          <span key={pi} className="w-1.5 h-1.5 rounded-full bg-text-dim/40" />
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
+                                <StationPhotos urls={urls} stationLabel={`Station ${stIdx + 1}`} />
                                 <div className="px-4">
                                   {station.equipment && (
                                     <p className="text-xs font-bold text-accent-blue mb-1">
