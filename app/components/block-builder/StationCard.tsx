@@ -34,7 +34,7 @@ export default function StationCard({ station, onChange, onRemove }: StationCard
 
   return (
     <div className="bg-bg-primary border border-bg-border rounded-xl overflow-hidden">
-      {/* X button — top right, no station label */}
+      {/* X button */}
       <div className="flex justify-end px-3 pt-2.5">
         <button
           type="button"
@@ -48,7 +48,76 @@ export default function StationCard({ station, onChange, onRemove }: StationCard
         </button>
       </div>
 
+      {/* Photos — full-width swipeable strip at the top */}
+      {station.photos.length > 0 && (
+        <div className="relative mb-3 mx-3">
+          <div
+            className="flex overflow-x-auto gap-2 pb-1"
+            style={{ scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}
+          >
+            {station.photos.map((photo) => (
+              <div
+                key={photo.localId}
+                className="relative flex-shrink-0 rounded-xl overflow-hidden"
+                style={{ scrollSnapAlign: 'start', width: '100%' }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={photo.photoPreview ?? photo.photo_url ?? ''}
+                  alt="Station photo"
+                  className="w-full object-cover rounded-xl"
+                  style={{ maxHeight: '220px' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => removePhoto(photo.localId)}
+                  className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 flex items-center justify-center text-white hover:bg-black/80 transition-colors"
+                  aria-label="Remove photo"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+          </div>
+          {/* Dot indicators when multiple photos */}
+          {station.photos.length > 1 && (
+            <div className="flex justify-center gap-1 mt-1.5">
+              {station.photos.map((photo) => (
+                <span key={photo.localId} className="w-1.5 h-1.5 rounded-full bg-text-dim/40" />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="px-3 pb-3 space-y-3">
+        {/* Add photo buttons */}
+        <div className="flex items-center gap-4 flex-wrap">
+          <button
+            type="button"
+            onClick={() => cameraRef.current?.click()}
+            className="flex items-center gap-1.5 text-sm font-semibold text-accent-blue hover:text-accent-blue/80 transition-colors py-1.5"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            Take Photo
+          </button>
+          <button
+            type="button"
+            onClick={() => libraryRef.current?.click()}
+            className="flex items-center gap-1.5 text-sm font-semibold text-text-muted hover:text-text-primary transition-colors py-1.5"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            Choose from Library
+          </button>
+        </div>
+
         <div>
           <label className="field-label">Equipment</label>
           <input
@@ -71,62 +140,8 @@ export default function StationCard({ station, onChange, onRemove }: StationCard
           />
         </div>
 
-        {/* Photos */}
-        <div>
-          {/* Thumbnail row */}
-          {station.photos.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-2.5">
-              {station.photos.map((photo) => (
-                <div key={photo.localId} className="relative">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={photo.photoPreview ?? photo.photo_url ?? ''}
-                    alt="Station photo"
-                    className="w-16 h-16 rounded-lg object-cover border border-bg-border"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removePhoto(photo.localId)}
-                    className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-bg-card border border-bg-border flex items-center justify-center text-text-dim hover:text-red-400 transition-colors"
-                    aria-label="Remove photo"
-                  >
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Add photo buttons */}
-          <div className="flex items-center gap-4 flex-wrap">
-            <button
-              type="button"
-              onClick={() => cameraRef.current?.click()}
-              className="flex items-center gap-1.5 text-sm font-semibold text-accent-blue hover:text-accent-blue/80 transition-colors py-1.5"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              Take Photo
-            </button>
-            <button
-              type="button"
-              onClick={() => libraryRef.current?.click()}
-              className="flex items-center gap-1.5 text-sm font-semibold text-text-muted hover:text-text-primary transition-colors py-1.5"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              Choose from Library
-            </button>
-          </div>
-
-          <input ref={cameraRef} type="file" accept="image/*,video/*" onChange={handleFileAdded} className="hidden" />
-          <input ref={libraryRef} type="file" accept="image/*,video/*" onChange={handleFileAdded} className="hidden" />
-        </div>
+        <input ref={cameraRef} type="file" accept="image/*,video/*" onChange={handleFileAdded} className="hidden" />
+        <input ref={libraryRef} type="file" accept="image/*,video/*" onChange={handleFileAdded} className="hidden" />
       </div>
     </div>
   )

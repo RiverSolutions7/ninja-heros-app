@@ -141,37 +141,53 @@ export default async function ShareClassPage({ params }: Props) {
                       )}
 
                       {block.stations.length > 0 && (
-                        <div className="px-4 pb-4 space-y-4">
+                        <div className="pb-4 space-y-4">
                           {block.stations.map((station, stIdx) => {
                             const urls = station.photo_urls?.length > 0
                               ? station.photo_urls
                               : station.photo_url ? [station.photo_url] : []
                             return (
                               <div key={station.id}>
-                                <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-2">
+                                <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-2 px-4">
                                   Station {stIdx + 1}
                                 </p>
+                                {/* Photos — full-width swipeable */}
                                 {urls.length > 0 && (
-                                  <div className="flex flex-wrap gap-2 mb-2">
-                                    {urls.map((url, pi) => (
-                                      // eslint-disable-next-line @next/next/no-img-element
-                                      <img
-                                        key={pi}
-                                        src={url}
-                                        alt={`Station ${stIdx + 1} photo ${pi + 1}`}
-                                        className="w-24 h-24 rounded-xl object-cover border border-bg-border"
-                                      />
-                                    ))}
+                                  <div className="mb-3">
+                                    <div
+                                      className="flex overflow-x-auto gap-2 px-4"
+                                      style={{ scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}
+                                    >
+                                      {urls.map((url, pi) => (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img
+                                          key={pi}
+                                          src={url}
+                                          alt={`Station ${stIdx + 1} photo ${pi + 1}`}
+                                          className="flex-shrink-0 w-full rounded-xl object-cover"
+                                          style={{ scrollSnapAlign: 'start', maxHeight: '240px' }}
+                                        />
+                                      ))}
+                                    </div>
+                                    {urls.length > 1 && (
+                                      <div className="flex justify-center gap-1 mt-1.5">
+                                        {urls.map((_, pi) => (
+                                          <span key={pi} className="w-1.5 h-1.5 rounded-full bg-text-dim/40" />
+                                        ))}
+                                      </div>
+                                    )}
                                   </div>
                                 )}
-                                {station.equipment && (
-                                  <p className="text-xs font-bold text-accent-blue mb-1">
-                                    {station.equipment}
+                                <div className="px-4">
+                                  {station.equipment && (
+                                    <p className="text-xs font-bold text-accent-blue mb-1">
+                                      {station.equipment}
+                                    </p>
+                                  )}
+                                  <p className="text-sm text-text-primary leading-snug">
+                                    {station.description}
                                   </p>
-                                )}
-                                <p className="text-sm text-text-primary leading-snug">
-                                  {station.description}
-                                </p>
+                                </div>
                               </div>
                             )
                           })}
