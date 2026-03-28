@@ -156,21 +156,16 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
               }
 
               if (block.type === 'lane') {
-                const laneNumber =
-                  cls.blocks
-                    .slice(0, blockIdx)
-                    .filter((b) => b.type === 'lane').length + 1
-
-                const heading = block.data.instructor_name
-                  ? `Lane ${laneNumber} — ${block.data.instructor_name}`
-                  : `Lane ${laneNumber}`
-
                 return (
                   <div key={block.block.id} className="border-l-4 border-accent-fire">
-                    {/* Lane header with gradient */}
-                    <div className="px-4 py-3 bg-gradient-to-r from-accent-fire/[0.10] to-transparent">
-                      <span className="font-heading text-sm text-accent-fire">{heading}</span>
-                    </div>
+                    {/* Lane header with gradient — only shown when a name was entered */}
+                    {block.data.instructor_name && (
+                      <div className="px-4 py-3 bg-gradient-to-r from-accent-fire/[0.10] to-transparent">
+                        <span className="font-heading text-sm text-accent-fire">
+                          {block.data.instructor_name}
+                        </span>
+                      </div>
+                    )}
 
                     {/* Core skills */}
                     {block.data.core_skills.length > 0 && (
