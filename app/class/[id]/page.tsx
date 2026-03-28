@@ -116,17 +116,15 @@ export default async function ShareClassPage({ params }: Props) {
                 }
 
                 if (block.type === 'lane') {
-                  const laneNumber =
-                    cls.blocks.slice(0, blockIdx).filter((b) => b.type === 'lane').length + 1
-                  const heading = block.data.instructor_name
-                    ? `Lane ${laneNumber} — ${block.data.instructor_name}`
-                    : `Lane ${laneNumber}`
+                  const heading = block.data.instructor_name || ''
 
                   return (
                     <div key={block.block.id} className="card overflow-hidden border-l-4 border-accent-fire">
-                      <div className="px-4 py-3 bg-gradient-to-r from-accent-fire/[0.10] to-transparent">
-                        <span className="font-heading text-sm text-accent-fire">{heading}</span>
-                      </div>
+                      {heading && (
+                        <div className="px-4 py-3 bg-gradient-to-r from-accent-fire/[0.10] to-transparent">
+                          <span className="font-heading text-sm text-accent-fire">{heading}</span>
+                        </div>
+                      )}
 
                       {block.data.core_skills.length > 0 && (
                         <div className="px-4 py-2.5 flex flex-wrap gap-1.5">
@@ -149,9 +147,6 @@ export default async function ShareClassPage({ params }: Props) {
                               : station.photo_url ? [station.photo_url] : []
                             return (
                               <div key={station.id}>
-                                <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-2 px-4">
-                                  Station {stIdx + 1}
-                                </p>
                                 <StationPhotos urls={urls} stationLabel={`Station ${stIdx + 1}`} />
                                 <div className="px-4">
                                   {station.equipment && (
