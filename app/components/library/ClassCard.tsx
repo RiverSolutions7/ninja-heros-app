@@ -157,7 +157,7 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
 
               if (block.type === 'lane') {
                 return (
-                  <div key={block.block.id} className="border-l-4 border-accent-fire">
+                  <div key={block.block.id} className="border-l-4 !border-l-accent-fire">
                     {/* Lane header with gradient — only shown when a name was entered */}
                     {block.data.instructor_name && (
                       <div className="px-4 py-3 bg-gradient-to-r from-accent-fire/[0.10] to-transparent">
