@@ -33,7 +33,7 @@ export default function StationPhotos({ urls, stationLabel }: StationPhotosProps
               key={pi}
               src={url}
               alt={`${stationLabel} photo ${pi + 1}`}
-              className="flex-shrink-0 w-full rounded-xl object-contain cursor-pointer bg-black/20"
+              className="flex-shrink-0 w-full rounded-xl cursor-pointer"
               style={{ scrollSnapAlign: 'start' }}
               onClick={() => setLightboxIndex(pi)}
             />
