@@ -8,11 +8,18 @@ interface StationPhotosProps {
 }
 
 export default function StationPhotos({ urls, stationLabel }: StationPhotosProps) {
+  const [activeIndex, setActiveIndex] = useState(0)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const touchStartX = useRef(0)
 
   if (urls.length === 0) return null
 
+  function prevActive() {
+    setActiveIndex((i) => (i - 1 + urls.length) % urls.length)
+  }
+  function nextActive() {
+    setActiveIndex((i) => (i + 1) % urls.length)
+  }
   function prev() {
     setLightboxIndex((i) => (i !== null ? (i - 1 + urls.length) % urls.length : null))
   }
@@ -23,26 +30,31 @@ export default function StationPhotos({ urls, stationLabel }: StationPhotosProps
   return (
     <>
       <div className="mb-3">
+        {/* Single-photo display — avoids shared flex height causing black bars */}
         <div
-          className="flex overflow-x-auto gap-2 px-4"
-          style={{ scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}
+          onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX }}
+          onTouchEnd={(e) => {
+            const diff = touchStartX.current - e.changedTouches[0].clientX
+            if (diff > 50) nextActive()
+            else if (diff < -50) prevActive()
+          }}
         >
-          {urls.map((url, pi) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              key={pi}
-              src={url}
-              alt={`${stationLabel} photo ${pi + 1}`}
-              className="flex-shrink-0 w-full rounded-xl cursor-pointer"
-              style={{ scrollSnapAlign: 'start' }}
-              onClick={() => setLightboxIndex(pi)}
-            />
-          ))}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={urls[activeIndex]}
+            alt={`${stationLabel} photo ${activeIndex + 1}`}
+            className="w-full cursor-pointer"
+            style={{ height: 'auto', display: 'block' }}
+            onClick={() => setLightboxIndex(activeIndex)}
+          />
         </div>
         {urls.length > 1 && (
           <div className="flex justify-center gap-1 mt-1.5">
             {urls.map((_, pi) => (
-              <span key={pi} className="w-1.5 h-1.5 rounded-full bg-text-dim/40" />
+              <span
+                key={pi}
+                className={`w-1.5 h-1.5 rounded-full transition-colors ${pi === activeIndex ? 'bg-text-primary' : 'bg-text-dim/40'}`}
+              />
             ))}
           </div>
         )}
