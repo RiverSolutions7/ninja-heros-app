@@ -6,6 +6,9 @@ import Link from 'next/link'
 import { supabase } from '@/app/lib/supabase'
 import { uploadStationPhoto } from '@/app/lib/uploadPhoto'
 import { uploadLaneVideo, uploadGameVideo } from '@/app/lib/uploadVideo'
+import { autoPopulateComponents } from '@/app/lib/autoPopulateComponents'
+import type { ComponentCandidate } from '@/app/lib/autoPopulateComponents'
+import { componentToDraftBlock } from '@/app/lib/componentUtils'
 import {
   type AgeGroup,
   type CurriculumRow,
@@ -16,8 +19,14 @@ import {
   type DraftLaneBlock,
   type DraftGameBlock,
   type DraftStation,
+  type ComponentRow,
 } from '@/app/lib/database.types'
 import BlockBuilder from '@/app/components/block-builder/BlockBuilder'
+
+function parseDurationMinutes(time: string): number | null {
+  const match = time.match(/^(\d+)/)
+  return match ? parseInt(match[1], 10) : null
+}
 
 function today(): string {
   return new Date().toISOString().slice(0, 10)
@@ -138,6 +147,19 @@ export default function NewClassPage() {
     }))
   }
 
+  function addBlockFromLibrary(component: ComponentRow, afterIndex?: number) {
+    const newBlock = componentToDraftBlock(component)
+    setDraft((prev) => {
+      const blocks = [...prev.blocks]
+      if (afterIndex === undefined || afterIndex < 0) {
+        blocks.push(newBlock)
+      } else {
+        blocks.splice(afterIndex + 1, 0, newBlock)
+      }
+      return { ...prev, blocks }
+    })
+  }
+
   // Called when a lane block adds a new skill inline
   function handleAddSkill(name: string) {
     setAvailableSkills((prev) =>
@@ -163,6 +185,9 @@ export default function NewClassPage() {
     }
 
     setSubmitting(true)
+
+    // Collect component candidates as we save blocks (fire-and-forget after save)
+    const componentCandidates: ComponentCandidate[] = []
 
     try {
       // 1. Insert class row
@@ -204,6 +229,21 @@ export default function NewClassPage() {
             skill_focus: draftBlock.skill_focus.trim() || null,
           })
           if (wErr) throw wErr
+
+          // Component candidate: warmup
+          const warmupTitle = draftBlock.description.slice(0, 80).trim()
+          if (warmupTitle) {
+            componentCandidates.push({
+              type: 'warmup',
+              title: warmupTitle,
+              curriculum: draft.age_group,
+              description: draftBlock.description.trim() || null,
+              skills: draftBlock.skill_focus.trim() ? [draftBlock.skill_focus.trim()] : null,
+              photos: null,
+              duration_minutes: parseDurationMinutes(draftBlock.time),
+              equipment: null,
+            })
+          }
 
         } else if (draftBlock.type === 'lane') {
           // Upload lane video if present
@@ -256,6 +296,21 @@ export default function NewClassPage() {
               photo_urls: uploadedUrls,
             })
             if (sErr) throw sErr
+
+            // Component candidate: station
+            const stationTitle = station.equipment.trim()
+            if (stationTitle) {
+              componentCandidates.push({
+                type: 'station',
+                title: stationTitle,
+                curriculum: draft.age_group,
+                description: station.description.trim() || null,
+                skills: draftBlock.core_skills.length > 0 ? draftBlock.core_skills : null,
+                photos: uploadedUrls.length > 0 ? uploadedUrls : null,
+                duration_minutes: null,
+                equipment: stationTitle,
+              })
+            }
           }
 
         } else if (draftBlock.type === 'game') {
@@ -277,8 +332,28 @@ export default function NewClassPage() {
             video_url: gameVideoUrl,
           })
           if (gErr) throw gErr
+
+          // Component candidate: game
+          const gameTitle = draftBlock.name.trim()
+          if (gameTitle) {
+            componentCandidates.push({
+              type: 'game',
+              title: gameTitle,
+              curriculum: draft.age_group,
+              description: draftBlock.description.trim() || null,
+              skills: null,
+              photos: null,
+              duration_minutes: null,
+              equipment: null,
+            })
+          }
         }
       }
+
+      // Silently extract components in the background — no await
+      autoPopulateComponents(componentCandidates).catch((err) =>
+        console.error('Component auto-populate failed:', err)
+      )
 
       router.push(`/library/${classRow.id}`)
     } catch (err) {
@@ -401,6 +476,7 @@ export default function NewClassPage() {
         <BlockBuilder
           blocks={draft.blocks}
           onAdd={addBlock}
+          onAddFromLibrary={addBlockFromLibrary}
           onChange={updateBlock}
           onRemove={removeBlock}
           availableSkills={availableSkills}

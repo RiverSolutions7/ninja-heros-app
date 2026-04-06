@@ -1,6 +1,6 @@
 'use client'
 
-import type { DraftBlock, DraftLaneBlock, BlockType } from '@/app/lib/database.types'
+import type { DraftBlock, DraftLaneBlock, BlockType, ComponentRow } from '@/app/lib/database.types'
 import AddBlockMenu from './AddBlockMenu'
 import WarmupBlockForm from './WarmupBlockForm'
 import LaneBlockForm from './LaneBlockForm'
@@ -9,6 +9,7 @@ import GameBlockForm from './GameBlockForm'
 interface BlockBuilderProps {
   blocks: DraftBlock[]
   onAdd: (type: BlockType, afterIndex?: number) => void
+  onAddFromLibrary: (component: ComponentRow, afterIndex?: number) => void
   onChange: (localId: string, changes: Partial<DraftBlock>) => void
   onRemove: (localId: string) => void
   availableSkills: string[]
@@ -36,6 +37,7 @@ function BlockConnector({ fromType, toType }: { fromType?: string; toType?: stri
 export default function BlockBuilder({
   blocks,
   onAdd,
+  onAddFromLibrary,
   onChange,
   onRemove,
   availableSkills,
@@ -51,7 +53,11 @@ export default function BlockBuilder({
     <div className="space-y-0">
       {/* Initial add button (when no blocks yet) */}
       {blocks.length === 0 && (
-        <AddBlockMenu onAdd={(type) => onAdd(type, -1)} />
+        <AddBlockMenu
+          onAdd={(type) => onAdd(type, -1)}
+          onAddFromLibrary={(c) => onAddFromLibrary(c, -1)}
+          ageGroup={ageGroup}
+        />
       )}
 
       {blocks.map((block, index) => (
@@ -95,7 +101,11 @@ export default function BlockBuilder({
 
           {/* Add button AFTER each block */}
           <div className="mt-3">
-            <AddBlockMenu onAdd={(type) => onAdd(type, index)} />
+            <AddBlockMenu
+              onAdd={(type) => onAdd(type, index)}
+              onAddFromLibrary={(c) => onAddFromLibrary(c, index)}
+              ageGroup={ageGroup}
+            />
           </div>
         </div>
       ))}

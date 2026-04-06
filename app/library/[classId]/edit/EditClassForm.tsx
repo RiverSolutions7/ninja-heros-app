@@ -17,7 +17,9 @@ import {
   type DraftLaneBlock,
   type DraftGameBlock,
   type DraftStation,
+  type ComponentRow,
 } from '@/app/lib/database.types'
+import { componentToDraftBlock } from '@/app/lib/componentUtils'
 import BlockBuilder from '@/app/components/block-builder/BlockBuilder'
 
 // ── Convert a persisted FullClass into an editable ClassDraft ──────────────
@@ -155,6 +157,19 @@ export default function EditClassForm({ cls, initialSkills }: EditClassFormProps
 
   function addBlock(type: BlockType, afterIndex?: number) {
     const newBlock = createEmptyBlock(type)
+    setDraft((prev) => {
+      const blocks = [...prev.blocks]
+      if (afterIndex === undefined || afterIndex < 0) {
+        blocks.push(newBlock)
+      } else {
+        blocks.splice(afterIndex + 1, 0, newBlock)
+      }
+      return { ...prev, blocks }
+    })
+  }
+
+  function addBlockFromLibrary(component: ComponentRow, afterIndex?: number) {
+    const newBlock = componentToDraftBlock(component)
     setDraft((prev) => {
       const blocks = [...prev.blocks]
       if (afterIndex === undefined || afterIndex < 0) {
@@ -567,6 +582,7 @@ export default function EditClassForm({ cls, initialSkills }: EditClassFormProps
         <BlockBuilder
           blocks={draft.blocks}
           onAdd={addBlock}
+          onAddFromLibrary={addBlockFromLibrary}
           onChange={updateBlock}
           onRemove={removeBlock}
           availableSkills={availableSkills}
