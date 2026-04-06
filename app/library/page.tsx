@@ -5,8 +5,8 @@ import ClassCard from '@/app/components/library/ClassCard'
 import ClassFilters from '@/app/components/library/ClassFilters'
 import FolderBar from '@/app/components/library/FolderBar'
 import LibraryToggle from '@/app/components/library/LibraryToggle'
-import ComponentCard from '@/app/components/library/ComponentCard'
 import ComponentTypeFilter from '@/app/components/library/ComponentTypeFilter'
+import ComponentListClient from '@/app/components/library/ComponentListClient'
 import type { FullClass } from '@/app/lib/database.types'
 
 interface LibraryPageProps {
@@ -111,13 +111,7 @@ async function ComponentList({ activeType }: { activeType: string }) {
     )
   }
 
-  return (
-    <div className="space-y-3">
-      {components.map((c) => (
-        <ComponentCard key={c.id} component={c} />
-      ))}
-    </div>
-  )
+  return <ComponentListClient components={components} />
 }
 
 export default async function LibraryPage({ searchParams }: LibraryPageProps) {
