@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import type { BlockType, ComponentRow } from '@/app/lib/database.types'
+import type { BlockType, ComponentRow, CurriculumRow } from '@/app/lib/database.types'
 import { supabase } from '@/app/lib/supabase'
 import ComponentCard from '@/app/components/library/ComponentCard'
 
@@ -52,8 +52,9 @@ export default function AddBlockMenu({ onAdd, onAddFromLibrary, ageGroup }: AddB
 
   // Library state
   const [components, setComponents] = useState<ComponentRow[]>([])
+  const [curriculums, setCurriculums] = useState<CurriculumRow[]>([])
   const [loadingLibrary, setLoadingLibrary] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
+  const [activeCurriculum, setActiveCurriculum] = useState<string>(ageGroup)
   const [activeType, setActiveType] = useState<'' | 'game' | 'warmup' | 'station'>('')
 
   function openMenu() {
@@ -75,7 +76,7 @@ export default function AddBlockMenu({ onAdd, onAddFromLibrary, ageGroup }: AddB
 
   function close() {
     setView('closed')
-    setSearchQuery('')
+    setActiveCurriculum(ageGroup)
     setActiveType('')
   }
 
@@ -103,19 +104,19 @@ export default function AddBlockMenu({ onAdd, onAddFromLibrary, ageGroup }: AddB
     }
   }, [view])
 
-  // Fetch components when library opens
+  // Fetch components + curriculums when library opens
   useEffect(() => {
     if (view !== 'library') return
     setLoadingLibrary(true)
-    supabase
-      .from('components')
-      .select('*')
-      .eq('curriculum', ageGroup)
-      .order('created_at', { ascending: false })
-      .then(({ data }) => {
-        setComponents((data ?? []) as ComponentRow[])
-        setLoadingLibrary(false)
-      })
+    setActiveCurriculum(ageGroup)
+    Promise.all([
+      supabase.from('components').select('*').order('created_at', { ascending: false }),
+      supabase.from('curriculums').select('*').order('sort_order').order('created_at'),
+    ]).then(([compRes, currRes]) => {
+      setComponents((compRes.data ?? []) as ComponentRow[])
+      setCurriculums((currRes.data ?? []) as CurriculumRow[])
+      setLoadingLibrary(false)
+    })
   }, [view, ageGroup])
 
   function handleSelectType(type: BlockType) {
@@ -130,10 +131,9 @@ export default function AddBlockMenu({ onAdd, onAddFromLibrary, ageGroup }: AddB
 
   // Filter components for library view
   const filtered = components.filter((c) => {
+    const matchesCurriculum = !activeCurriculum || c.curriculum === activeCurriculum
     const matchesType = !activeType || c.type === activeType
-    const matchesSearch =
-      !searchQuery || c.title.toLowerCase().includes(searchQuery.toLowerCase())
-    return matchesType && matchesSearch
+    return matchesCurriculum && matchesType
   })
 
   // ── Dropdown (menu view) ─────────────────────────────────────
@@ -221,31 +221,27 @@ export default function AddBlockMenu({ onAdd, onAddFromLibrary, ageGroup }: AddB
           </h2>
         </div>
 
-        {/* Search + type filters */}
+        {/* Curriculum + type filters */}
         <div className="px-4 pt-4 pb-3 space-y-3 flex-shrink-0">
-          <div className="relative">
-            <svg
-              className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-dim pointer-events-none"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
-            <input
-              type="search"
-              placeholder="Search components..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="field-input pl-10"
-              autoFocus
-            />
+          {/* Curriculum pills */}
+          <div className="flex gap-1.5 flex-wrap">
+            {[{ label: 'All', value: '' }, ...curriculums.map((c) => ({ label: c.label, value: c.age_group }))].map(({ label, value }) => (
+              <button
+                key={value || 'all'}
+                type="button"
+                onClick={() => setActiveCurriculum(value)}
+                className={[
+                  'px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 whitespace-nowrap',
+                  activeCurriculum === value
+                    ? 'bg-accent-fire text-white shadow-glow-fire'
+                    : 'bg-white/5 text-text-muted hover:bg-white/10 hover:text-text-primary',
+                ].join(' ')}
+              >
+                {label}
+              </button>
+            ))}
           </div>
+          {/* Type pills */}
           <div className="flex gap-1.5 flex-wrap">
             {(['', 'game', 'warmup', 'station'] as const).map((t) => (
               <button

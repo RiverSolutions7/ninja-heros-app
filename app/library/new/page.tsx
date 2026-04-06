@@ -270,6 +270,10 @@ export default function NewClassPage() {
           if (lErr) throw lErr
 
           // Insert stations (with photo uploads)
+          const laneAllPhotoUrls: string[] = []
+          const laneEquipmentParts: string[] = []
+          const laneDescriptionParts: string[] = []
+
           for (let j = 0; j < draftBlock.stations.length; j++) {
             const station = draftBlock.stations[j]
             const uploadedUrls: string[] = []
@@ -297,21 +301,23 @@ export default function NewClassPage() {
             })
             if (sErr) throw sErr
 
-            // Component candidate: station
-            const stationTitle = station.equipment.trim()
-            if (stationTitle) {
-              componentCandidates.push({
-                type: 'station',
-                title: stationTitle,
-                curriculum: draft.age_group,
-                description: station.description.trim() || null,
-                skills: draftBlock.core_skills.length > 0 ? draftBlock.core_skills : null,
-                photos: uploadedUrls.length > 0 ? uploadedUrls : null,
-                duration_minutes: null,
-                equipment: stationTitle,
-              })
-            }
+            laneAllPhotoUrls.push(...uploadedUrls)
+            if (station.equipment.trim()) laneEquipmentParts.push(station.equipment.trim())
+            if (station.description.trim()) laneDescriptionParts.push(station.description.trim())
           }
+
+          // Component candidate: one per lane block (not per station)
+          const laneTitle = draftBlock.instructor_name.trim() || 'Obstacle Course Station'
+          componentCandidates.push({
+            type: 'station',
+            title: laneTitle,
+            curriculum: draft.age_group,
+            description: laneDescriptionParts.join('\n\n') || null,
+            skills: draftBlock.core_skills.length > 0 ? draftBlock.core_skills : null,
+            photos: laneAllPhotoUrls.length > 0 ? laneAllPhotoUrls : null,
+            duration_minutes: null,
+            equipment: laneEquipmentParts.join(', ') || null,
+          })
 
         } else if (draftBlock.type === 'game') {
           // Upload game video if present
