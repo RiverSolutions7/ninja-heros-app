@@ -37,8 +37,10 @@ export default function ComponentCard({ component }: ComponentCardProps) {
           <p className="font-heading text-text-primary text-base leading-snug truncate">
             {component.title}
           </p>
-          {component.curriculum && (
-            <p className="text-text-dim text-xs mt-0.5">{component.curriculum}</p>
+          {(component.curriculum || component.equipment) && (
+            <p className="text-text-dim text-xs mt-0.5 truncate">
+              {[component.curriculum, component.equipment].filter(Boolean).join(' · ')}
+            </p>
           )}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">

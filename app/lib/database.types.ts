@@ -232,6 +232,7 @@ export interface ComponentRow {
   title: string
   curriculum: string | null
   description: string | null
+  equipment: string | null
   skills: string[] | null
   photos: string[] | null
   duration_minutes: number | null
