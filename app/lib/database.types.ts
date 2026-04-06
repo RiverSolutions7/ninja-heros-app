@@ -221,6 +221,24 @@ export interface ClassDraft {
 }
 
 // ============================================================
+// Component Library
+// ============================================================
+
+export type ComponentType = 'game' | 'warmup' | 'station'
+
+export interface ComponentRow {
+  id: string
+  type: ComponentType
+  title: string
+  curriculum: string | null
+  description: string | null
+  skills: string[] | null
+  photos: string[] | null
+  duration_minutes: number | null
+  created_at: string
+}
+
+// ============================================================
 // Skill Tracker
 // ============================================================
 

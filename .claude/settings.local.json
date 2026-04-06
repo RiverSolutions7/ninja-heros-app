@@ -24,7 +24,8 @@
       "Bash(npx tsc:*)",
       "Bash(ipconfig)",
       "Bash(git config:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(grep -r \"TODO\\\\|FIXME\\\\|HACK\\\\|XXX\" /c/Users/river/OneDrive/Documents/ninja-heros-app/.claude/worktrees/elastic-northcutt/app --include=*.tsx --include=*.ts)"
     ]
   }
 }

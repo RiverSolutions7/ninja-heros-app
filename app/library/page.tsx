@@ -1,13 +1,16 @@
 import Link from 'next/link'
 import { Suspense } from 'react'
-import { fetchAllFullClasses, fetchFolders } from '@/app/lib/queries'
+import { fetchAllFullClasses, fetchFolders, fetchComponents } from '@/app/lib/queries'
 import ClassCard from '@/app/components/library/ClassCard'
 import ClassFilters from '@/app/components/library/ClassFilters'
 import FolderBar from '@/app/components/library/FolderBar'
+import LibraryToggle from '@/app/components/library/LibraryToggle'
+import ComponentCard from '@/app/components/library/ComponentCard'
+import ComponentTypeFilter from '@/app/components/library/ComponentTypeFilter'
 import type { FullClass } from '@/app/lib/database.types'
 
 interface LibraryPageProps {
-  searchParams: Promise<{ q?: string; age?: string; folder?: string; dateRange?: string }>
+  searchParams: Promise<{ q?: string; age?: string; folder?: string; dateRange?: string; view?: string; ctype?: string }>
 }
 
 function getDateCutoff(range: string): string | null {
@@ -21,7 +24,7 @@ function getDateCutoff(range: string): string | null {
 async function ClassList({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; age?: string; folder?: string; dateRange?: string }>
+  searchParams: Promise<{ q?: string; age?: string; folder?: string; dateRange?: string; view?: string; ctype?: string }>
 }) {
   const { q: rawQ, age: rawAge, folder: rawFolder, dateRange: rawDateRange } = await searchParams
   let classes: FullClass[] = []
@@ -80,7 +83,47 @@ async function ClassList({
   )
 }
 
+async function ComponentList({ activeType }: { activeType: string }) {
+  let components = []
+
+  try {
+    components = await fetchComponents(activeType || undefined)
+  } catch {
+    return (
+      <div className="text-center py-12">
+        <p className="text-accent-fire font-heading">Failed to load components</p>
+        <p className="text-text-muted text-sm mt-2">
+          Check your Supabase environment variables
+        </p>
+      </div>
+    )
+  }
+
+  if (components.length === 0) {
+    return (
+      <div className="text-center py-16">
+        <div className="text-5xl mb-4">🧩</div>
+        <p className="font-heading text-text-muted text-lg">No components yet</p>
+        <p className="text-text-dim text-sm mt-2">
+          Tap &quot;+ Log&quot; to add your first component
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {components.map((c) => (
+        <ComponentCard key={c.id} component={c} />
+      ))}
+    </div>
+  )
+}
+
 export default async function LibraryPage({ searchParams }: LibraryPageProps) {
+  const params = await searchParams
+  const view = params.view === 'components' ? 'components' : 'classes'
+  const activeType = params.ctype ?? ''
   const folders = await fetchFolders().catch(() => [])
 
   return (
@@ -99,40 +142,67 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
           </p>
         </div>
         <Link
-          href="/library/new"
+          href={view === 'components' ? '/library/log-component' : '/library/new'}
           className="inline-flex items-center gap-1.5 bg-accent-fire text-white font-heading text-sm px-4 py-2.5 rounded-xl active:scale-95 transition-all shadow-glow-fire min-h-[44px]"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
           </svg>
-          Log Class
+          {view === 'components' ? 'Log' : 'Log Class'}
         </Link>
       </div>
 
-      {/* Folder bar */}
+      {/* Classes / Components toggle */}
       <div className="mb-4">
-        <Suspense fallback={null}>
-          <FolderBar folders={folders} />
-        </Suspense>
+        <LibraryToggle view={view} />
       </div>
 
-      {/* Filters */}
-      <div className="mb-5">
-        <Suspense fallback={null}>
-          <ClassFilters />
-        </Suspense>
-      </div>
-
-      {/* Class list */}
-      <Suspense
-        fallback={
-          <div className="flex items-center justify-center py-16">
-            <div className="w-8 h-8 border-2 border-accent-fire border-t-transparent rounded-full animate-spin" />
+      {view === 'classes' ? (
+        <>
+          {/* Folder bar */}
+          <div className="mb-4">
+            <Suspense fallback={null}>
+              <FolderBar folders={folders} />
+            </Suspense>
           </div>
-        }
-      >
-        <ClassList searchParams={searchParams} />
-      </Suspense>
+
+          {/* Filters */}
+          <div className="mb-5">
+            <Suspense fallback={null}>
+              <ClassFilters />
+            </Suspense>
+          </div>
+
+          {/* Class list */}
+          <Suspense
+            fallback={
+              <div className="flex items-center justify-center py-16">
+                <div className="w-8 h-8 border-2 border-accent-fire border-t-transparent rounded-full animate-spin" />
+              </div>
+            }
+          >
+            <ClassList searchParams={searchParams} />
+          </Suspense>
+        </>
+      ) : (
+        <>
+          {/* Component type filter */}
+          <div className="mb-5">
+            <ComponentTypeFilter activeType={activeType} />
+          </div>
+
+          {/* Component list */}
+          <Suspense
+            fallback={
+              <div className="flex items-center justify-center py-16">
+                <div className="w-8 h-8 border-2 border-accent-fire border-t-transparent rounded-full animate-spin" />
+              </div>
+            }
+          >
+            <ComponentList activeType={activeType} />
+          </Suspense>
+        </>
+      )}
     </div>
   )
 }
