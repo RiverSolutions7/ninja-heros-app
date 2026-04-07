@@ -27,29 +27,29 @@ const BUILD_OPTIONS: {
 }[] = [
   {
     type: 'warmup',
-    label: 'Warm-Up & Stretches',
+    label: 'Warm Up',
     emoji: '🔥',
     textColor: 'text-accent-gold',
     hoverBg: 'hover:bg-accent-gold/10',
-    description: 'Opening activity with time and skill focus',
+    description: '',
     componentType: 'warmup',
   },
   {
     type: 'lane',
-    label: 'Obstacle Course Lane',
+    label: 'Lane',
     emoji: '🏃',
     textColor: 'text-accent-fire',
     hoverBg: 'hover:bg-accent-fire/10',
-    description: 'Lane with stations, skills, and coach',
+    description: '',
     componentType: 'station',
   },
   {
     type: 'game',
-    label: 'Game / Activity',
+    label: 'Game',
     emoji: '🎮',
     textColor: 'text-accent-green',
     hoverBg: 'hover:bg-accent-green/10',
-    description: 'Closing game with rules and video link',
+    description: '',
     componentType: 'game',
   },
 ]
@@ -173,27 +173,26 @@ export default function AddBlockMenu({ onAdd, onAddFromLibrary, ageGroup, hero =
           top: dropdownPos.top,
           left: dropdownPos.left,
           transform: 'translateX(-50%)',
-          width: '288px',
+          width: '320px',
           zIndex: 9999,
         }}
-        className="bg-bg-secondary border border-bg-border rounded-2xl shadow-2xl overflow-hidden animate-slide-up"
+        className="animate-slide-up"
       >
-        <p className="px-4 py-2.5 text-xs font-heading text-text-dim uppercase tracking-wider border-b border-bg-border">
-          Add Block
-        </p>
-        {BUILD_OPTIONS.map((opt) => (
-          <button
-            key={opt.type}
-            type="button"
-            onClick={() => handlePickType(opt)}
-            className={`w-full text-left px-4 py-3.5 flex flex-col gap-0.5 border-b border-bg-border last:border-b-0 transition-colors ${opt.hoverBg}`}
-          >
-            <span className={`font-heading text-sm ${opt.textColor}`}>
-              {opt.label}
-            </span>
-            <span className="text-xs text-text-dim">{opt.description}</span>
-          </button>
-        ))}
+        <div className="flex flex-col gap-3 p-3 bg-bg-secondary border border-bg-border rounded-3xl shadow-2xl">
+          {BUILD_OPTIONS.map((opt) => (
+            <button
+              key={opt.type}
+              type="button"
+              onClick={() => handlePickType(opt)}
+              className={`w-full flex items-center gap-4 px-5 py-5 rounded-2xl border border-bg-border bg-bg-card active:scale-[0.97] transition-all duration-150 ${opt.hoverBg}`}
+            >
+              <span className="text-4xl leading-none">{opt.emoji}</span>
+              <span className={`font-heading text-2xl tracking-wide ${opt.textColor}`}>
+                {opt.label}
+              </span>
+            </button>
+          ))}
+        </div>
       </div>
     ) : null
 
