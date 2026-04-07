@@ -96,6 +96,9 @@ export default function BlockBuilder({
               block={block}
               onChange={(changes) => onChange(block.localId, changes)}
               onRemove={() => onRemove(block.localId)}
+              availableSkills={availableSkills}
+              onAddSkill={onAddSkill}
+              ageGroup={ageGroup}
             />
           )}
 

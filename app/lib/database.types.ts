@@ -181,6 +181,11 @@ export interface DraftWarmupBlock {
   description: string
   time: WarmupTime
   skill_focus: string
+  // optional add-what-you-need fields
+  photos?: DraftPhotoItem[]
+  video_link?: string
+  videoFile?: File | null
+  videoPreview?: string | null
 }
 
 export interface DraftLaneBlock {
@@ -194,6 +199,9 @@ export interface DraftLaneBlock {
   stations: DraftStation[]
   videoFile: File | null
   videoPreview: string | null
+  // optional add-what-you-need fields
+  video_link?: string
+  duration_minutes?: number | null
 }
 
 export interface DraftGameBlock {
@@ -207,6 +215,10 @@ export interface DraftGameBlock {
   video_link: string
   videoFile: File | null
   videoPreview: string | null
+  // optional add-what-you-need fields
+  photos?: DraftPhotoItem[]
+  skills?: string[]
+  duration_minutes?: number | null
 }
 
 export type DraftBlock = DraftWarmupBlock | DraftLaneBlock | DraftGameBlock

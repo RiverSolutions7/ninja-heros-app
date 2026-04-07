@@ -230,6 +230,21 @@ export default function NewClassPage() {
           })
           if (wErr) throw wErr
 
+          // Upload warmup photos for component library
+          const warmupPhotoUrls: string[] = []
+          for (const photo of (draftBlock.photos ?? [])) {
+            if (photo.photoFile) {
+              try {
+                const url = await uploadStationPhoto(photo.photoFile)
+                warmupPhotoUrls.push(url)
+              } catch (uploadErr) {
+                console.error('Warmup photo upload failed:', uploadErr)
+              }
+            } else if (photo.photo_url) {
+              warmupPhotoUrls.push(photo.photo_url)
+            }
+          }
+
           // Component candidate: warmup
           const warmupTitle = draftBlock.description.slice(0, 80).trim()
           if (warmupTitle) {
@@ -239,7 +254,7 @@ export default function NewClassPage() {
               curriculum: draft.age_group,
               description: draftBlock.description.trim() || null,
               skills: draftBlock.skill_focus.trim() ? [draftBlock.skill_focus.trim()] : null,
-              photos: null,
+              photos: warmupPhotoUrls.length > 0 ? warmupPhotoUrls : null,
               duration_minutes: parseDurationMinutes(draftBlock.time),
               equipment: null,
             })
@@ -315,7 +330,7 @@ export default function NewClassPage() {
             description: laneDescriptionParts.join('\n\n') || null,
             skills: draftBlock.core_skills.length > 0 ? draftBlock.core_skills : null,
             photos: laneAllPhotoUrls.length > 0 ? laneAllPhotoUrls : null,
-            duration_minutes: null,
+            duration_minutes: draftBlock.duration_minutes ?? null,
             equipment: laneEquipmentParts.join(', ') || null,
           })
 
@@ -339,6 +354,21 @@ export default function NewClassPage() {
           })
           if (gErr) throw gErr
 
+          // Upload game photos for component library
+          const gamePhotoUrls: string[] = []
+          for (const photo of (draftBlock.photos ?? [])) {
+            if (photo.photoFile) {
+              try {
+                const url = await uploadStationPhoto(photo.photoFile)
+                gamePhotoUrls.push(url)
+              } catch (uploadErr) {
+                console.error('Game photo upload failed:', uploadErr)
+              }
+            } else if (photo.photo_url) {
+              gamePhotoUrls.push(photo.photo_url)
+            }
+          }
+
           // Component candidate: game
           const gameTitle = draftBlock.name.trim()
           if (gameTitle) {
@@ -347,9 +377,9 @@ export default function NewClassPage() {
               title: gameTitle,
               curriculum: draft.age_group,
               description: draftBlock.description.trim() || null,
-              skills: null,
-              photos: null,
-              duration_minutes: null,
+              skills: (draftBlock.skills ?? []).length > 0 ? draftBlock.skills! : null,
+              photos: gamePhotoUrls.length > 0 ? gamePhotoUrls : null,
+              duration_minutes: draftBlock.duration_minutes ?? null,
               equipment: null,
             })
           }
