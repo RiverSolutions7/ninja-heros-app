@@ -1,16 +1,23 @@
 import Link from 'next/link'
 import { Suspense } from 'react'
-import { fetchAllFullClasses, fetchFolders, fetchComponents } from '@/app/lib/queries'
+import { fetchAllFullClasses, fetchComponents } from '@/app/lib/queries'
 import ClassCard from '@/app/components/library/ClassCard'
 import ClassFilters from '@/app/components/library/ClassFilters'
-import FolderBar from '@/app/components/library/FolderBar'
 import LibraryToggle from '@/app/components/library/LibraryToggle'
-import ComponentTypeFilter from '@/app/components/library/ComponentTypeFilter'
+import ComponentFilters from '@/app/components/library/ComponentFilters'
 import ComponentListClient from '@/app/components/library/ComponentListClient'
 import type { FullClass } from '@/app/lib/database.types'
 
 interface LibraryPageProps {
-  searchParams: Promise<{ q?: string; age?: string; folder?: string; dateRange?: string; view?: string; ctype?: string }>
+  searchParams: Promise<{
+    q?: string
+    age?: string
+    folder?: string
+    dateRange?: string
+    view?: string
+    ctype?: string
+    ccurriculum?: string
+  }>
 }
 
 function getDateCutoff(range: string): string | null {
@@ -24,20 +31,26 @@ function getDateCutoff(range: string): string | null {
 async function ClassList({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; age?: string; folder?: string; dateRange?: string; view?: string; ctype?: string }>
+  searchParams: Promise<{
+    q?: string
+    age?: string
+    folder?: string
+    dateRange?: string
+    view?: string
+    ctype?: string
+    ccurriculum?: string
+  }>
 }) {
   const { q: rawQ, age: rawAge, folder: rawFolder, dateRange: rawDateRange } = await searchParams
   let classes: FullClass[] = []
 
   try {
     classes = await fetchAllFullClasses()
-  } catch (err) {
+  } catch {
     return (
       <div className="text-center py-12">
         <p className="text-accent-fire font-heading">Failed to load classes</p>
-        <p className="text-text-muted text-sm mt-2">
-          Check your Supabase environment variables
-        </p>
+        <p className="text-text-muted text-sm mt-2">Check your Supabase environment variables</p>
       </div>
     )
   }
@@ -83,18 +96,22 @@ async function ClassList({
   )
 }
 
-async function ComponentList({ activeType }: { activeType: string }) {
+async function ComponentList({
+  activeType,
+  activeCurriculum,
+}: {
+  activeType: string
+  activeCurriculum: string
+}) {
   let components = []
 
   try {
-    components = await fetchComponents(activeType || undefined)
+    components = await fetchComponents(activeType || undefined, activeCurriculum || undefined)
   } catch {
     return (
       <div className="text-center py-12">
         <p className="text-accent-fire font-heading">Failed to load components</p>
-        <p className="text-text-muted text-sm mt-2">
-          Check your Supabase environment variables
-        </p>
+        <p className="text-text-muted text-sm mt-2">Check your Supabase environment variables</p>
       </div>
     )
   }
@@ -118,18 +135,15 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
   const params = await searchParams
   const view = params.view === 'components' ? 'components' : 'classes'
   const activeType = params.ctype ?? ''
-  const folders = await fetchFolders().catch(() => [])
+  const activeCurriculum = params.ccurriculum ?? ''
 
   return (
     <div>
       {/* Page header */}
       <div className="relative flex items-center justify-between mb-5 pt-2">
-        {/* Subtle brand gradient wash */}
         <div className="absolute inset-x-0 -top-4 h-24 bg-gradient-to-b from-accent-fire/[0.07] to-transparent pointer-events-none rounded-2xl -z-10" />
         <div>
-          <h1 className="font-heading text-2xl text-text-primary leading-none">
-            Class Library
-          </h1>
+          <h1 className="font-heading text-2xl text-text-primary leading-none">Class Library</h1>
           <p className="flex items-center gap-1.5 text-text-dim text-xs mt-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-accent-fire inline-block opacity-60" />
             Just Tumble · Ninja H.E.R.O.S.
@@ -139,7 +153,13 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
           href={view === 'components' ? '/library/log-component' : '/library/new'}
           className="inline-flex items-center gap-1.5 bg-accent-fire text-white font-heading text-sm px-4 py-2.5 rounded-xl active:scale-95 transition-all shadow-glow-fire min-h-[44px]"
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2.5}
+          >
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
           </svg>
           {view === 'components' ? 'Log' : 'Log Class'}
@@ -153,14 +173,7 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
 
       {view === 'classes' ? (
         <>
-          {/* Folder bar */}
-          <div className="mb-4">
-            <Suspense fallback={null}>
-              <FolderBar folders={folders} />
-            </Suspense>
-          </div>
-
-          {/* Filters */}
+          {/* Search + 3 filter dropdowns */}
           <div className="mb-5">
             <Suspense fallback={null}>
               <ClassFilters />
@@ -180,9 +193,11 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
         </>
       ) : (
         <>
-          {/* Component type filter */}
+          {/* 2 filter dropdowns */}
           <div className="mb-5">
-            <ComponentTypeFilter activeType={activeType} />
+            <Suspense fallback={null}>
+              <ComponentFilters activeType={activeType} activeCurriculum={activeCurriculum} />
+            </Suspense>
           </div>
 
           {/* Component list */}
@@ -193,7 +208,7 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
               </div>
             }
           >
-            <ComponentList activeType={activeType} />
+            <ComponentList activeType={activeType} activeCurriculum={activeCurriculum} />
           </Suspense>
         </>
       )}
