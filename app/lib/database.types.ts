@@ -248,6 +248,8 @@ export interface ComponentRow {
   skills: string[] | null
   photos: string[] | null
   duration_minutes: number | null
+  video_link: string | null
+  video_url: string | null
   created_at: string
 }
 
