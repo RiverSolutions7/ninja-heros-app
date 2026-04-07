@@ -88,7 +88,7 @@ async function ClassList({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="-mx-4">
       {filtered.map((cls) => (
         <ClassCard key={cls.id} cls={cls} showActions={true} />
       ))}

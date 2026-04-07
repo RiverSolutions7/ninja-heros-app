@@ -16,14 +16,13 @@ function formatShortDate(dateStr: string) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-function formatDate(dateStr: string) {
-  const d = new Date(dateStr + 'T12:00:00')
-  return d.toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
+function getCurriculumColor(ageGroup: string): string {
+  const g = ageGroup.toLowerCase()
+  if (g.includes('mini')) return '#7c3aed'
+  if (g.includes('junior')) return '#d97706'
+  if (g.includes('teen')) return '#0ea5e9'
+  if (g.includes('adult')) return '#059669'
+  return '#e84040'
 }
 
 export default function ClassCard({ cls, showActions = true, showHandoffRemove = false }: ClassCardProps) {
@@ -56,69 +55,86 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
     .map((b) => b.data.video_url)
     .filter(Boolean) as string[]
 
-  // Block type indicators for collapsed header
-  const hasWarmup = cls.blocks.some((b) => b.type === 'warmup')
-  const hasLane = cls.blocks.some((b) => b.type === 'lane')
-  const hasGame = cls.blocks.some((b) => b.type === 'game')
+  const thumbnailColor = getCurriculumColor(cls.age_group ?? '')
 
   return (
-    <div className="card overflow-hidden">
-      {/* Card header — tap to expand/collapse */}
+    <div className="border-b border-white/[0.06]">
+      {/* Row header — tap to expand/collapse */}
       <div
-        className="px-4 py-4 cursor-pointer select-none"
+        className="flex items-center gap-3 px-4 py-3 cursor-pointer select-none active:bg-white/[0.03] transition-colors"
         onClick={() => setExpanded((v) => !v)}
       >
-        <div className="flex items-start gap-3">
-          <div className="flex-1 min-w-0">
-            <p className={`font-heading text-base leading-tight truncate${cls.title ? ' text-text-primary' : ' text-text-dim'}`}>
-              {cls.title || 'Untitled Class'}
-            </p>
-            {/* Meta row */}
-            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-              <span className="text-xs text-text-dim">{formatShortDate(cls.class_date)}</span>
-              <span className="text-text-dim/40 text-xs leading-none">·</span>
-              <span className="text-xs text-text-dim truncate max-w-[140px]">{cls.age_group}</span>
-              {/* Block type dots */}
-              {(hasWarmup || hasLane || hasGame) && (
-                <div className="flex items-center gap-1 ml-0.5">
-                  {hasWarmup && <span className="w-2 h-2 rounded-full bg-accent-gold inline-block" />}
-                  {hasLane && <span className="w-2 h-2 rounded-full bg-accent-fire inline-block" />}
-                  {hasGame && <span className="w-2 h-2 rounded-full bg-accent-green inline-block" />}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Chevron */}
-          <svg
-            className={`w-5 h-5 text-text-dim flex-shrink-0 mt-0.5 transition-transform duration-300 ease-in-out${expanded ? ' rotate-180' : ''}`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
-
-          {/* Action buttons — stop propagation so they don't toggle expand */}
-          {(showActions || showHandoffRemove) && (
-            <div onClick={(e) => e.stopPropagation()}>
-              {showActions && (
-                <ClassCardMenu
-                  classId={cls.id}
-                  currentFolderId={cls.folder_id}
-                  inHandoff={cls.in_handoff}
-                  photoUrls={photoUrls}
-                  laneVideoUrls={laneVideoUrls}
-                  gameVideoUrls={gameVideoUrls}
-                />
-              )}
-              {showHandoffRemove && (
-                <RemoveFromHandoffButton classId={cls.id} />
-              )}
+        {/* Thumbnail */}
+        <div className="flex-shrink-0 w-14 h-14 rounded-xl overflow-hidden">
+          {photoUrls[0] ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={photoUrls[0]}
+              alt=""
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div
+              className="w-full h-full flex items-center justify-center"
+              style={{ backgroundColor: thumbnailColor + '33' }}
+            >
+              {/* Ninja star icon */}
+              <svg
+                className="w-6 h-6 opacity-80"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke={thumbnailColor}
+                strokeWidth={1.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M12 2L9.5 9.5 2 12l7.5 2.5L12 22l2.5-7.5L22 12l-7.5-2.5z" />
+              </svg>
             </div>
           )}
         </div>
+
+        {/* Text content */}
+        <div className="flex-1 min-w-0">
+          <p className={`font-heading text-[15px] leading-snug truncate${cls.title ? ' text-text-primary' : ' text-text-dim'}`}>
+            {cls.title || 'Untitled Class'}
+          </p>
+          <p className="text-xs text-text-dim mt-0.5 truncate">
+            {cls.age_group}
+            {cls.age_group && ' · '}
+            {formatShortDate(cls.class_date)}
+          </p>
+        </div>
+
+        {/* Chevron */}
+        <svg
+          className={`w-4 h-4 text-text-dim/50 flex-shrink-0 transition-transform duration-300 ease-in-out${expanded ? ' rotate-180' : ''}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+
+        {/* Action buttons — stop propagation so they don't toggle expand */}
+        {(showActions || showHandoffRemove) && (
+          <div onClick={(e) => e.stopPropagation()}>
+            {showActions && (
+              <ClassCardMenu
+                classId={cls.id}
+                currentFolderId={cls.folder_id}
+                inHandoff={cls.in_handoff}
+                photoUrls={photoUrls}
+                laneVideoUrls={laneVideoUrls}
+                gameVideoUrls={gameVideoUrls}
+              />
+            )}
+            {showHandoffRemove && (
+              <RemoveFromHandoffButton classId={cls.id} />
+            )}
+          </div>
+        )}
       </div>
 
       {/* Smooth expand/collapse via CSS Grid height trick */}
@@ -129,7 +145,7 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
 
           {/* Blocks */}
           <div className="divide-y divide-bg-border">
-            {cls.blocks.map((block, blockIdx) => {
+            {cls.blocks.map((block) => {
               if (block.type === 'warmup') {
                 return (
                   <div key={block.block.id} className="border-l-4 border-accent-gold">
@@ -315,6 +331,7 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
           )}
         </div>
       </div>
+
       {/* Photo lightbox */}
       {lightbox && (
         <div
