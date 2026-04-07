@@ -250,6 +250,8 @@ export interface ComponentRow {
   duration_minutes: number | null
   video_link: string | null
   video_url: string | null
+  folder_id: string | null
+  in_handoff: boolean
   created_at: string
 }
 

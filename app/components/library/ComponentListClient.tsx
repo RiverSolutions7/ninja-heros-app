@@ -22,7 +22,7 @@ export default function ComponentListClient({ components }: ComponentListClientP
             onClick={() => setSelected(c)}
             className="w-full text-left active:scale-[0.98] transition-transform"
           >
-            <ComponentCard component={c} />
+            <ComponentCard component={c} showMenu />
           </button>
         ))}
       </div>

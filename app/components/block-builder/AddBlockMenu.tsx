@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import type { BlockType, ComponentRow, CurriculumRow } from '@/app/lib/database.types'
 import { supabase } from '@/app/lib/supabase'
 import ComponentCard from '@/app/components/library/ComponentCard'
+import { TYPE_META } from '@/app/components/library/ComponentCard'
 
 interface AddBlockMenuProps {
   onAdd: (type: BlockType) => void
@@ -12,7 +13,7 @@ interface AddBlockMenuProps {
   ageGroup: string
 }
 
-type MenuView = 'closed' | 'menu' | 'choose' | 'library'
+type MenuView = 'closed' | 'menu' | 'choose' | 'library' | 'preview'
 
 const BUILD_OPTIONS: {
   type: BlockType
@@ -64,6 +65,7 @@ export default function AddBlockMenu({ onAdd, onAddFromLibrary, ageGroup }: AddB
   const [curriculums, setCurriculums] = useState<CurriculumRow[]>([])
   const [loadingLibrary, setLoadingLibrary] = useState(false)
   const [activeCurriculum, setActiveCurriculum] = useState<string>(ageGroup)
+  const [previewComponent, setPreviewComponent] = useState<ComponentRow | null>(null)
 
   function openMenu() {
     if (buttonRef.current) {
@@ -86,6 +88,7 @@ export default function AddBlockMenu({ onAdd, onAddFromLibrary, ageGroup }: AddB
     setView('closed')
     setSelectedOption(null)
     setActiveCurriculum(ageGroup)
+    setPreviewComponent(null)
   }
 
   // Close dropdown on outside click or scroll
@@ -141,8 +144,15 @@ export default function AddBlockMenu({ onAdd, onAddFromLibrary, ageGroup }: AddB
   }
 
   function handleSelectComponent(component: ComponentRow) {
-    onAddFromLibrary(component)
-    close()
+    setPreviewComponent(component)
+    setView('preview')
+  }
+
+  function handleAddToClass() {
+    if (previewComponent) {
+      onAddFromLibrary(previewComponent)
+      close()
+    }
   }
 
   // Filter components: locked to the type matching the selected block
@@ -323,6 +333,139 @@ export default function AddBlockMenu({ onAdd, onAddFromLibrary, ageGroup }: AddB
       </div>
     ) : null
 
+  // ── Preview screen ───────────────────────────────────────────
+  const previewScreen =
+    view === 'preview' && previewComponent ? (() => {
+      const meta = TYPE_META[previewComponent.type]
+      const photos = previewComponent.photos ?? []
+      return (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 9999 }}
+          className="bg-bg-primary flex flex-col"
+        >
+          {/* Header */}
+          <div className="flex items-center gap-3 px-4 py-4 border-b border-bg-border flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => setView('library')}
+              className="text-text-dim hover:text-text-primary transition-colors p-1.5 rounded-lg hover:bg-white/5 -ml-1.5"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <div className="flex-1 min-w-0">
+              <h2 className={`font-heading text-lg leading-none ${meta.textColor}`}>
+                {previewComponent.title}
+              </h2>
+              {previewComponent.curriculum && (
+                <p className="text-text-dim text-xs mt-0.5">{previewComponent.curriculum}</p>
+              )}
+            </div>
+            <span className={['text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0', meta.badge].join(' ')}>
+              {meta.label}
+            </span>
+          </div>
+
+          {/* Scrollable body */}
+          <div className="flex-1 overflow-y-auto">
+            {/* Photos */}
+            {photos.length > 0 && (
+              <div className="flex overflow-x-auto gap-2 px-4 py-4" style={{ scrollSnapType: 'x mandatory' }}>
+                {photos.map((url, i) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={i}
+                    src={url}
+                    alt={`${previewComponent.title} photo ${i + 1}`}
+                    className="flex-shrink-0 h-48 w-auto rounded-xl object-cover border border-bg-border"
+                    style={{ scrollSnapAlign: 'start' }}
+                  />
+                ))}
+              </div>
+            )}
+
+            <div className="px-4 py-4 space-y-4">
+              {/* Skills */}
+              {(previewComponent.skills?.length ?? 0) > 0 && (
+                <div>
+                  <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-2">Skills</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {previewComponent.skills!.map((skill) => (
+                      <span key={skill} className="badge badge-skill">{skill}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Equipment / Lane Name */}
+              {previewComponent.equipment && (
+                <div>
+                  <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-1">Lane Name</p>
+                  <p className="text-sm font-bold text-accent-blue">{previewComponent.equipment}</p>
+                </div>
+              )}
+
+              {/* Description */}
+              {previewComponent.description && (
+                <div>
+                  <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-1">Description</p>
+                  <p className="text-sm text-text-primary leading-relaxed whitespace-pre-wrap">
+                    {previewComponent.description}
+                  </p>
+                </div>
+              )}
+
+              {/* Duration */}
+              {previewComponent.duration_minutes != null && (
+                <div>
+                  <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-1">Duration</p>
+                  <p className="text-sm text-text-primary">{previewComponent.duration_minutes} minutes</p>
+                </div>
+              )}
+
+              {/* Video link */}
+              {previewComponent.video_link && (
+                <div>
+                  <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-1">Video</p>
+                  <a
+                    href={previewComponent.video_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-accent-blue/10 border border-accent-blue/20 text-xs text-accent-blue hover:bg-accent-blue/20 transition-colors"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                    Watch video
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Bottom action buttons */}
+          <div className="px-4 py-4 border-t border-bg-border flex gap-3 flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => setView('library')}
+              className="flex-1 py-3.5 rounded-xl border border-bg-border text-text-muted font-heading text-sm hover:bg-white/5 transition-colors"
+            >
+              Back
+            </button>
+            <button
+              type="button"
+              onClick={handleAddToClass}
+              className="flex-1 py-3.5 rounded-xl bg-accent-fire text-white font-heading text-sm active:scale-95 transition-all shadow-lg shadow-accent-fire/25"
+            >
+              Add to Class
+            </button>
+          </div>
+        </div>
+      )
+    })() : null
+
   return (
     <div className="flex justify-center">
       <button
@@ -345,6 +488,9 @@ export default function AddBlockMenu({ onAdd, onAddFromLibrary, ageGroup }: AddB
         : null}
       {typeof window !== 'undefined' && libraryPicker
         ? createPortal(libraryPicker, document.body)
+        : null}
+      {typeof window !== 'undefined' && previewScreen
+        ? createPortal(previewScreen, document.body)
         : null}
     </div>
   )
