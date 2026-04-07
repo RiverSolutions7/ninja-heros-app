@@ -11,6 +11,7 @@ interface AddBlockMenuProps {
   onAdd: (type: BlockType) => void
   onAddFromLibrary: (component: ComponentRow) => void
   ageGroup: string
+  hero?: boolean
 }
 
 type MenuView = 'closed' | 'menu' | 'choose' | 'library' | 'preview'
@@ -53,7 +54,7 @@ const BUILD_OPTIONS: {
   },
 ]
 
-export default function AddBlockMenu({ onAdd, onAddFromLibrary, ageGroup }: AddBlockMenuProps) {
+export default function AddBlockMenu({ onAdd, onAddFromLibrary, ageGroup, hero = false }: AddBlockMenuProps) {
   const [view, setView] = useState<MenuView>('closed')
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 })
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -467,18 +468,30 @@ export default function AddBlockMenu({ onAdd, onAddFromLibrary, ageGroup }: AddB
     })() : null
 
   return (
-    <div className="flex justify-center">
-      <button
-        ref={buttonRef}
-        type="button"
-        onClick={() => (view === 'menu' ? close() : openMenu())}
-        className="flex items-center gap-2 px-5 py-2.5 rounded-xl border-2 border-dashed border-accent-fire/20 text-text-dim hover:border-accent-fire/50 hover:text-accent-fire hover:bg-accent-fire/5 transition-all duration-150 font-heading text-sm active:scale-95"
-      >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-        </svg>
-        Add Block
-      </button>
+    <div className={hero ? 'w-full' : 'flex justify-center'}>
+      {hero ? (
+        <button
+          ref={buttonRef}
+          type="button"
+          onClick={() => (view === 'menu' ? close() : openMenu())}
+          className="w-full flex flex-col items-center justify-center gap-3 py-14 rounded-3xl border-2 border-dashed border-accent-fire/30 hover:border-accent-fire/60 bg-accent-fire/[0.04] hover:bg-accent-fire/[0.08] active:scale-[0.97] transition-all duration-200"
+        >
+          <span className="text-7xl font-heading text-accent-fire/70 leading-none select-none">+</span>
+          <span className="font-heading text-xl text-accent-fire/80 tracking-wide">Add Block</span>
+        </button>
+      ) : (
+        <button
+          ref={buttonRef}
+          type="button"
+          onClick={() => (view === 'menu' ? close() : openMenu())}
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl border-2 border-dashed border-accent-fire/20 text-text-dim hover:border-accent-fire/50 hover:text-accent-fire hover:bg-accent-fire/5 transition-all duration-150 font-heading text-sm active:scale-95"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+          Add Block
+        </button>
+      )}
 
       {typeof window !== 'undefined' && dropdown
         ? createPortal(dropdown, document.body)
