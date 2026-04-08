@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/app/lib/supabase'
@@ -23,6 +23,20 @@ import {
 } from '@/app/lib/database.types'
 import BlockBuilder from '@/app/components/block-builder/BlockBuilder'
 import AddBlockMenu from '@/app/components/block-builder/AddBlockMenu'
+import Toast from '@/app/components/ui/Toast'
+
+const DRAFT_KEY = 'ninja-heros-class-draft'
+
+interface StoredDraft {
+  title: string
+  class_date: string
+  age_group: string
+  difficulty: string
+  noteLines: string[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  blocks: any[]
+  savedAt: string
+}
 
 function parseDurationMinutes(time: string): number | null {
   const match = time.match(/^(\d+)/)
@@ -78,15 +92,130 @@ export default function NewClassPage() {
   const router = useRouter()
   const [draft, setDraft] = useState<ClassDraft>(defaultDraft)
   const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [titleError, setTitleError] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const [noteLines, setNoteLines] = useState<string[]>([])
+
+  // Draft auto-save
+  const [savedDraft, setSavedDraft] = useState<StoredDraft | null>(null)
+  const draftRef = useRef(draft)
+  const noteLinesRef = useRef(noteLines)
 
   // Curriculums fetched from DB
   const [curriculums, setCurriculums] = useState<CurriculumRow[]>([])
 
   // Dynamic skills fetched from the DB, filtered by selected curriculum
   const [availableSkills, setAvailableSkills] = useState<string[]>([])
+
+  // Keep refs in sync so interval/effects always see latest state
+  useEffect(() => { draftRef.current = draft }, [draft])
+  useEffect(() => { noteLinesRef.current = noteLines }, [noteLines])
+
+  function saveDraftToStorage() {
+    const d = draftRef.current
+    const nl = noteLinesRef.current
+    if (!d.title && d.blocks.length === 0 && nl.length === 0) return
+    try {
+      const data: StoredDraft = {
+        title: d.title,
+        class_date: d.class_date,
+        age_group: d.age_group,
+        difficulty: d.difficulty,
+        noteLines: nl,
+        blocks: d.blocks.map((block) => {
+          if (block.type === 'warmup') {
+            return { type: 'warmup', localId: block.localId, description: block.description, time: block.time, skill_focus: block.skill_focus }
+          }
+          if (block.type === 'lane') {
+            return {
+              type: 'lane', localId: block.localId, instructor_name: block.instructor_name,
+              core_skills: block.core_skills, duration_minutes: block.duration_minutes ?? null,
+              stations: block.stations.map((s: DraftStation) => ({
+                localId: s.localId, sort_order: s.sort_order, equipment: s.equipment, description: s.description,
+              })),
+            }
+          }
+          return {
+            type: 'game', localId: block.localId, name: block.name, description: block.description,
+            video_link: block.video_link, skills: block.skills ?? [], duration_minutes: block.duration_minutes ?? null,
+          }
+        }),
+        savedAt: new Date().toISOString(),
+      }
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(data))
+    } catch { /* ignore quota errors */ }
+  }
+
+  function clearDraft() {
+    try { localStorage.removeItem(DRAFT_KEY) } catch { /* ignore */ }
+  }
+
+  function handleRestore() {
+    if (!savedDraft) return
+    try {
+      const blocks: DraftBlock[] = (savedDraft.blocks ?? []).map((b) => {
+        if (b.type === 'warmup') {
+          return { type: 'warmup', localId: b.localId || crypto.randomUUID(), description: b.description || '', time: b.time || '5 min', skill_focus: b.skill_focus || '' } as DraftWarmupBlock
+        }
+        if (b.type === 'lane') {
+          return {
+            type: 'lane', localId: b.localId || crypto.randomUUID(), instructor_name: b.instructor_name || '',
+            core_skills: b.core_skills || [], duration_minutes: b.duration_minutes ?? null,
+            stations: (b.stations ?? []).map((s: { localId?: string; sort_order?: number; equipment?: string; description?: string }) => ({
+              localId: s.localId || crypto.randomUUID(), sort_order: s.sort_order ?? 0,
+              equipment: s.equipment || '', description: s.description || '', photos: [],
+            })),
+            videoFile: null, videoPreview: null,
+          } as DraftLaneBlock
+        }
+        return {
+          type: 'game', localId: b.localId || crypto.randomUUID(), name: b.name || '',
+          description: b.description || '', video_link: b.video_link || '',
+          skills: b.skills || [], duration_minutes: b.duration_minutes ?? null,
+          videoFile: null, videoPreview: null,
+        } as DraftGameBlock
+      })
+      setDraft({
+        title: savedDraft.title || '',
+        class_date: savedDraft.class_date || today(),
+        age_group: savedDraft.age_group || 'Junior Ninjas (5-9)',
+        difficulty: savedDraft.difficulty || 'Intermediate',
+        notes: '',
+        blocks,
+      })
+      setNoteLines(savedDraft.noteLines || [])
+    } catch { /* ignore corrupt data */ }
+    setSavedDraft(null)
+  }
+
+  function handleDiscard() {
+    clearDraft()
+    setSavedDraft(null)
+  }
+
+  // Check for saved draft on mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY)
+      if (raw) {
+        const parsed: StoredDraft = JSON.parse(raw)
+        if (parsed.title || (parsed.blocks?.length ?? 0) > 0 || (parsed.noteLines?.length ?? 0) > 0) {
+          setSavedDraft(parsed)
+        }
+      }
+    } catch { /* ignore corrupt data */ }
+  }, [])
+
+  // Auto-save every 30 seconds
+  useEffect(() => {
+    const id = setInterval(saveDraftToStorage, 30_000)
+    return () => clearInterval(id)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Save on block add/remove
+  useEffect(() => {
+    saveDraftToStorage()
+  }, [draft.blocks.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch curriculums once on mount
   useEffect(() => {
@@ -172,8 +301,8 @@ export default function NewClassPage() {
   // ── Submit ───────────────────────────────────────────────────
 
   async function handleSubmit(e: React.FormEvent) {
+    console.log('SAVE TRIGGERED')
     e.preventDefault()
-    setError(null)
     setTitleError(null)
 
     if (!draft.title.trim()) {
@@ -182,7 +311,7 @@ export default function NewClassPage() {
     }
 
     if (!draft.class_date) {
-      setError('Please select a class date.')
+      setToast({ message: 'Please select a class date.', type: 'error' })
       return
     }
 
@@ -247,20 +376,17 @@ export default function NewClassPage() {
             }
           }
 
-          // Component candidate: warmup
-          const warmupTitle = draftBlock.description.slice(0, 80).trim()
-          if (warmupTitle) {
-            componentCandidates.push({
-              type: 'warmup',
-              title: warmupTitle,
-              curriculum: draft.age_group,
-              description: draftBlock.description.trim() || null,
-              skills: draftBlock.skill_focus.trim() ? [draftBlock.skill_focus.trim()] : null,
-              photos: warmupPhotoUrls.length > 0 ? warmupPhotoUrls : null,
-              duration_minutes: parseDurationMinutes(draftBlock.time),
-              equipment: null,
-            })
-          }
+          // Component candidate: warmup — always push, fall back to 'Warmup' if no description
+          componentCandidates.push({
+            type: 'warmup',
+            title: draftBlock.description.slice(0, 80).trim() || 'Warmup',
+            curriculum: draft.age_group,
+            description: draftBlock.description.trim() || null,
+            skills: draftBlock.skill_focus.trim() ? [draftBlock.skill_focus.trim()] : null,
+            photos: warmupPhotoUrls.length > 0 ? warmupPhotoUrls : null,
+            duration_minutes: parseDurationMinutes(draftBlock.time),
+            equipment: null,
+          })
 
         } else if (draftBlock.type === 'lane') {
           // Upload lane video if present
@@ -389,19 +515,24 @@ export default function NewClassPage() {
         }
       }
 
-      // Silently extract components in the background — no await
-      autoPopulateComponents(componentCandidates).catch((err) =>
-        console.error('Component auto-populate failed:', err)
+      // Extract components before navigating so logs are visible
+      console.log(
+        `[handleSubmit] firing autoPopulateComponents with ${componentCandidates.length} candidates:`,
+        componentCandidates.map((c) => `${c.type}:"${c.title}"`)
       )
+      try {
+        await autoPopulateComponents(componentCandidates)
+      } catch (err) {
+        console.error('Component auto-populate failed:', err)
+      }
 
+      clearDraft()
+      setToast({ message: 'Class saved ✓', type: 'success' })
+      await new Promise((r) => setTimeout(r, 1500))
       router.push(`/library/${classRow.id}`)
     } catch (err) {
       console.error('Save failed:', err)
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Failed to save class. Please try again.'
-      )
+      setToast({ message: 'Something went wrong. Please try again.', type: 'error' })
       setSubmitting(false)
     }
   }
@@ -425,6 +556,29 @@ export default function NewClassPage() {
           <p className="text-text-dim text-xs mt-0.5">Just Tumble Ninja H.E.R.O.S.</p>
         </div>
       </div>
+
+      {/* Draft restore banner */}
+      {savedDraft && (
+        <div className="mb-4 flex items-center justify-between gap-3 px-3 py-2.5 bg-amber-900/25 border border-amber-700/40 rounded-xl">
+          <p className="text-text-muted text-sm leading-snug">You have an unfinished class. Restore draft?</p>
+          <div className="flex gap-2 flex-shrink-0">
+            <button
+              type="button"
+              onClick={handleRestore}
+              className="text-xs font-semibold text-accent-gold px-3 py-1.5 rounded-lg border border-accent-gold/40 hover:bg-accent-gold/10 transition-colors"
+            >
+              Restore
+            </button>
+            <button
+              type="button"
+              onClick={handleDiscard}
+              className="text-xs text-text-dim px-3 py-1.5 rounded-lg border border-bg-border hover:bg-white/5 transition-colors"
+            >
+              Discard
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Compact class details — no card, no section label */}
       <div className="px-1 mb-5 space-y-2">
@@ -533,13 +687,6 @@ export default function NewClassPage() {
         )}
       </div>
 
-      {/* Error */}
-      {error && (
-        <div className="mb-4 p-3 bg-red-900/30 border border-red-800 rounded-xl text-red-400 text-sm">
-          {error}
-        </div>
-      )}
-
       {/* Submit */}
       <button
         type="submit"
@@ -562,6 +709,14 @@ export default function NewClassPage() {
       </button>
 
       <div className="h-4" />
+
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onDismiss={() => setToast(null)}
+        />
+      )}
     </form>
   )
 }

@@ -24,19 +24,28 @@ export async function autoPopulateComponents(
   candidates: ComponentCandidate[]
 ): Promise<void> {
   const valid = candidates.filter((c) => c.title.trim())
+  console.log(
+    `[autoPopulateComponents] called with ${candidates.length} candidates, ${valid.length} valid:`,
+    valid.map((c) => `${c.type}:"${c.title}"`)
+  )
   if (valid.length === 0) return
 
   for (const candidate of valid) {
     const title = candidate.title.trim()
 
     // Look for an existing component with the same type + title + curriculum
-    const { data } = await supabase
+    const { data, error: selectErr } = await supabase
       .from('components')
       .select('id, photos')
       .eq('type', candidate.type)
       .ilike('title', title)
       .eq('curriculum', candidate.curriculum)
       .limit(1)
+
+    if (selectErr) {
+      console.error(`[autoPopulateComponents] select failed for "${title}":`, JSON.stringify(selectErr))
+      continue
+    }
 
     if (data && data.length > 0) {
       // Upsert: merge new data over existing — combine photos, overwrite
@@ -55,11 +64,19 @@ export async function autoPopulateComponents(
       if (candidate.video_link) updates.video_link = candidate.video_link
 
       if (Object.keys(updates).length > 0) {
-        await supabase.from('components').update(updates).eq('id', existing.id)
+        const { error: updateErr } = await supabase
+          .from('components')
+          .update(updates)
+          .eq('id', existing.id)
+        if (updateErr) {
+          console.error(`[autoPopulateComponents] update failed for "${title}" (id=${existing.id}):`, JSON.stringify(updateErr))
+        } else {
+          console.log(`[autoPopulateComponents] updated component "${title}" (${candidate.type})`)
+        }
       }
     } else {
       // New component — insert
-      await supabase.from('components').insert({
+      const { error: insertErr } = await supabase.from('components').insert({
         type: candidate.type,
         title,
         curriculum: candidate.curriculum || null,
@@ -70,6 +87,11 @@ export async function autoPopulateComponents(
         equipment: candidate.equipment,
         video_link: candidate.video_link ?? null,
       })
+      if (insertErr) {
+        console.error(`[autoPopulateComponents] insert failed for "${title}":`, JSON.stringify(insertErr))
+      } else {
+        console.log(`[autoPopulateComponents] inserted new component "${title}" (${candidate.type})`)
+      }
     }
   }
 }

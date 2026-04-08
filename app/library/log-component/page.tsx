@@ -9,6 +9,7 @@ import { uploadComponentVideo } from '@/app/lib/uploadVideo'
 import type { ComponentType, CurriculumRow } from '@/app/lib/database.types'
 import SkillChip from '@/app/components/skills/SkillChip'
 import VideoCapture from '@/app/components/block-builder/VideoCapture'
+import Toast from '@/app/components/ui/Toast'
 
 interface PhotoDraft {
   localId: string
@@ -85,6 +86,7 @@ export default function LogComponentPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [titleError, setTitleError] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const newSkillInputRef = useRef<HTMLInputElement>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
   const libraryRef = useRef<HTMLInputElement>(null)
@@ -238,12 +240,12 @@ export default function LogComponentPage() {
 
       if (insertErr) throw insertErr
 
+      setToast({ message: 'Component saved ✓', type: 'success' })
+      await new Promise((r) => setTimeout(r, 1500))
       router.push('/library?view=components')
     } catch (err) {
       console.error('Save failed:', err)
-      setError(
-        err instanceof Error ? err.message : 'Failed to save. Please try again.'
-      )
+      setToast({ message: 'Something went wrong. Please try again.', type: 'error' })
       setSubmitting(false)
     }
   }
@@ -707,6 +709,14 @@ export default function LogComponentPage() {
       </button>
 
       <div className="h-4" />
+
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onDismiss={() => setToast(null)}
+        />
+      )}
     </form>
   )
 }
