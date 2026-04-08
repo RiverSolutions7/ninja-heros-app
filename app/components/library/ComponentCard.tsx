@@ -37,7 +37,21 @@ export default function ComponentCard({ component, showMenu = false }: Component
   const meta = TYPE_META[component.type]
   const photos = component.photos ?? []
   const [lightbox, setLightbox] = useState<{ index: number } | null>(null)
+  const [shareToast, setShareToast] = useState(false)
   const touchStartX = useRef(0)
+
+  function handleShare(e: React.MouseEvent) {
+    e.stopPropagation()
+    const url = `${window.location.origin}/component/${component.id}`
+    if (navigator.share) {
+      navigator.share({ title: component.title, url })
+    } else {
+      navigator.clipboard.writeText(url).then(() => {
+        setShareToast(true)
+        setTimeout(() => setShareToast(false), 2500)
+      })
+    }
+  }
 
   function lbPrev() {
     setLightbox((lb) => lb ? { index: (lb.index - 1 + photos.length) % photos.length } : null)
@@ -82,15 +96,27 @@ export default function ComponentCard({ component, showMenu = false }: Component
             )}
           </div>
 
-          {/* Right: badge + pencil */}
+          {/* Right: badge + share + pencil */}
           <div className="flex items-center gap-1 flex-shrink-0">
             <span className={['text-xs font-semibold px-2 py-0.5 rounded-full', meta.badge].join(' ')}>
               {meta.label}
             </span>
             {showMenu && (
-              <div onClick={(e) => e.stopPropagation()}>
-                <ComponentCardMenu component={component} />
-              </div>
+              <>
+                <button
+                  type="button"
+                  onClick={handleShare}
+                  aria-label="Share component"
+                  className="flex items-center justify-center w-8 h-8 rounded-lg text-text-dim hover:text-text-primary hover:bg-white/5 transition-colors flex-shrink-0"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                  </svg>
+                </button>
+                <div onClick={(e) => e.stopPropagation()}>
+                  <ComponentCardMenu component={component} />
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -121,6 +147,17 @@ export default function ComponentCard({ component, showMenu = false }: Component
           </div>
         )}
       </div>
+
+      {/* Link copied toast */}
+      {shareToast && typeof window !== 'undefined' && createPortal(
+        <div className="fixed bottom-32 left-1/2 -translate-x-1/2 z-[300] flex items-center gap-2 bg-bg-card border border-bg-border rounded-xl px-4 py-2.5 shadow-2xl text-sm text-text-primary whitespace-nowrap pointer-events-none">
+          <svg className="w-4 h-4 text-accent-green flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+          Link copied!
+        </div>,
+        document.body
+      )}
 
       {/* Lightbox */}
       {lightbox !== null && typeof window !== 'undefined' && createPortal(
