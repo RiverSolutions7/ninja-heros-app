@@ -149,21 +149,26 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
             Just Tumble · Ninja H.E.R.O.S.
           </p>
         </div>
-        <Link
-          href={view === 'components' ? '/library/log-component' : '/library/new'}
-          className="inline-flex items-center gap-1.5 bg-accent-fire text-white font-heading text-sm px-4 py-2.5 rounded-xl active:scale-95 transition-all shadow-glow-fire min-h-[44px]"
-        >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2.5}
+        <div className="flex items-center gap-2">
+          <Link
+            href="/library/log-component"
+            className="inline-flex items-center gap-1.5 border border-bg-border text-text-muted font-heading text-sm px-3 py-2.5 rounded-xl active:scale-95 transition-all hover:bg-white/5 min-h-[44px]"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-          {view === 'components' ? 'Log' : 'Log Class'}
-        </Link>
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            Log Component
+          </Link>
+          <Link
+            href="/library/new"
+            className="inline-flex items-center gap-1.5 bg-accent-fire text-white font-heading text-sm px-4 py-2.5 rounded-xl active:scale-95 transition-all shadow-glow-fire min-h-[44px]"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            Log Class
+          </Link>
+        </div>
       </div>
 
       {/* Classes / Components toggle */}
