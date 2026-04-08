@@ -158,6 +158,7 @@ export default function InspirationPage() {
     })
 
     if (error) {
+      console.error('inspiration_clips insert error:', JSON.stringify(error))
       setFormError('Save failed. Please try again.')
       setSubmitting(false)
       return
@@ -254,9 +255,9 @@ export default function InspirationPage() {
         </div>
       )}
 
-      {/* Add Clip form overlay */}
+      {/* Add Clip form overlay — z-[200] sits above TabNav (z-50) */}
       {showForm && (
-        <div className="fixed inset-0 z-50 flex flex-col">
+        <div className="fixed inset-0 z-[200] flex flex-col">
           {/* Backdrop */}
           <div className="flex-1 bg-black/60" onClick={closeForm} />
           {/* Bottom sheet */}
