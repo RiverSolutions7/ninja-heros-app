@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { FullClass } from '@/app/lib/database.types'
 import ClassCardMenu from './ClassCardMenu'
 import RemoveFromHandoffButton from '@/app/components/handoff/RemoveFromHandoffButton'
@@ -28,7 +29,20 @@ function getCurriculumColor(ageGroup: string): string {
 export default function ClassCard({ cls, showActions = true, showHandoffRemove = false }: ClassCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [lightbox, setLightbox] = useState<{ urls: string[]; index: number } | null>(null)
+  const [shareToast, setShareToast] = useState(false)
   const touchStartX = useRef(0)
+
+  function handleShare() {
+    const url = `${window.location.origin}/class/${cls.id}`
+    if (navigator.share) {
+      navigator.share({ title: cls.title || 'Ninja H.E.R.O.S. Class', url })
+    } else {
+      navigator.clipboard.writeText(url).then(() => {
+        setShareToast(true)
+        setTimeout(() => setShareToast(false), 2500)
+      })
+    }
+  }
 
   function lbPrev() {
     setLightbox((lb) => lb ? { ...lb, index: (lb.index - 1 + lb.urls.length) % lb.urls.length } : null)
@@ -119,7 +133,19 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
 
         {/* Action buttons — stop propagation so they don't toggle expand */}
         {(showActions || showHandoffRemove) && (
-          <div onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+            {showActions && (
+              <button
+                type="button"
+                onClick={handleShare}
+                aria-label="Share class"
+                className="flex items-center justify-center w-8 h-8 rounded-lg text-text-dim hover:text-text-primary hover:bg-white/5 transition-colors flex-shrink-0"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+              </button>
+            )}
             {showActions && (
               <ClassCardMenu
                 classId={cls.id}
@@ -331,6 +357,19 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
           )}
         </div>
       </div>
+
+      {/* Link copied toast */}
+      {shareToast &&
+        typeof window !== 'undefined' &&
+        createPortal(
+          <div className="fixed bottom-32 left-1/2 -translate-x-1/2 z-[300] flex items-center gap-2 bg-bg-card border border-bg-border rounded-xl px-4 py-2.5 shadow-2xl text-sm text-text-primary whitespace-nowrap pointer-events-none">
+            <svg className="w-4 h-4 text-accent-green flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            Link copied!
+          </div>,
+          document.body
+        )}
 
       {/* Photo lightbox */}
       {lightbox && (

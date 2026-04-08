@@ -11,6 +11,7 @@ import type { ComponentCandidate } from '@/app/lib/autoPopulateComponents'
 import { componentToDraftBlock } from '@/app/lib/componentUtils'
 import {
   type AgeGroup,
+  type Difficulty,
   type CurriculumRow,
   type BlockType,
   type ClassDraft,
@@ -179,7 +180,7 @@ export default function NewClassPage() {
         title: savedDraft.title || '',
         class_date: savedDraft.class_date || today(),
         age_group: savedDraft.age_group || 'Junior Ninjas (5-9)',
-        difficulty: savedDraft.difficulty || 'Intermediate',
+        difficulty: (savedDraft.difficulty || 'Intermediate') as Difficulty,
         notes: '',
         blocks,
       })
