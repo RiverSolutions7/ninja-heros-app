@@ -19,7 +19,7 @@
 ## QUICK WINS (Do Next)
 [x] Auto-populate components from logged classes
 [x] Toast confirmation after save ("Class saved ✓")
-[~] Draft auto-save — restore unfinished log if coach is interrupted
+[x] Draft auto-save — restore unfinished log if coach is interrupted
 [x] Prominent share icon directly on class rows (not buried in pencil menu)
 [ ] + Log Component button alongside + Log Class on library header
 [ ] Persist curriculum selection in URL params (/skills?curriculum=Mini+Ninjas)
