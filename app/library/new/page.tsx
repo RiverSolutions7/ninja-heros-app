@@ -383,6 +383,7 @@ export default function NewClassPage() {
               photos: gamePhotoUrls.length > 0 ? gamePhotoUrls : null,
               duration_minutes: draftBlock.duration_minutes ?? null,
               equipment: null,
+              video_link: draftBlock.video_link.trim() || null,
             })
           }
         }

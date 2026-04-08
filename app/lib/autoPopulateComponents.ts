@@ -10,11 +10,14 @@ export interface ComponentCandidate {
   photos: string[] | null
   duration_minutes: number | null
   equipment: string | null
+  video_link?: string | null
 }
 
 /**
  * After saving a class, silently extract and save its components to the
- * components table. Skips duplicates (same title + type).
+ * components table. Dedup key: type + title (case-insensitive) + curriculum.
+ * If a matching component already exists, merge in any new data (combine
+ * photos, overwrite other fields only when the new value is non-empty).
  * Fire-and-forget — do not await this in the UI.
  */
 export async function autoPopulateComponents(
@@ -24,25 +27,49 @@ export async function autoPopulateComponents(
   if (valid.length === 0) return
 
   for (const candidate of valid) {
-    // Skip if a component with this title + type already exists
+    const title = candidate.title.trim()
+
+    // Look for an existing component with the same type + title + curriculum
     const { data } = await supabase
       .from('components')
-      .select('id')
+      .select('id, photos')
       .eq('type', candidate.type)
-      .ilike('title', candidate.title.trim())
+      .ilike('title', title)
+      .eq('curriculum', candidate.curriculum)
       .limit(1)
 
-    if (data && data.length > 0) continue
+    if (data && data.length > 0) {
+      // Upsert: merge new data over existing — combine photos, overwrite
+      // other fields only when the incoming value has content.
+      const existing = data[0] as { id: string; photos: string[] | null }
+      const combinedPhotos = Array.from(
+        new Set([...(existing.photos ?? []), ...(candidate.photos ?? [])])
+      )
 
-    await supabase.from('components').insert({
-      type: candidate.type,
-      title: candidate.title.trim(),
-      curriculum: candidate.curriculum || null,
-      description: candidate.description,
-      skills: candidate.skills,
-      photos: candidate.photos,
-      duration_minutes: candidate.duration_minutes,
-      equipment: candidate.equipment,
-    })
+      const updates: Record<string, unknown> = {}
+      if (combinedPhotos.length > 0) updates.photos = combinedPhotos
+      if (candidate.description) updates.description = candidate.description
+      if (candidate.skills?.length) updates.skills = candidate.skills
+      if (candidate.duration_minutes != null) updates.duration_minutes = candidate.duration_minutes
+      if (candidate.equipment) updates.equipment = candidate.equipment
+      if (candidate.video_link) updates.video_link = candidate.video_link
+
+      if (Object.keys(updates).length > 0) {
+        await supabase.from('components').update(updates).eq('id', existing.id)
+      }
+    } else {
+      // New component — insert
+      await supabase.from('components').insert({
+        type: candidate.type,
+        title,
+        curriculum: candidate.curriculum || null,
+        description: candidate.description,
+        skills: candidate.skills,
+        photos: candidate.photos,
+        duration_minutes: candidate.duration_minutes,
+        equipment: candidate.equipment,
+        video_link: candidate.video_link ?? null,
+      })
+    }
   }
 }
