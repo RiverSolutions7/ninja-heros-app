@@ -256,6 +256,21 @@ export interface ComponentRow {
 }
 
 // ============================================================
+// Inspiration Clips
+// ============================================================
+
+export interface InspirationClipRow {
+  id: string
+  url: string
+  title: string | null
+  thumbnail_url: string | null
+  source_domain: string | null
+  tags: string[]
+  notes: string | null
+  created_at: string
+}
+
+// ============================================================
 // Skill Tracker
 // ============================================================
 
