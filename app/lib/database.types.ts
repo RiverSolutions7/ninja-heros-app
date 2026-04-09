@@ -119,6 +119,7 @@ export interface LaneBlockRow {
   instructor_name: string | null
   core_skills: string[]
   video_url: string | null
+  duration_minutes: number | null
 }
 
 export interface StationRow {

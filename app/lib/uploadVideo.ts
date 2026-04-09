@@ -13,7 +13,7 @@ export async function uploadLaneVideo(file: File): Promise<string> {
       contentType: file.type,
     })
 
-  if (error) throw new Error(`Lane video upload failed: ${error.message}`)
+  if (error) throw new Error(`Station video upload failed: ${error.message}`)
 
   const { data } = supabase.storage
     .from('lane-videos')

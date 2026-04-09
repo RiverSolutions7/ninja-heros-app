@@ -108,7 +108,7 @@ export default async function ShareComponentPage({ params }: Props) {
 
           {component.equipment && (
             <div>
-              <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-1">Lane Name</p>
+              <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-1">Station Name</p>
               <p className="text-sm font-bold text-accent-blue">{component.equipment}</p>
             </div>
           )}

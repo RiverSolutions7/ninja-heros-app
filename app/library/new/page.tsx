@@ -337,6 +337,19 @@ export default function NewClassPage() {
       return
     }
 
+    // Validate that every station within each lane block has been named
+    for (const block of draft.blocks) {
+      if (block.type === 'lane') {
+        for (const station of block.stations) {
+          if (!station.equipment.trim()) {
+            setTitleError('Please name all your stations before saving.')
+            window.scrollTo({ top: 0, behavior: 'smooth' })
+            return
+          }
+        }
+      }
+    }
+
     setSubmitting(true)
 
     // Collect component candidates as we save blocks (fire-and-forget after save)
@@ -428,17 +441,14 @@ export default function NewClassPage() {
               instructor_name: draftBlock.instructor_name.trim() || null,
               core_skills: draftBlock.core_skills,
               video_url: laneVideoUrl,
+              duration_minutes: draftBlock.duration_minutes ?? null,
             })
             .select()
             .single()
 
           if (lErr) throw lErr
 
-          // Insert stations (with photo uploads)
-          const laneAllPhotoUrls: string[] = []
-          const laneEquipmentParts: string[] = []
-          const laneDescriptionParts: string[] = []
-
+          // Insert stations (with photo uploads) — one component candidate per station
           for (let j = 0; j < draftBlock.stations.length; j++) {
             const station = draftBlock.stations[j]
             const uploadedUrls: string[] = []
@@ -466,23 +476,19 @@ export default function NewClassPage() {
             })
             if (sErr) throw sErr
 
-            laneAllPhotoUrls.push(...uploadedUrls)
-            if (station.equipment.trim()) laneEquipmentParts.push(station.equipment.trim())
-            if (station.description.trim()) laneDescriptionParts.push(station.description.trim())
+            // One component candidate per named station (validated above — all have names)
+            componentCandidates.push({
+              type: 'station',
+              title: station.equipment.trim(),
+              curriculum: draft.age_group,
+              description: station.description.trim() || null,
+              skills: draftBlock.core_skills.length > 0 ? draftBlock.core_skills : null,
+              photos: uploadedUrls.length > 0 ? uploadedUrls : null,
+              duration_minutes: draftBlock.duration_minutes ?? null,
+              equipment: station.equipment.trim(),
+              video_link: null,
+            })
           }
-
-          // Component candidate: one per lane block (not per station)
-          const laneTitle = draftBlock.instructor_name.trim() || 'Obstacle Course Station'
-          componentCandidates.push({
-            type: 'station',
-            title: laneTitle,
-            curriculum: draft.age_group,
-            description: laneDescriptionParts.join('\n\n') || null,
-            skills: draftBlock.core_skills.length > 0 ? draftBlock.core_skills : null,
-            photos: laneAllPhotoUrls.length > 0 ? laneAllPhotoUrls : null,
-            duration_minutes: draftBlock.duration_minutes ?? null,
-            equipment: laneEquipmentParts.join(', ') || null,
-          })
 
         } else if (draftBlock.type === 'game') {
           // Upload game video if present

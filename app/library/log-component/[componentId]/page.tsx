@@ -19,7 +19,7 @@ interface PhotoDraft {
 type SectionKey = 'lanename' | 'photo' | 'video' | 'videolink' | 'description' | 'duration' | 'skills'
 
 const ALL_SECTIONS: { key: SectionKey; label: string }[] = [
-  { key: 'lanename', label: 'Lane Name' },
+  { key: 'lanename', label: 'Station Name' },
   { key: 'photo', label: 'Photo' },
   { key: 'video', label: 'Video' },
   { key: 'videolink', label: 'Video Link' },
@@ -363,8 +363,8 @@ export default function EditComponentPage() {
           {activeSections.map((key) => {
             if (key === 'lanename') return (
               <div key="lanename">
-                <SectionHeader label="Lane Name" sectionKey="lanename" />
-                <input type="text" value={lane_name} onChange={(e) => setLaneName(e.target.value)} placeholder="e.g. Lane 1, Blue Lane..." className="field-input" />
+                <SectionHeader label="Station Name" sectionKey="lanename" />
+                <input type="text" value={lane_name} onChange={(e) => setLaneName(e.target.value)} placeholder="e.g. Station 1, Blue Station..." className="field-input" />
               </div>
             )
 

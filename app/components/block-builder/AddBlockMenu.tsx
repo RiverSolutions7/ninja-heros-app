@@ -36,8 +36,8 @@ const BUILD_OPTIONS: {
   },
   {
     type: 'lane',
-    label: 'Lane',
-    emoji: '🏃',
+    label: 'Station',
+    emoji: '📍',
     textColor: 'text-accent-fire',
     hoverBg: 'hover:bg-accent-fire/10',
     description: '',

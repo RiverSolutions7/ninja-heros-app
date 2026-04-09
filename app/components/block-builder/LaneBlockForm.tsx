@@ -9,7 +9,7 @@ import VideoCapture from './VideoCapture'
 type SectionKey = 'lanename' | 'photo' | 'video' | 'videolink' | 'description' | 'duration' | 'skills'
 
 const SECTION_OPTIONS: { key: SectionKey; label: string }[] = [
-  { key: 'lanename', label: 'Lane Name' },
+  { key: 'lanename', label: 'Station Name' },
   { key: 'photo', label: 'Photo' },
   { key: 'video', label: 'Video' },
   { key: 'videolink', label: 'Video Link' },
@@ -195,7 +195,7 @@ export default function LaneBlockForm({
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-accent-fire/[0.12] to-transparent border-b border-bg-border rounded-t-2xl">
         <span className="font-heading text-accent-fire text-sm tracking-wide uppercase">
-          Lane {laneNumber}
+          Station {laneNumber}
         </span>
         <button
           type="button"
@@ -210,13 +210,13 @@ export default function LaneBlockForm({
 
       <div className="px-4 py-4 space-y-4">
         {activeSections.length === 0 && (
-          <p className="text-sm text-text-dim text-center py-2">Tap Add to build this lane</p>
+          <p className="text-sm text-text-dim text-center py-2">Tap Add to build this station</p>
         )}
 
         {activeSections.map((key) => {
           if (key === 'lanename') return (
             <div key="lanename">
-              <SectionHeader label="Lane Name" sectionKey="lanename" />
+              <SectionHeader label="Station Name" sectionKey="lanename" />
               <input
                 type="text"
                 value={block.instructor_name}
@@ -244,7 +244,7 @@ export default function LaneBlockForm({
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={photo.photoPreview ?? photo.photo_url ?? ''}
-                        alt="Lane photo"
+                        alt="Station photo"
                         className="w-full object-cover rounded-xl"
                         style={{ maxHeight: '220px' }}
                       />

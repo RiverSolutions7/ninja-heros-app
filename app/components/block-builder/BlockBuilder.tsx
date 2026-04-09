@@ -96,7 +96,7 @@ function SortableBlockItem({
     opacity: isDragging ? 0.5 : 1,
   }
 
-  function getLaneNumber(): number {
+  function getStationNumber(): number {
     return blocks.slice(0, index).filter((b) => b.type === 'lane').length + 1
   }
 
@@ -132,7 +132,7 @@ function SortableBlockItem({
       {block.type === 'lane' && (
         <LaneBlockForm
           block={block}
-          laneNumber={getLaneNumber()}
+          laneNumber={getStationNumber()}
           onChange={(changes) => onChange(block.localId, changes as Partial<DraftLaneBlock>)}
           onRemove={() => onRemove(block.localId)}
           availableSkills={availableSkills}

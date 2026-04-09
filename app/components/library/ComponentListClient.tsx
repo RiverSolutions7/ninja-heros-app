@@ -14,16 +14,14 @@ export default function ComponentListClient({ components }: ComponentListClientP
 
   return (
     <>
-      <div className="space-y-3">
+      <div className="bg-bg-card rounded-2xl overflow-hidden border border-bg-border -mx-0">
         {components.map((c) => (
-          <button
+          <ComponentCard
             key={c.id}
-            type="button"
+            component={c}
+            showMenu
             onClick={() => setSelected(c)}
-            className="w-full text-left active:scale-[0.98] transition-transform"
-          >
-            <ComponentCard component={c} showMenu />
-          </button>
+          />
         ))}
       </div>
 

@@ -154,8 +154,8 @@ export default async function SkillsPage({
                       <div key={`${cls.classId}-${lane.laneNumber}`} className="mb-2 last:mb-0">
                         <p className="text-xs text-accent-fire font-heading mb-1.5">
                           {lane.instructorName
-                            ? `Lane ${lane.laneNumber} — ${lane.instructorName}`
-                            : `Lane ${lane.laneNumber}`}
+                            ? `Station ${lane.laneNumber} — ${lane.instructorName}`
+                            : `Station ${lane.laneNumber}`}
                         </p>
                         <div className="flex flex-wrap gap-1.5">
                           {lane.skills.map((skill) => (
