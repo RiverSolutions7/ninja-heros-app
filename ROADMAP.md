@@ -23,7 +23,7 @@
 [x] Prominent share icon directly on class rows (not buried in pencil menu)
 [x] + Log Component button alongside + Log Class on library header
 [x] Persist curriculum selection in URL params (/skills?curriculum=Mini+Ninjas)
-[ ] Block reordering — drag handles so coaches can reorder warmup/lane/game blocks
+[x] Block reordering — drag handles so coaches can reorder warmup/lane/game blocks
 
 ---
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { arrayMove } from '@dnd-kit/sortable'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/app/lib/supabase'
@@ -194,6 +195,13 @@ export default function EditClassForm({ cls, initialSkills }: EditClassFormProps
     setDraft((prev) => ({
       ...prev,
       blocks: prev.blocks.filter((b) => b.localId !== localId),
+    }))
+  }
+
+  function reorderBlocks(fromIndex: number, toIndex: number) {
+    setDraft((prev) => ({
+      ...prev,
+      blocks: arrayMove(prev.blocks, fromIndex, toIndex),
     }))
   }
 
@@ -585,6 +593,7 @@ export default function EditClassForm({ cls, initialSkills }: EditClassFormProps
           onAddFromLibrary={addBlockFromLibrary}
           onChange={updateBlock}
           onRemove={removeBlock}
+          onReorder={reorderBlocks}
           availableSkills={availableSkills}
           onAddSkill={handleAddSkill}
           ageGroup={draft.age_group}

@@ -9,6 +9,7 @@ import { uploadLaneVideo, uploadGameVideo } from '@/app/lib/uploadVideo'
 import { autoPopulateComponents } from '@/app/lib/autoPopulateComponents'
 import type { ComponentCandidate } from '@/app/lib/autoPopulateComponents'
 import { componentToDraftBlock } from '@/app/lib/componentUtils'
+import { arrayMove } from '@dnd-kit/sortable'
 import {
   type AgeGroup,
   type Difficulty,
@@ -276,6 +277,13 @@ export default function NewClassPage() {
     setDraft((prev) => ({
       ...prev,
       blocks: prev.blocks.filter((b) => b.localId !== localId),
+    }))
+  }
+
+  function reorderBlocks(fromIndex: number, toIndex: number) {
+    setDraft((prev) => ({
+      ...prev,
+      blocks: arrayMove(prev.blocks, fromIndex, toIndex),
     }))
   }
 
@@ -681,6 +689,7 @@ export default function NewClassPage() {
             onAddFromLibrary={addBlockFromLibrary}
             onChange={updateBlock}
             onRemove={removeBlock}
+            onReorder={reorderBlocks}
             availableSkills={availableSkills}
             onAddSkill={handleAddSkill}
             ageGroup={draft.age_group}
