@@ -10,22 +10,10 @@ const PREFILL_KEY = 'ninja-heros-plan-prefill'
 const HOURS_36 = 36 * 60 * 60 * 1000
 const HOURS_48 = 48 * 60 * 60 * 1000
 
-const TYPE_BORDER: Record<ComponentType, string> = {
-  warmup: 'border-l-accent-gold',
-  station: 'border-l-accent-blue',
-  game: 'border-l-accent-green',
-}
-
-const TYPE_LABEL: Record<ComponentType, string> = {
-  warmup: 'Warmup',
-  station: 'Station',
-  game: 'Game',
-}
-
-const TYPE_TEXT: Record<ComponentType, string> = {
-  warmup: 'text-accent-gold',
-  station: 'text-accent-blue',
-  game: 'text-accent-green',
+const TYPE_META: Record<ComponentType, { label: string; border: string; placeholderBg: string }> = {
+  warmup: { label: 'Warmup', border: 'border-l-accent-gold', placeholderBg: 'bg-accent-gold/20' },
+  station: { label: 'Station', border: 'border-l-accent-blue', placeholderBg: 'bg-accent-blue/20' },
+  game: { label: 'Game', border: 'border-l-accent-green', placeholderBg: 'bg-accent-green/20' },
 }
 
 interface PlanItem {
@@ -271,69 +259,76 @@ export default function TodaysPlanClient() {
 
       {/* Plan items */}
       {items.length > 0 && (
-        <ul className="px-4 flex flex-col gap-2">
-          {items.map((item) => (
-            <li
-              key={item.localId}
-              draggable
-              onDragStart={() => handleDragStart(item.localId)}
-              onDragOver={(e) => handleDragOver(e, item.localId)}
-              onDrop={handleDrop}
-              className={[
-                'bg-bg-card rounded-xl border-l-4 flex items-center gap-3 px-3 py-3 cursor-grab active:cursor-grabbing',
-                TYPE_BORDER[item.component.type],
-              ].join(' ')}
-            >
-              {/* Drag handle */}
-              <span className="text-text-dim/40 text-lg leading-none select-none flex-shrink-0" aria-hidden>
-                ⠿
-              </span>
+        <ul className="mx-4 bg-bg-card rounded-2xl overflow-hidden border border-bg-border">
+          {items.map((item) => {
+            const meta = TYPE_META[item.component.type]
+            const firstPhoto = item.component.photos?.[0] ?? null
+            const subMeta = [meta.label, item.component.curriculum].filter(Boolean).join(' · ')
+            return (
+              <li
+                key={item.localId}
+                draggable
+                onDragStart={() => handleDragStart(item.localId)}
+                onDragOver={(e) => handleDragOver(e, item.localId)}
+                onDrop={handleDrop}
+                className={[
+                  'flex items-center gap-3 px-3 py-3 border-b border-bg-border/50 last:border-b-0 border-l-4 cursor-grab active:cursor-grabbing',
+                  meta.border,
+                ].join(' ')}
+              >
+                {/* Drag handle */}
+                <span className="text-text-dim/30 text-base leading-none select-none flex-shrink-0" aria-hidden>
+                  ⠿
+                </span>
 
-              {/* Content */}
-              <div className="flex-1 min-w-0">
-                <p className="font-heading text-text-primary text-sm leading-snug truncate">
-                  {item.component.title}
-                </p>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className={['text-xs font-medium', TYPE_TEXT[item.component.type]].join(' ')}>
-                    {TYPE_LABEL[item.component.type]}
-                  </span>
-                  {item.component.curriculum && (
-                    <>
-                      <span className="text-text-dim/40 text-xs">·</span>
-                      <span className="text-text-dim text-xs truncate">{item.component.curriculum}</span>
-                    </>
+                {/* Thumbnail */}
+                <div className="flex-shrink-0 w-14 h-14 rounded-xl overflow-hidden">
+                  {firstPhoto ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={firstPhoto} alt={item.component.title} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className={['w-full h-full', meta.placeholderBg].join(' ')} />
                   )}
                 </div>
-              </div>
 
-              {/* Duration input */}
-              <div className="flex items-center gap-1 flex-shrink-0">
-                <input
-                  type="number"
-                  min={1}
-                  max={120}
-                  value={item.durationMinutes ?? ''}
-                  onChange={(e) => handleDurationChange(item.localId, e.target.value)}
-                  placeholder="—"
-                  className="w-10 bg-transparent text-text-muted text-sm text-right focus:outline-none focus:text-text-primary [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                />
-                <span className="text-text-dim text-xs">m</span>
-              </div>
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  <p className="font-heading text-[15px] text-text-primary leading-snug truncate">
+                    {item.component.title}
+                  </p>
+                  {subMeta && (
+                    <p className="text-xs text-text-dim mt-0.5 truncate">{subMeta}</p>
+                  )}
+                </div>
 
-              {/* Remove */}
-              <button
-                type="button"
-                onClick={() => handleRemove(item.localId)}
-                className="text-text-dim/40 hover:text-text-muted transition-colors flex-shrink-0 p-1 -mr-1"
-                aria-label="Remove"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </li>
-          ))}
+                {/* Duration input */}
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <input
+                    type="number"
+                    min={1}
+                    max={120}
+                    value={item.durationMinutes ?? ''}
+                    onChange={(e) => handleDurationChange(item.localId, e.target.value)}
+                    placeholder="—"
+                    className="w-10 bg-transparent text-text-muted text-sm text-right focus:outline-none focus:text-text-primary [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                  />
+                  <span className="text-text-dim text-xs">m</span>
+                </div>
+
+                {/* Remove */}
+                <button
+                  type="button"
+                  onClick={() => handleRemove(item.localId)}
+                  className="text-text-dim/40 hover:text-text-muted transition-colors flex-shrink-0 p-1 -mr-1"
+                  aria-label="Remove"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </li>
+            )
+          })}
         </ul>
       )}
 
