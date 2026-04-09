@@ -1,0 +1,55 @@
+# NINJA H.E.R.O.S. COACH HUB — ROADMAP
+
+*Based on full codebase analysis. Updated April 2026.*
+*Note: Difficulty field has been removed from the app — ignore any suggestions related to difficulty.*
+
+---
+
+## CURRENT FOCUS
+- [x] Replace Handoff tab with Today's Plan tab
+- [x] Library tab defaults to Components view
+- [x] Today's Plan — pick components from library into slots
+- [x] Today's Plan — 48 hour auto-delete with 36 hour nudge
+- [x] Today's Plan — save plan to library as a full class
+
+---
+
+## STATUS KEY
+[ ] = Not started
+[~] = In progress / needs fixes or testing
+[x] = Fully done and confirmed working in real classes
+
+---
+
+## IN PROGRESS
+
+---
+
+## QUICK WINS (Do Next)
+[x] Auto-populate components from logged classes
+[x] Toast confirmation after save ("Class saved ✓")
+[x] Draft auto-save — restore unfinished log if coach is interrupted
+[x] Prominent share icon directly on class rows (not buried in pencil menu)
+[x] + Log Component button alongside + Log Class on library header
+[x] Persist curriculum selection in URL params (/skills?curriculum=Mini+Ninjas)
+[x] Block reordering — drag handles so coaches can reorder warmup/lane/game blocks
+
+---
+
+## MEDIUM TERM
+[ ] "What should I teach today?" — AI suggestion based on skill recency
+[ ] Class templates — clone a previous class as a starting point
+[ ] Program stats dashboard — classes per curriculum, most used games, skill coverage
+[ ] Component use count — "Used 7 times · Last: 2 weeks ago"
+[ ] Curriculum standards view — shareable read-only page per curriculum
+
+---
+
+## LONG TERM
+[ ] Multi-gym architecture — each gym gets its own workspace
+[ ] SaaS pricing model — monthly subscription per gym
+[ ] Network effect — aggregate data across gyms for best practices
+
+---
+
+*Do not delete any items. Update status markers as work progresses.*

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { arrayMove } from '@dnd-kit/sortable'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/app/lib/supabase'
@@ -17,7 +18,9 @@ import {
   type DraftLaneBlock,
   type DraftGameBlock,
   type DraftStation,
+  type ComponentRow,
 } from '@/app/lib/database.types'
+import { componentToDraftBlock } from '@/app/lib/componentUtils'
 import BlockBuilder from '@/app/components/block-builder/BlockBuilder'
 
 // ── Convert a persisted FullClass into an editable ClassDraft ──────────────
@@ -166,6 +169,19 @@ export default function EditClassForm({ cls, initialSkills }: EditClassFormProps
     })
   }
 
+  function addBlockFromLibrary(component: ComponentRow, afterIndex?: number) {
+    const newBlock = componentToDraftBlock(component)
+    setDraft((prev) => {
+      const blocks = [...prev.blocks]
+      if (afterIndex === undefined || afterIndex < 0) {
+        blocks.push(newBlock)
+      } else {
+        blocks.splice(afterIndex + 1, 0, newBlock)
+      }
+      return { ...prev, blocks }
+    })
+  }
+
   function updateBlock(localId: string, changes: Partial<DraftBlock>) {
     setDraft((prev) => ({
       ...prev,
@@ -179,6 +195,13 @@ export default function EditClassForm({ cls, initialSkills }: EditClassFormProps
     setDraft((prev) => ({
       ...prev,
       blocks: prev.blocks.filter((b) => b.localId !== localId),
+    }))
+  }
+
+  function reorderBlocks(fromIndex: number, toIndex: number) {
+    setDraft((prev) => ({
+      ...prev,
+      blocks: arrayMove(prev.blocks, fromIndex, toIndex),
     }))
   }
 
@@ -567,8 +590,10 @@ export default function EditClassForm({ cls, initialSkills }: EditClassFormProps
         <BlockBuilder
           blocks={draft.blocks}
           onAdd={addBlock}
+          onAddFromLibrary={addBlockFromLibrary}
           onChange={updateBlock}
           onRemove={removeBlock}
+          onReorder={reorderBlocks}
           availableSkills={availableSkills}
           onAddSkill={handleAddSkill}
           ageGroup={draft.age_group}

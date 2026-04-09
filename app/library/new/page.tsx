@@ -1,13 +1,18 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/app/lib/supabase'
 import { uploadStationPhoto } from '@/app/lib/uploadPhoto'
 import { uploadLaneVideo, uploadGameVideo } from '@/app/lib/uploadVideo'
+import { autoPopulateComponents } from '@/app/lib/autoPopulateComponents'
+import type { ComponentCandidate } from '@/app/lib/autoPopulateComponents'
+import { componentToDraftBlock } from '@/app/lib/componentUtils'
+import { arrayMove } from '@dnd-kit/sortable'
 import {
   type AgeGroup,
+  type Difficulty,
   type CurriculumRow,
   type BlockType,
   type ClassDraft,
@@ -16,8 +21,29 @@ import {
   type DraftLaneBlock,
   type DraftGameBlock,
   type DraftStation,
+  type ComponentRow,
 } from '@/app/lib/database.types'
 import BlockBuilder from '@/app/components/block-builder/BlockBuilder'
+import AddBlockMenu from '@/app/components/block-builder/AddBlockMenu'
+import Toast from '@/app/components/ui/Toast'
+
+const DRAFT_KEY = 'ninja-heros-class-draft'
+
+interface StoredDraft {
+  title: string
+  class_date: string
+  age_group: string
+  difficulty: string
+  noteLines: string[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  blocks: any[]
+  savedAt: string
+}
+
+function parseDurationMinutes(time: string): number | null {
+  const match = time.match(/^(\d+)/)
+  return match ? parseInt(match[1], 10) : null
+}
 
 function today(): string {
   return new Date().toISOString().slice(0, 10)
@@ -68,14 +94,143 @@ export default function NewClassPage() {
   const router = useRouter()
   const [draft, setDraft] = useState<ClassDraft>(defaultDraft)
   const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [titleError, setTitleError] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+  const [noteLines, setNoteLines] = useState<string[]>([])
+
+  // Draft auto-save
+  const [savedDraft, setSavedDraft] = useState<StoredDraft | null>(null)
+  const draftRef = useRef(draft)
+  const noteLinesRef = useRef(noteLines)
 
   // Curriculums fetched from DB
   const [curriculums, setCurriculums] = useState<CurriculumRow[]>([])
 
   // Dynamic skills fetched from the DB, filtered by selected curriculum
   const [availableSkills, setAvailableSkills] = useState<string[]>([])
+
+  // Keep refs in sync so interval/effects always see latest state
+  useEffect(() => { draftRef.current = draft }, [draft])
+  useEffect(() => { noteLinesRef.current = noteLines }, [noteLines])
+
+  function saveDraftToStorage() {
+    const d = draftRef.current
+    const nl = noteLinesRef.current
+    if (!d.title && d.blocks.length === 0 && nl.length === 0) return
+    try {
+      const data: StoredDraft = {
+        title: d.title,
+        class_date: d.class_date,
+        age_group: d.age_group,
+        difficulty: d.difficulty,
+        noteLines: nl,
+        blocks: d.blocks.map((block) => {
+          if (block.type === 'warmup') {
+            return { type: 'warmup', localId: block.localId, description: block.description, time: block.time, skill_focus: block.skill_focus }
+          }
+          if (block.type === 'lane') {
+            return {
+              type: 'lane', localId: block.localId, instructor_name: block.instructor_name,
+              core_skills: block.core_skills, duration_minutes: block.duration_minutes ?? null,
+              stations: block.stations.map((s: DraftStation) => ({
+                localId: s.localId, sort_order: s.sort_order, equipment: s.equipment, description: s.description,
+              })),
+            }
+          }
+          return {
+            type: 'game', localId: block.localId, name: block.name, description: block.description,
+            video_link: block.video_link, skills: block.skills ?? [], duration_minutes: block.duration_minutes ?? null,
+          }
+        }),
+        savedAt: new Date().toISOString(),
+      }
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(data))
+    } catch { /* ignore quota errors */ }
+  }
+
+  function clearDraft() {
+    try { localStorage.removeItem(DRAFT_KEY) } catch { /* ignore */ }
+  }
+
+  function handleRestore() {
+    if (!savedDraft) return
+    try {
+      const blocks: DraftBlock[] = (savedDraft.blocks ?? []).map((b) => {
+        if (b.type === 'warmup') {
+          return { type: 'warmup', localId: b.localId || crypto.randomUUID(), description: b.description || '', time: b.time || '5 min', skill_focus: b.skill_focus || '' } as DraftWarmupBlock
+        }
+        if (b.type === 'lane') {
+          return {
+            type: 'lane', localId: b.localId || crypto.randomUUID(), instructor_name: b.instructor_name || '',
+            core_skills: b.core_skills || [], duration_minutes: b.duration_minutes ?? null,
+            stations: (b.stations ?? []).map((s: { localId?: string; sort_order?: number; equipment?: string; description?: string }) => ({
+              localId: s.localId || crypto.randomUUID(), sort_order: s.sort_order ?? 0,
+              equipment: s.equipment || '', description: s.description || '', photos: [],
+            })),
+            videoFile: null, videoPreview: null,
+          } as DraftLaneBlock
+        }
+        return {
+          type: 'game', localId: b.localId || crypto.randomUUID(), name: b.name || '',
+          description: b.description || '', video_link: b.video_link || '',
+          skills: b.skills || [], duration_minutes: b.duration_minutes ?? null,
+          videoFile: null, videoPreview: null,
+        } as DraftGameBlock
+      })
+      setDraft({
+        title: savedDraft.title || '',
+        class_date: savedDraft.class_date || today(),
+        age_group: savedDraft.age_group || 'Junior Ninjas (5-9)',
+        difficulty: (savedDraft.difficulty || 'Intermediate') as Difficulty,
+        notes: '',
+        blocks,
+      })
+      setNoteLines(savedDraft.noteLines || [])
+    } catch { /* ignore corrupt data */ }
+    setSavedDraft(null)
+  }
+
+  function handleDiscard() {
+    clearDraft()
+    setSavedDraft(null)
+  }
+
+  // Check for Today's Plan prefill from sessionStorage
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('ninja-heros-plan-prefill')
+      if (!raw) return
+      sessionStorage.removeItem('ninja-heros-plan-prefill')
+      const items: { localId: string; component: ComponentRow; durationMinutes: number | null }[] = JSON.parse(raw)
+      if (!Array.isArray(items) || items.length === 0) return
+      const blocks: DraftBlock[] = items.map((item) => componentToDraftBlock(item.component))
+      setDraft((d) => ({ ...d, blocks }))
+    } catch { /* ignore corrupt data */ }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Check for saved draft on mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY)
+      if (raw) {
+        const parsed: StoredDraft = JSON.parse(raw)
+        if (parsed.title || (parsed.blocks?.length ?? 0) > 0 || (parsed.noteLines?.length ?? 0) > 0) {
+          setSavedDraft(parsed)
+        }
+      }
+    } catch { /* ignore corrupt data */ }
+  }, [])
+
+  // Auto-save every 30 seconds
+  useEffect(() => {
+    const id = setInterval(saveDraftToStorage, 30_000)
+    return () => clearInterval(id)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Save on block add/remove
+  useEffect(() => {
+    saveDraftToStorage()
+  }, [draft.blocks.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch curriculums once on mount
   useEffect(() => {
@@ -138,6 +293,26 @@ export default function NewClassPage() {
     }))
   }
 
+  function reorderBlocks(fromIndex: number, toIndex: number) {
+    setDraft((prev) => ({
+      ...prev,
+      blocks: arrayMove(prev.blocks, fromIndex, toIndex),
+    }))
+  }
+
+  function addBlockFromLibrary(component: ComponentRow, afterIndex?: number) {
+    const newBlock = componentToDraftBlock(component)
+    setDraft((prev) => {
+      const blocks = [...prev.blocks]
+      if (afterIndex === undefined || afterIndex < 0) {
+        blocks.push(newBlock)
+      } else {
+        blocks.splice(afterIndex + 1, 0, newBlock)
+      }
+      return { ...prev, blocks }
+    })
+  }
+
   // Called when a lane block adds a new skill inline
   function handleAddSkill(name: string) {
     setAvailableSkills((prev) =>
@@ -148,8 +323,8 @@ export default function NewClassPage() {
   // ── Submit ───────────────────────────────────────────────────
 
   async function handleSubmit(e: React.FormEvent) {
+    console.log('SAVE TRIGGERED')
     e.preventDefault()
-    setError(null)
     setTitleError(null)
 
     if (!draft.title.trim()) {
@@ -158,11 +333,14 @@ export default function NewClassPage() {
     }
 
     if (!draft.class_date) {
-      setError('Please select a class date.')
+      setToast({ message: 'Please select a class date.', type: 'error' })
       return
     }
 
     setSubmitting(true)
+
+    // Collect component candidates as we save blocks (fire-and-forget after save)
+    const componentCandidates: ComponentCandidate[] = []
 
     try {
       // 1. Insert class row
@@ -173,7 +351,7 @@ export default function NewClassPage() {
           class_date: draft.class_date,
           age_group: draft.age_group,
           difficulty: draft.difficulty,
-          notes: draft.notes.trim() || null,
+          notes: noteLines.filter((s) => s.trim()).join('\n') || null,
         })
         .select()
         .single()
@@ -205,6 +383,33 @@ export default function NewClassPage() {
           })
           if (wErr) throw wErr
 
+          // Upload warmup photos for component library
+          const warmupPhotoUrls: string[] = []
+          for (const photo of (draftBlock.photos ?? [])) {
+            if (photo.photoFile) {
+              try {
+                const url = await uploadStationPhoto(photo.photoFile)
+                warmupPhotoUrls.push(url)
+              } catch (uploadErr) {
+                console.error('Warmup photo upload failed:', uploadErr)
+              }
+            } else if (photo.photo_url) {
+              warmupPhotoUrls.push(photo.photo_url)
+            }
+          }
+
+          // Component candidate: warmup — always push, fall back to 'Warmup' if no description
+          componentCandidates.push({
+            type: 'warmup',
+            title: draftBlock.description.slice(0, 80).trim() || 'Warmup',
+            curriculum: draft.age_group,
+            description: draftBlock.description.trim() || null,
+            skills: draftBlock.skill_focus.trim() ? [draftBlock.skill_focus.trim()] : null,
+            photos: warmupPhotoUrls.length > 0 ? warmupPhotoUrls : null,
+            duration_minutes: parseDurationMinutes(draftBlock.time),
+            equipment: null,
+          })
+
         } else if (draftBlock.type === 'lane') {
           // Upload lane video if present
           let laneVideoUrl: string | null = null
@@ -230,6 +435,10 @@ export default function NewClassPage() {
           if (lErr) throw lErr
 
           // Insert stations (with photo uploads)
+          const laneAllPhotoUrls: string[] = []
+          const laneEquipmentParts: string[] = []
+          const laneDescriptionParts: string[] = []
+
           for (let j = 0; j < draftBlock.stations.length; j++) {
             const station = draftBlock.stations[j]
             const uploadedUrls: string[] = []
@@ -256,7 +465,24 @@ export default function NewClassPage() {
               photo_urls: uploadedUrls,
             })
             if (sErr) throw sErr
+
+            laneAllPhotoUrls.push(...uploadedUrls)
+            if (station.equipment.trim()) laneEquipmentParts.push(station.equipment.trim())
+            if (station.description.trim()) laneDescriptionParts.push(station.description.trim())
           }
+
+          // Component candidate: one per lane block (not per station)
+          const laneTitle = draftBlock.instructor_name.trim() || 'Obstacle Course Station'
+          componentCandidates.push({
+            type: 'station',
+            title: laneTitle,
+            curriculum: draft.age_group,
+            description: laneDescriptionParts.join('\n\n') || null,
+            skills: draftBlock.core_skills.length > 0 ? draftBlock.core_skills : null,
+            photos: laneAllPhotoUrls.length > 0 ? laneAllPhotoUrls : null,
+            duration_minutes: draftBlock.duration_minutes ?? null,
+            equipment: laneEquipmentParts.join(', ') || null,
+          })
 
         } else if (draftBlock.type === 'game') {
           // Upload game video if present
@@ -277,17 +503,58 @@ export default function NewClassPage() {
             video_url: gameVideoUrl,
           })
           if (gErr) throw gErr
+
+          // Upload game photos for component library
+          const gamePhotoUrls: string[] = []
+          for (const photo of (draftBlock.photos ?? [])) {
+            if (photo.photoFile) {
+              try {
+                const url = await uploadStationPhoto(photo.photoFile)
+                gamePhotoUrls.push(url)
+              } catch (uploadErr) {
+                console.error('Game photo upload failed:', uploadErr)
+              }
+            } else if (photo.photo_url) {
+              gamePhotoUrls.push(photo.photo_url)
+            }
+          }
+
+          // Component candidate: game
+          const gameTitle = draftBlock.name.trim()
+          if (gameTitle) {
+            componentCandidates.push({
+              type: 'game',
+              title: gameTitle,
+              curriculum: draft.age_group,
+              description: draftBlock.description.trim() || null,
+              skills: (draftBlock.skills ?? []).length > 0 ? draftBlock.skills! : null,
+              photos: gamePhotoUrls.length > 0 ? gamePhotoUrls : null,
+              duration_minutes: draftBlock.duration_minutes ?? null,
+              equipment: null,
+              video_link: draftBlock.video_link.trim() || null,
+            })
+          }
         }
       }
 
+      // Extract components before navigating so logs are visible
+      console.log(
+        `[handleSubmit] firing autoPopulateComponents with ${componentCandidates.length} candidates:`,
+        componentCandidates.map((c) => `${c.type}:"${c.title}"`)
+      )
+      try {
+        await autoPopulateComponents(componentCandidates)
+      } catch (err) {
+        console.error('Component auto-populate failed:', err)
+      }
+
+      clearDraft()
+      setToast({ message: 'Class saved ✓', type: 'success' })
+      await new Promise((r) => setTimeout(r, 1500))
       router.push(`/library/${classRow.id}`)
     } catch (err) {
       console.error('Save failed:', err)
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Failed to save class. Please try again.'
-      )
+      setToast({ message: 'Something went wrong. Please try again.', type: 'error' })
       setSubmitting(false)
     }
   }
@@ -297,7 +564,7 @@ export default function NewClassPage() {
   return (
     <form onSubmit={handleSubmit}>
       {/* Header */}
-      <div className="flex items-center gap-3 mb-6 pt-2">
+      <div className="flex items-center gap-3 mb-5 pt-2">
         <Link
           href="/library"
           className="text-text-dim hover:text-text-primary transition-colors p-1.5 rounded-lg hover:bg-white/5 -ml-1.5"
@@ -312,15 +579,33 @@ export default function NewClassPage() {
         </div>
       </div>
 
-      {/* Class details */}
-      <div className="card p-4 mb-5 space-y-4">
-        <h2 className="font-heading text-sm text-text-muted uppercase tracking-wider">Class Details</h2>
+      {/* Draft restore banner */}
+      {savedDraft && (
+        <div className="mb-4 flex items-center justify-between gap-3 px-3 py-2.5 bg-amber-900/25 border border-amber-700/40 rounded-xl">
+          <p className="text-text-muted text-sm leading-snug">You have an unfinished class. Restore draft?</p>
+          <div className="flex gap-2 flex-shrink-0">
+            <button
+              type="button"
+              onClick={handleRestore}
+              className="text-xs font-semibold text-accent-gold px-3 py-1.5 rounded-lg border border-accent-gold/40 hover:bg-accent-gold/10 transition-colors"
+            >
+              Restore
+            </button>
+            <button
+              type="button"
+              onClick={handleDiscard}
+              className="text-xs text-text-dim px-3 py-1.5 rounded-lg border border-bg-border hover:bg-white/5 transition-colors"
+            >
+              Discard
+            </button>
+          </div>
+        </div>
+      )}
 
-        {/* Title (required) */}
+      {/* Compact class details — no card, no section label */}
+      <div className="px-1 mb-5 space-y-2">
+        {/* Title */}
         <div>
-          <label className="field-label" htmlFor="title">
-            Class Title<span className="text-accent-fire ml-0.5">*</span>
-          </label>
           <input
             id="title"
             type="text"
@@ -329,92 +614,101 @@ export default function NewClassPage() {
               setDraft((d) => ({ ...d, title: e.target.value }))
               setTitleError(null)
             }}
-            placeholder="e.g. Football Training Camp, Spider-Man Theme..."
-            className="field-input"
+            placeholder="Class title..."
+            className="w-full bg-transparent border-b border-bg-border/50 py-2 text-text-primary text-lg placeholder:text-text-dim/40 focus:outline-none focus:border-accent-fire/50 transition-colors"
           />
           {titleError && (
             <p className="text-accent-fire text-xs mt-1">{titleError}</p>
           )}
         </div>
 
-        {/* Date */}
-        <div>
-          <label className="field-label" htmlFor="class_date">Date</label>
+        {/* Date + Curriculum on one row */}
+        <div className="flex items-center gap-4">
           <input
             id="class_date"
             type="date"
             required
             value={draft.class_date}
             onChange={(e) => setDraft((d) => ({ ...d, class_date: e.target.value }))}
-            className="field-input"
+            className="bg-transparent border-b border-bg-border/40 py-1.5 text-text-muted text-sm focus:outline-none focus:border-accent-fire/40 transition-colors flex-shrink-0"
+            style={{ colorScheme: 'dark' }}
           />
-        </div>
-
-        {/* Age group */}
-        <div>
-          <label className="field-label" htmlFor="age_group">Curriculum</label>
-          <div className="relative">
+          <div className="relative flex-1 min-w-0">
             <select
               id="age_group"
               value={draft.age_group}
-              onChange={(e) =>
-                setDraft((d) => ({ ...d, age_group: e.target.value as AgeGroup }))
-              }
-              className="field-select pr-8"
+              onChange={(e) => setDraft((d) => ({ ...d, age_group: e.target.value as AgeGroup }))}
+              className="w-full bg-transparent border-b border-bg-border/40 py-1.5 text-text-muted text-sm focus:outline-none focus:border-accent-fire/40 transition-colors appearance-none cursor-pointer pr-5"
             >
               {curriculums.map((c) => (
-                <option key={c.id} value={c.age_group}>
-                  {c.label}
-                </option>
+                <option key={c.id} value={c.age_group}>{c.label}</option>
               ))}
             </select>
-            <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-dim pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className="absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-dim/50 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
             </svg>
           </div>
         </div>
 
-        {/* Notes (optional) */}
-        <div>
-          <label className="field-label" htmlFor="notes">
-            Coach Notes{' '}
-            <span className="text-text-dim font-normal normal-case tracking-normal">
-              (optional)
-            </span>
-          </label>
-          <textarea
-            id="notes"
-            value={draft.notes}
-            onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
-            placeholder="Overall notes, energy level, what worked / didn't work..."
-            rows={2}
-            className="field-textarea"
-          />
-        </div>
+        {/* Dynamic note lines */}
+        {noteLines.map((note, i) => (
+          <div key={i} className="flex items-center gap-2 group">
+            <input
+              type="text"
+              value={note}
+              onChange={(e) => setNoteLines((prev) => prev.map((n, idx) => idx === i ? e.target.value : n))}
+              placeholder="Note..."
+              autoFocus={i === noteLines.length - 1}
+              className="flex-1 bg-transparent border-b border-bg-border/30 py-1.5 text-text-dim text-sm placeholder:text-text-dim/30 focus:outline-none focus:border-accent-fire/30 transition-colors"
+            />
+            <button
+              type="button"
+              onClick={() => setNoteLines((prev) => prev.filter((_, idx) => idx !== i))}
+              className="text-text-dim/30 hover:text-red-400 transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100 focus:opacity-100"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        ))}
+
+        {/* + Add Note */}
+        <button
+          type="button"
+          onClick={() => setNoteLines((prev) => [...prev, ''])}
+          className="flex items-center gap-1.5 text-xs text-text-dim/50 hover:text-text-dim transition-colors py-1"
+        >
+          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+          Add Note
+        </button>
       </div>
 
-      {/* Block builder */}
+      {/* Block builder — hero button when empty, normal builder when blocks exist */}
       <div className="mb-6">
-        <h2 className="font-heading text-sm text-text-muted uppercase tracking-wider mb-4">
-          Class Sequence
-        </h2>
-        <BlockBuilder
-          blocks={draft.blocks}
-          onAdd={addBlock}
-          onChange={updateBlock}
-          onRemove={removeBlock}
-          availableSkills={availableSkills}
-          onAddSkill={handleAddSkill}
-          ageGroup={draft.age_group}
-        />
+        {draft.blocks.length === 0 ? (
+          <AddBlockMenu
+            hero
+            onAdd={(type) => addBlock(type, -1)}
+            onAddFromLibrary={(c) => addBlockFromLibrary(c, -1)}
+            ageGroup={draft.age_group}
+          />
+        ) : (
+          <BlockBuilder
+            blocks={draft.blocks}
+            onAdd={addBlock}
+            onAddFromLibrary={addBlockFromLibrary}
+            onChange={updateBlock}
+            onRemove={removeBlock}
+            onReorder={reorderBlocks}
+            availableSkills={availableSkills}
+            onAddSkill={handleAddSkill}
+            ageGroup={draft.age_group}
+          />
+        )}
       </div>
-
-      {/* Error */}
-      {error && (
-        <div className="mb-4 p-3 bg-red-900/30 border border-red-800 rounded-xl text-red-400 text-sm">
-          {error}
-        </div>
-      )}
 
       {/* Submit */}
       <button
@@ -437,8 +731,15 @@ export default function NewClassPage() {
         )}
       </button>
 
-      {/* Bottom spacer for fixed nav */}
       <div className="h-4" />
+
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onDismiss={() => setToast(null)}
+        />
+      )}
     </form>
   )
 }

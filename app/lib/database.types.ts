@@ -181,6 +181,11 @@ export interface DraftWarmupBlock {
   description: string
   time: WarmupTime
   skill_focus: string
+  // optional add-what-you-need fields
+  photos?: DraftPhotoItem[]
+  video_link?: string
+  videoFile?: File | null
+  videoPreview?: string | null
 }
 
 export interface DraftLaneBlock {
@@ -194,6 +199,9 @@ export interface DraftLaneBlock {
   stations: DraftStation[]
   videoFile: File | null
   videoPreview: string | null
+  // optional add-what-you-need fields
+  video_link?: string
+  duration_minutes?: number | null
 }
 
 export interface DraftGameBlock {
@@ -207,6 +215,10 @@ export interface DraftGameBlock {
   video_link: string
   videoFile: File | null
   videoPreview: string | null
+  // optional add-what-you-need fields
+  photos?: DraftPhotoItem[]
+  skills?: string[]
+  duration_minutes?: number | null
 }
 
 export type DraftBlock = DraftWarmupBlock | DraftLaneBlock | DraftGameBlock
@@ -218,6 +230,44 @@ export interface ClassDraft {
   difficulty: Difficulty
   notes: string
   blocks: DraftBlock[]
+}
+
+// ============================================================
+// Component Library
+// ============================================================
+
+export type ComponentType = 'game' | 'warmup' | 'station'
+
+export interface ComponentRow {
+  id: string
+  type: ComponentType
+  title: string
+  curriculum: string | null
+  description: string | null
+  equipment: string | null
+  skills: string[] | null
+  photos: string[] | null
+  duration_minutes: number | null
+  video_link: string | null
+  video_url: string | null
+  folder_id: string | null
+  in_handoff: boolean
+  created_at: string
+}
+
+// ============================================================
+// Inspiration Clips
+// ============================================================
+
+export interface InspirationClipRow {
+  id: string
+  url: string
+  title: string | null
+  thumbnail_url: string | null
+  source_domain: string | null
+  tags: string[]
+  notes: string | null
+  created_at: string
 }
 
 // ============================================================

@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import type {
   ClassRow,
+  ComponentRow,
   CurriculumRow,
   FullClass,
   FullBlock,
@@ -181,6 +182,25 @@ export async function fetchHandoffNotes(): Promise<HandoffNoteRow[]> {
     .order('created_at', { ascending: false })
   if (error) throw error
   return (data ?? []) as HandoffNoteRow[]
+}
+
+// ============================================================
+// Fetch components (standalone games, warmups, stations)
+// ============================================================
+export async function fetchComponents(type?: string, curriculum?: string): Promise<ComponentRow[]> {
+  let query = supabase
+    .from('components')
+    .select('*')
+    .order('created_at', { ascending: false })
+  if (type) {
+    query = query.eq('type', type)
+  }
+  if (curriculum) {
+    query = query.eq('curriculum', curriculum)
+  }
+  const { data, error } = await query
+  if (error) throw error
+  return (data ?? []) as ComponentRow[]
 }
 
 // ============================================================

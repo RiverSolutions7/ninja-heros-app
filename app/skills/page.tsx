@@ -3,6 +3,7 @@ import SkillRemoveManager from '@/app/components/skills/SkillRemoveManager'
 import AddSkillButton from '@/app/components/skills/AddSkillButton'
 import CurriculumSelector from '@/app/components/skills/CurriculumSelector'
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { Suspense } from 'react'
 
 function formatDate(dateStr: string) {
@@ -17,6 +18,12 @@ export default async function SkillsPage({
 }) {
   const { curriculum: curriculumId } = await searchParams
   const curriculums = await fetchCurriculums().catch(() => [])
+
+  // Auto-select first curriculum if none chosen (so TabNav always lands on data)
+  if (!curriculumId && curriculums.length > 0) {
+    redirect(`/skills?curriculum=${curriculums[0].id}`)
+  }
+
   const curriculumRow = curriculums.find((c) => c.id === curriculumId) ?? null
   const curriculum = curriculumRow
     ? { id: curriculumRow.id, label: curriculumRow.label, ageGroup: curriculumRow.age_group }
