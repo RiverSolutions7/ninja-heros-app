@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { ComponentRow, ComponentType } from '@/app/lib/database.types'
 import ComponentCardMenu from './ComponentCardMenu'
@@ -8,37 +8,64 @@ import ComponentCardMenu from './ComponentCardMenu'
 interface ComponentCardProps {
   component: ComponentRow
   showMenu?: boolean
+  onClick?: () => void
 }
 
-const TYPE_META: Record<ComponentType, { label: string; border: string; badge: string; textColor: string }> = {
+const TYPE_META: Record<ComponentType, { label: string; border: string; badge: string; textColor: string; placeholderBg: string }> = {
   game: {
     label: 'Game',
     border: 'border-l-accent-green',
     badge: 'bg-accent-green/10 text-accent-green border border-accent-green/20',
     textColor: 'text-accent-green',
+    placeholderBg: 'bg-accent-green/20',
   },
   warmup: {
     label: 'Warmup',
     border: 'border-l-accent-gold',
     badge: 'bg-accent-gold/10 text-accent-gold border border-accent-gold/20',
     textColor: 'text-accent-gold',
+    placeholderBg: 'bg-accent-gold/20',
   },
   station: {
     label: 'Station',
     border: 'border-l-accent-blue',
     badge: 'bg-accent-blue/10 text-accent-blue border border-accent-blue/20',
     textColor: 'text-accent-blue',
+    placeholderBg: 'bg-accent-blue/20',
   },
 }
 
 export { TYPE_META }
 
-export default function ComponentCard({ component, showMenu = false }: ComponentCardProps) {
+function PlaceholderIcon({ type }: { type: ComponentType }) {
+  if (type === 'warmup') {
+    return (
+      <svg className="w-6 h-6 text-accent-gold/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z" />
+      </svg>
+    )
+  }
+  if (type === 'game') {
+    return (
+      <svg className="w-6 h-6 text-accent-green/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z" />
+      </svg>
+    )
+  }
+  // station
+  return (
+    <svg className="w-6 h-6 text-accent-blue/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+  )
+}
+
+export default function ComponentCard({ component, showMenu = false, onClick }: ComponentCardProps) {
   const meta = TYPE_META[component.type]
-  const photos = component.photos ?? []
-  const [lightbox, setLightbox] = useState<{ index: number } | null>(null)
+  const firstPhoto = component.photos?.[0] ?? null
   const [shareToast, setShareToast] = useState(false)
-  const touchStartX = useRef(0)
 
   function handleShare(e: React.MouseEvent) {
     e.stopPropagation()
@@ -53,97 +80,63 @@ export default function ComponentCard({ component, showMenu = false }: Component
     }
   }
 
-  function lbPrev() {
-    setLightbox((lb) => lb ? { index: (lb.index - 1 + photos.length) % photos.length } : null)
-  }
-  function lbNext() {
-    setLightbox((lb) => lb ? { index: (lb.index + 1) % photos.length } : null)
-  }
+  const meta2 = [
+    component.curriculum,
+    meta.label,
+    component.duration_minutes != null ? `${component.duration_minutes}m` : null,
+  ].filter(Boolean).join(' · ')
 
   return (
     <>
       <div
+        onClick={onClick}
         className={[
-          'bg-bg-card rounded-2xl shadow-card border border-bg-border border-l-4',
+          'flex items-center gap-3 px-4 py-3 border-b border-bg-border/50 cursor-pointer hover:bg-white/5 active:bg-white/[0.03] transition-colors border-l-4',
           meta.border,
         ].join(' ')}
       >
-        {/* Main row */}
-        <div className="flex items-start gap-3 p-4 pb-3">
-          {/* Main content */}
-          <div className="flex-1 min-w-0">
-            <p className="font-heading text-text-primary text-base leading-snug">
-              {component.title}
-            </p>
-            {(component.curriculum || component.duration_minutes != null) && (
-              <p className="text-text-dim text-xs mt-0.5">
-                {[
-                  component.curriculum,
-                  component.duration_minutes != null ? `${component.duration_minutes}m` : null,
-                ]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </p>
-            )}
-            {(component.skills?.length ?? 0) > 0 && (
-              <div className="flex flex-wrap gap-1 mt-2">
-                {component.skills!.map((skill) => (
-                  <span key={skill} className="badge badge-skill">
-                    {skill}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Right: badge + share + pencil */}
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <span className={['text-xs font-semibold px-2 py-0.5 rounded-full', meta.badge].join(' ')}>
-              {meta.label}
-            </span>
-            {showMenu && (
-              <>
-                <button
-                  type="button"
-                  onClick={handleShare}
-                  aria-label="Share component"
-                  className="flex items-center justify-center w-8 h-8 rounded-lg text-text-dim hover:text-text-primary hover:bg-white/5 transition-colors flex-shrink-0"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                  </svg>
-                </button>
-                <div onClick={(e) => e.stopPropagation()}>
-                  <ComponentCardMenu component={component} />
-                </div>
-              </>
-            )}
-          </div>
+        {/* Thumbnail */}
+        <div className="flex-shrink-0 w-14 h-14 rounded-xl overflow-hidden">
+          {firstPhoto ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={firstPhoto}
+              alt={component.title}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className={['w-full h-full flex items-center justify-center', meta.placeholderBg].join(' ')}>
+              <PlaceholderIcon type={component.type} />
+            </div>
+          )}
         </div>
 
-        {/* Photos row — shown when there are photos */}
-        {photos.length > 0 && (
-          <div
-            className="flex overflow-x-auto gap-2 px-4 pb-4"
-            style={{ scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {photos.map((url, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={(e) => { e.stopPropagation(); setLightbox({ index: idx }) }}
-                className="flex-shrink-0"
-                style={{ scrollSnapAlign: 'start' }}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={url}
-                  alt={`${component.title} photo ${idx + 1}`}
-                  className="w-16 h-16 rounded-xl object-cover border border-bg-border hover:scale-105 transition-transform duration-200"
-                />
-              </button>
-            ))}
+        {/* Text */}
+        <div className="flex-1 min-w-0">
+          <p className="font-heading text-[15px] text-text-primary leading-snug truncate">
+            {component.title}
+          </p>
+          {meta2 && (
+            <p className="text-xs text-text-dim mt-0.5 truncate">{meta2}</p>
+          )}
+        </div>
+
+        {/* Actions */}
+        {showMenu && (
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              type="button"
+              onClick={handleShare}
+              aria-label="Share component"
+              className="flex items-center justify-center w-8 h-8 rounded-lg text-text-dim hover:text-text-primary hover:bg-white/5 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+              </svg>
+            </button>
+            <div onClick={(e) => e.stopPropagation()}>
+              <ComponentCardMenu component={component} />
+            </div>
           </div>
         )}
       </div>
@@ -155,71 +148,6 @@ export default function ComponentCard({ component, showMenu = false }: Component
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
           </svg>
           Link copied!
-        </div>,
-        document.body
-      )}
-
-      {/* Lightbox */}
-      {lightbox !== null && typeof window !== 'undefined' && createPortal(
-        <div
-          className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center p-4"
-          onClick={() => setLightbox(null)}
-          onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX }}
-          onTouchEnd={(e) => {
-            const diff = touchStartX.current - e.changedTouches[0].clientX
-            if (diff > 50) lbNext()
-            else if (diff < -50) lbPrev()
-          }}
-        >
-          <button
-            type="button"
-            className="absolute top-4 right-4 text-white/70 hover:text-white p-2 z-10"
-            onClick={() => setLightbox(null)}
-          >
-            <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={photos[lightbox.index]}
-            alt={`${component.title} photo ${lightbox.index + 1}`}
-            className="max-w-full max-h-full object-contain rounded-xl"
-            onClick={(e) => e.stopPropagation()}
-          />
-          {photos.length > 1 && (
-            <>
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); lbPrev() }}
-                className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-2 transition-colors"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); lbNext() }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-2 transition-colors"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-              <div
-                className="absolute bottom-6 left-0 right-0 flex justify-center gap-2"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {photos.map((_, i) => (
-                  <span
-                    key={i}
-                    className={`w-2 h-2 rounded-full transition-colors ${i === lightbox.index ? 'bg-white' : 'bg-white/30'}`}
-                  />
-                ))}
-              </div>
-            </>
-          )}
         </div>,
         document.body
       )}

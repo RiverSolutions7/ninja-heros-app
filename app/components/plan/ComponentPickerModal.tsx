@@ -12,10 +12,10 @@ const TYPE_FILTERS: { label: string; value: ComponentType | 'all' }[] = [
   { label: 'Game', value: 'game' },
 ]
 
-const TYPE_DOT: Record<ComponentType, string> = {
-  warmup: 'bg-accent-gold',
-  station: 'bg-accent-blue',
-  game: 'bg-accent-green',
+const TYPE_PLACEHOLDER: Record<ComponentType, string> = {
+  warmup: 'bg-accent-gold/20',
+  station: 'bg-accent-blue/20',
+  game: 'bg-accent-green/20',
 }
 
 const TYPE_LABEL: Record<ComponentType, string> = {
@@ -112,7 +112,12 @@ export default function ComponentPickerModal({ onSelect, onClose }: ComponentPic
                   onClick={() => onSelect(component)}
                   className="w-full flex items-center gap-3 px-4 py-3.5 border-b border-bg-border/50 hover:bg-white/5 active:bg-white/10 transition-colors text-left"
                 >
-                  <span className={['w-2.5 h-2.5 rounded-full flex-shrink-0', TYPE_DOT[component.type]].join(' ')} />
+                  <div className={['flex-shrink-0 w-12 h-12 rounded-xl overflow-hidden', TYPE_PLACEHOLDER[component.type]].join(' ')}>
+                    {component.photos?.[0] ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={component.photos[0]} alt={component.title} className="w-full h-full object-cover" />
+                    ) : null}
+                  </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-heading text-text-primary text-sm truncate">{component.title}</p>
                     {component.curriculum && (

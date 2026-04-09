@@ -169,162 +169,117 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
           {/* Top border slides in with content */}
           <div className="border-t border-bg-border" />
 
-          {/* Blocks */}
+          {/* Blocks — timeline layout */}
           <div className="divide-y divide-bg-border">
-            {cls.blocks.map((block) => {
-              if (block.type === 'warmup') {
-                return (
-                  <div key={block.block.id} className="border-l-4 border-accent-gold">
-                    <div className="px-4 py-3 bg-gradient-to-r from-accent-gold/[0.10] to-transparent">
-                      <div className="flex items-center gap-2.5">
-                        <span className="text-accent-gold font-heading text-xs uppercase tracking-wider">
-                          Warm-Up
-                        </span>
-                        <span className="badge badge-time">{block.data.time}</span>
-                      </div>
-                    </div>
-                    <div className="px-4 pb-3 pt-2.5">
-                      <p className="text-sm text-text-primary leading-relaxed">
-                        {block.data.description}
-                      </p>
-                      {block.data.skill_focus && (
-                        <p className="text-xs text-text-muted mt-1.5">
-                          Focus: {block.data.skill_focus}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                )
-              }
-
-              if (block.type === 'lane') {
-                return (
-                  <div key={block.block.id} className="border-l-4 !border-l-accent-fire">
-                    {/* Lane header with gradient — only shown when a name was entered */}
-                    {block.data.instructor_name && (
-                      <div className="px-4 py-3 bg-gradient-to-r from-accent-fire/[0.10] to-transparent">
-                        <span className="font-heading text-sm text-accent-fire">
-                          {block.data.instructor_name}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Core skills */}
-                    {block.data.core_skills.length > 0 && (
-                      <div className="px-4 py-2.5 flex flex-wrap gap-1.5">
-                        {block.data.core_skills.map((skill) => (
-                          <span key={skill} className="badge badge-skill">
-                            {skill}
+            {(() => {
+              let stationCount = 0
+              return cls.blocks.map((block) => {
+                if (block.type === 'warmup') {
+                  return (
+                    <div key={block.block.id} className="border-l-4 border-accent-gold">
+                      {/* Header */}
+                      <div className="px-4 py-3 bg-gradient-to-r from-accent-gold/[0.10] to-transparent">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base leading-none">🔥</span>
+                          <span className="text-accent-gold font-heading text-xs uppercase tracking-wider">
+                            Warm Up
                           </span>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Stations */}
-                    {block.stations.length > 0 && (
-                      <div className="px-4 pb-4 space-y-3.5">
-                        {block.stations.map((station, stIdx) => (
-                          <div key={station.id} className="space-y-2">
-                            {/* Photos row */}
-                            {(() => {
-                              const urls = station.photo_urls?.length > 0
-                                ? station.photo_urls
-                                : station.photo_url ? [station.photo_url] : []
-                              return urls.length > 0 ? (
-                                <div className="flex flex-wrap gap-2">
-                                  {urls.map((url, photoIdx) => (
-                                    <button
-                                      key={photoIdx}
-                                      type="button"
-                                      className="flex-shrink-0"
-                                      onClick={(e) => { e.stopPropagation(); setLightbox({ urls, index: photoIdx }) }}
-                                    >
-                                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                                      <img
-                                        src={url}
-                                        alt={`Station ${stIdx + 1} photo ${photoIdx + 1}`}
-                                        className="w-20 h-20 rounded-xl object-cover border border-bg-border shadow-card hover:scale-105 transition-transform duration-200 cursor-pointer"
-                                      />
-                                    </button>
-                                  ))}
-                                </div>
-                              ) : null
-                            })()}
-                            {/* Text */}
-                            <div className="min-w-0">
-                              {station.equipment && (
-                                <p className="text-xs font-bold text-accent-blue mb-1">
-                                  {station.equipment}
-                                </p>
-                              )}
-                              <p className="text-sm text-text-primary leading-snug">
-                                {station.description}
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Lane video */}
-                    {block.data.video_url && (
-                      <div className="px-4 pb-4">
-                        <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-2">
-                          Course Video
-                        </p>
-                        <div className="rounded-xl overflow-hidden border border-bg-border bg-black">
-                          <video
-                            src={block.data.video_url}
-                            controls
-                            playsInline
-                            className="w-full"
-                            style={{ maxHeight: '240px' }}
-                          />
+                          <span className="badge badge-time">{block.data.time}</span>
                         </div>
                       </div>
-                    )}
-                  </div>
-                )
-              }
-
-              if (block.type === 'game') {
-                return (
-                  <div key={block.block.id} className="border-l-4 border-accent-green">
-                    {/* Game header with gradient */}
-                    <div className="px-4 py-3 bg-gradient-to-r from-accent-green/[0.10] to-transparent">
-                      <div className="flex items-center gap-2.5">
-                        <span className="text-accent-green font-heading text-xs uppercase tracking-wider">
-                          Game
-                        </span>
-                        <span className="text-sm font-bold text-text-primary truncate">
-                          {block.data.name}
-                        </span>
-                      </div>
+                      {/* Body */}
+                      {(block.data.description || block.data.skill_focus) && (
+                        <div className="px-4 pb-3 pt-2">
+                          {block.data.description && (
+                            <p className="text-sm text-text-primary leading-relaxed">
+                              {block.data.description}
+                            </p>
+                          )}
+                          {block.data.skill_focus && (
+                            <p className="text-xs text-text-muted mt-1.5">
+                              Focus: {block.data.skill_focus}
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    <div className="px-4 pb-3 pt-2.5">
-                      {block.data.description && (
-                        <p className="text-sm text-text-primary leading-relaxed mb-2">
-                          {block.data.description}
-                        </p>
-                      )}
-                      {block.data.video_link && (
-                        <a
-                          href={block.data.video_link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 mt-1 px-3 py-1.5 rounded-full bg-accent-blue/10 border border-accent-blue/20 text-xs text-accent-blue hover:bg-accent-blue/20 transition-colors"
-                        >
-                          <svg className="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.5a8.19 8.19 0 004.77 1.52V6.56a4.85 4.85 0 01-1-.13z" />
-                          </svg>
-                          Watch video
-                        </a>
+                  )
+                }
+
+                if (block.type === 'lane') {
+                  stationCount += 1
+                  const sNum = stationCount
+                  return (
+                    <div key={block.block.id} className="border-l-4 border-accent-fire">
+                      {/* Header */}
+                      <div className="px-4 py-3 bg-gradient-to-r from-accent-fire/[0.10] to-transparent">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base leading-none">📍</span>
+                          <span className="text-accent-fire font-heading text-xs uppercase tracking-wider">
+                            Station {sNum}
+                            {block.data.instructor_name ? ` — ${block.data.instructor_name}` : ''}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Skills */}
+                      {block.data.core_skills.length > 0 && (
+                        <div className="px-4 pt-2.5 pb-1 flex flex-wrap gap-1.5">
+                          {block.data.core_skills.map((skill) => (
+                            <span key={skill} className="badge badge-skill">{skill}</span>
+                          ))}
+                        </div>
                       )}
 
+                      {/* Sub-stations */}
+                      {block.stations.length > 0 && (
+                        <div className="px-4 pb-4 pt-2 space-y-4">
+                          {block.stations.map((station, stIdx) => {
+                            const urls = station.photo_urls?.length > 0
+                              ? station.photo_urls
+                              : station.photo_url ? [station.photo_url] : []
+                            return (
+                              <div key={station.id}>
+                                {station.equipment && (
+                                  <p className="text-xs font-bold text-accent-blue mb-1.5">
+                                    {station.equipment}
+                                  </p>
+                                )}
+                                {urls.length > 0 && (
+                                  <div className="flex flex-wrap gap-2 mb-2">
+                                    {urls.map((url, photoIdx) => (
+                                      <button
+                                        key={photoIdx}
+                                        type="button"
+                                        className="flex-shrink-0"
+                                        onClick={(e) => { e.stopPropagation(); setLightbox({ urls, index: photoIdx }) }}
+                                      >
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        <img
+                                          src={url}
+                                          alt={`Station ${stIdx + 1} photo ${photoIdx + 1}`}
+                                          className="w-20 h-20 rounded-xl object-cover border border-bg-border shadow-card hover:scale-105 transition-transform duration-200 cursor-pointer"
+                                        />
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                                {station.description && (
+                                  <p className="text-sm text-text-primary leading-snug">
+                                    {station.description}
+                                  </p>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+
+                      {/* Course video */}
                       {block.data.video_url && (
-                        <div className="mt-3">
+                        <div className="px-4 pb-4">
                           <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-2">
-                            Game Video
+                            Course Video
                           </p>
                           <div className="rounded-xl overflow-hidden border border-bg-border bg-black">
                             <video
@@ -338,12 +293,72 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
                         </div>
                       )}
                     </div>
-                  </div>
-                )
-              }
+                  )
+                }
 
-              return null
-            })}
+                if (block.type === 'game') {
+                  return (
+                    <div key={block.block.id} className="border-l-4 border-accent-green">
+                      {/* Header */}
+                      <div className="px-4 py-3 bg-gradient-to-r from-accent-green/[0.10] to-transparent">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base leading-none">🎮</span>
+                          <span className="text-accent-green font-heading text-xs uppercase tracking-wider">
+                            Game
+                          </span>
+                          {block.data.name && (
+                            <span className="text-sm font-bold text-text-primary truncate">
+                              — {block.data.name}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {/* Body */}
+                      {(block.data.description || block.data.video_link || block.data.video_url) && (
+                        <div className="px-4 pb-3 pt-2.5">
+                          {block.data.description && (
+                            <p className="text-sm text-text-primary leading-relaxed mb-2">
+                              {block.data.description}
+                            </p>
+                          )}
+                          {block.data.video_link && (
+                            <a
+                              href={block.data.video_link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 mt-1 px-3 py-1.5 rounded-full bg-accent-blue/10 border border-accent-blue/20 text-xs text-accent-blue hover:bg-accent-blue/20 transition-colors"
+                            >
+                              <svg className="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.5a8.19 8.19 0 004.77 1.52V6.56a4.85 4.85 0 01-1-.13z" />
+                              </svg>
+                              Watch video
+                            </a>
+                          )}
+                          {block.data.video_url && (
+                            <div className="mt-3">
+                              <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-2">
+                                Game Video
+                              </p>
+                              <div className="rounded-xl overflow-hidden border border-bg-border bg-black">
+                                <video
+                                  src={block.data.video_url}
+                                  controls
+                                  playsInline
+                                  className="w-full"
+                                  style={{ maxHeight: '240px' }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                }
+
+                return null
+              })
+            })()}
           </div>
 
           {/* Notes */}

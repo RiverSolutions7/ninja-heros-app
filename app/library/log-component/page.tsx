@@ -46,7 +46,7 @@ const EMPTY_DRAFT: ComponentDraft = {
 type SectionKey = 'lanename' | 'photo' | 'video' | 'videolink' | 'description' | 'duration' | 'skills'
 
 const ALL_SECTIONS: { key: SectionKey; label: string }[] = [
-  { key: 'lanename', label: 'Lane Name' },
+  { key: 'lanename', label: 'Station Name' },
   { key: 'photo', label: 'Photo' },
   { key: 'video', label: 'Video' },
   { key: 'videolink', label: 'Video Link' },
@@ -446,7 +446,7 @@ export default function LogComponentPage() {
           {activeSections.map((key) => {
             if (key === 'lanename') return (
               <div key="lanename">
-                <SectionHeader label="Lane Name" sectionKey="lanename" />
+                <SectionHeader label="Station Name" sectionKey="lanename" />
                 <input
                   type="text"
                   value={draft.lane_name}
