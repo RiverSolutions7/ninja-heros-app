@@ -11,23 +11,23 @@ export default function LibraryToggle({ view }: LibraryToggleProps) {
         href="/library"
         className={[
           'flex-1 text-center text-sm font-heading py-2 rounded-lg transition-all duration-150',
-          view === 'classes'
-            ? 'bg-accent-fire text-white shadow-glow-fire'
-            : 'text-text-muted hover:text-text-primary',
-        ].join(' ')}
-      >
-        Classes
-      </Link>
-      <Link
-        href="/library?view=components"
-        className={[
-          'flex-1 text-center text-sm font-heading py-2 rounded-lg transition-all duration-150',
           view === 'components'
             ? 'bg-accent-fire text-white shadow-glow-fire'
             : 'text-text-muted hover:text-text-primary',
         ].join(' ')}
       >
         Components
+      </Link>
+      <Link
+        href="/library?view=classes"
+        className={[
+          'flex-1 text-center text-sm font-heading py-2 rounded-lg transition-all duration-150',
+          view === 'classes'
+            ? 'bg-accent-fire text-white shadow-glow-fire'
+            : 'text-text-muted hover:text-text-primary',
+        ].join(' ')}
+      >
+        Full Classes
       </Link>
     </div>
   )

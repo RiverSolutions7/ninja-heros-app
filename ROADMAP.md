@@ -5,6 +5,15 @@
 
 ---
 
+## CURRENT FOCUS
+- [x] Replace Handoff tab with Today's Plan tab
+- [x] Library tab defaults to Components view
+- [x] Today's Plan — pick components from library into slots
+- [x] Today's Plan — 48 hour auto-delete with 36 hour nudge
+- [x] Today's Plan — save plan to library as a full class
+
+---
+
 ## STATUS KEY
 [ ] = Not started
 [~] = In progress / needs fixes or testing

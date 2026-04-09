@@ -195,6 +195,19 @@ export default function NewClassPage() {
     setSavedDraft(null)
   }
 
+  // Check for Today's Plan prefill from sessionStorage
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('ninja-heros-plan-prefill')
+      if (!raw) return
+      sessionStorage.removeItem('ninja-heros-plan-prefill')
+      const items: { localId: string; component: ComponentRow; durationMinutes: number | null }[] = JSON.parse(raw)
+      if (!Array.isArray(items) || items.length === 0) return
+      const blocks: DraftBlock[] = items.map((item) => componentToDraftBlock(item.component))
+      setDraft((d) => ({ ...d, blocks }))
+    } catch { /* ignore corrupt data */ }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Check for saved draft on mount
   useEffect(() => {
     try {

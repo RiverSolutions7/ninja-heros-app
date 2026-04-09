@@ -133,7 +133,7 @@ async function ComponentList({
 
 export default async function LibraryPage({ searchParams }: LibraryPageProps) {
   const params = await searchParams
-  const view = params.view === 'components' ? 'components' : 'classes'
+  const view = params.view === 'classes' ? 'classes' : 'components'
   const activeType = params.ctype ?? ''
   const activeCurriculum = params.ccurriculum ?? ''
 
@@ -149,24 +149,21 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
             Just Tumble · Ninja H.E.R.O.S.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Link
-            href="/library/log-component"
-            className="inline-flex items-center gap-1.5 border border-bg-border text-text-muted font-heading text-sm px-3 py-2.5 rounded-xl active:scale-95 transition-all hover:bg-white/5 min-h-[44px]"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-            Log Component
-          </Link>
+        <div className="flex items-center gap-3">
           <Link
             href="/library/new"
+            className="text-sm text-text-dim hover:text-text-muted transition-colors underline underline-offset-2 min-h-[44px] flex items-center"
+          >
+            + Log Class
+          </Link>
+          <Link
+            href="/library/log-component"
             className="inline-flex items-center gap-1.5 bg-accent-fire text-white font-heading text-sm px-4 py-2.5 rounded-xl active:scale-95 transition-all shadow-glow-fire min-h-[44px]"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
             </svg>
-            Log Class
+            Log Component
           </Link>
         </div>
       </div>
