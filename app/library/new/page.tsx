@@ -12,7 +12,6 @@ import { componentToDraftBlock } from '@/app/lib/componentUtils'
 import { arrayMove } from '@dnd-kit/sortable'
 import {
   type AgeGroup,
-  type Difficulty,
   type CurriculumRow,
   type BlockType,
   type ClassDraft,
@@ -21,11 +20,14 @@ import {
   type DraftLaneBlock,
   type DraftGameBlock,
   type DraftStation,
+  type DraftPhotoItem,
   type ComponentRow,
 } from '@/app/lib/database.types'
 import BlockBuilder from '@/app/components/block-builder/BlockBuilder'
 import AddBlockMenu from '@/app/components/block-builder/AddBlockMenu'
 import Toast from '@/app/components/ui/Toast'
+
+type LogMode = 'quick' | 'detailed'
 
 const DRAFT_KEY = 'ninja-heros-class-draft'
 
@@ -92,11 +94,18 @@ const defaultDraft: ClassDraft = {
 
 export default function NewClassPage() {
   const router = useRouter()
+  const [mode, setMode] = useState<LogMode>('quick')
   const [draft, setDraft] = useState<ClassDraft>(defaultDraft)
   const [submitting, setSubmitting] = useState(false)
   const [titleError, setTitleError] = useState<string | null>(null)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const [noteLines, setNoteLines] = useState<string[]>([])
+
+  // Quick-log state
+  const [quickNotes, setQuickNotes] = useState('')
+  const [quickPhotos, setQuickPhotos] = useState<DraftPhotoItem[]>([])
+  const quickCameraRef = useRef<HTMLInputElement>(null)
+  const quickLibraryRef = useRef<HTMLInputElement>(null)
 
   // Draft auto-save
   const [savedDraft, setSavedDraft] = useState<StoredDraft | null>(null)
@@ -181,7 +190,7 @@ export default function NewClassPage() {
         title: savedDraft.title || '',
         class_date: savedDraft.class_date || today(),
         age_group: savedDraft.age_group || 'Junior Ninjas (5-9)',
-        difficulty: (savedDraft.difficulty || 'Intermediate') as Difficulty,
+        difficulty: (savedDraft.difficulty || 'Intermediate') as string,
         notes: '',
         blocks,
       })
@@ -320,6 +329,29 @@ export default function NewClassPage() {
     )
   }
 
+  // ── Quick-log photo handling ─────────────────────────────────
+
+  function handleQuickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const preview = URL.createObjectURL(file)
+    setQuickPhotos((prev) => [...prev, {
+      localId: crypto.randomUUID(),
+      photoFile: file,
+      photoPreview: preview,
+      photo_url: null,
+    }])
+    e.target.value = ''
+  }
+
+  function removeQuickPhoto(localId: string) {
+    setQuickPhotos((prev) => {
+      const item = prev.find((p) => p.localId === localId)
+      if (item?.photoPreview && item.photoFile) URL.revokeObjectURL(item.photoPreview)
+      return prev.filter((p) => p.localId !== localId)
+    })
+  }
+
   // ── Submit ───────────────────────────────────────────────────
 
   async function handleSubmit(e: React.FormEvent) {
@@ -336,6 +368,53 @@ export default function NewClassPage() {
       setToast({ message: 'Please select a class date.', type: 'error' })
       return
     }
+
+    // ── Quick mode save ──────────────────────────────────────
+    if (mode === 'quick') {
+      setSubmitting(true)
+      try {
+        // Upload quick photos
+        const uploadedUrls: string[] = []
+        for (const photo of quickPhotos) {
+          if (photo.photoFile) {
+            try {
+              const url = await uploadStationPhoto(photo.photoFile)
+              uploadedUrls.push(url)
+            } catch (uploadErr) {
+              console.error('Quick photo upload failed:', uploadErr)
+            }
+          }
+        }
+
+        const { data: classRow, error: classErr } = await supabase
+          .from('classes')
+          .insert({
+            title: draft.title.trim() || null,
+            class_date: draft.class_date,
+            age_group: draft.age_group,
+            difficulty: draft.difficulty,
+            notes: quickNotes.trim() || null,
+            photos: uploadedUrls,
+          })
+          .select()
+          .single()
+
+        if (classErr) throw classErr
+
+        clearDraft()
+        setToast({ message: 'Class saved ✓', type: 'success' })
+        await new Promise((r) => setTimeout(r, 1500))
+        router.push(`/library/${classRow.id}`)
+        return
+      } catch (err) {
+        console.error('Quick save failed:', err)
+        setToast({ message: 'Something went wrong. Please try again.', type: 'error' })
+        setSubmitting(false)
+        return
+      }
+    }
+
+    // ── Detailed mode save (existing logic) ──────────────────
 
     // Validate that every station within each lane block has been named
     for (const block of draft.blocks) {
@@ -585,8 +664,26 @@ export default function NewClassPage() {
         </div>
       </div>
 
+      {/* Mode toggle */}
+      <div className="flex bg-bg-card rounded-xl p-1 mb-5 border border-bg-border">
+        <button
+          type="button"
+          onClick={() => setMode('quick')}
+          className={`flex-1 py-2 text-sm font-heading rounded-lg transition-all ${mode === 'quick' ? 'bg-accent-fire text-white shadow-lg' : 'text-text-dim hover:text-text-muted'}`}
+        >
+          Quick Log
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('detailed')}
+          className={`flex-1 py-2 text-sm font-heading rounded-lg transition-all ${mode === 'detailed' ? 'bg-accent-fire text-white shadow-lg' : 'text-text-dim hover:text-text-muted'}`}
+        >
+          Detailed
+        </button>
+      </div>
+
       {/* Draft restore banner */}
-      {savedDraft && (
+      {savedDraft && mode === 'detailed' && (
         <div className="mb-4 flex items-center justify-between gap-3 px-3 py-2.5 bg-amber-900/25 border border-amber-700/40 rounded-xl">
           <p className="text-text-muted text-sm leading-snug">You have an unfinished class. Restore draft?</p>
           <div className="flex gap-2 flex-shrink-0">
@@ -608,113 +705,232 @@ export default function NewClassPage() {
         </div>
       )}
 
-      {/* Compact class details — no card, no section label */}
-      <div className="px-1 mb-5 space-y-2">
-        {/* Title */}
-        <div>
-          <input
-            id="title"
-            type="text"
-            value={draft.title}
-            onChange={(e) => {
-              setDraft((d) => ({ ...d, title: e.target.value }))
-              setTitleError(null)
-            }}
-            placeholder="Class title..."
-            className="w-full bg-transparent border-b border-bg-border/50 py-2 text-text-primary text-lg placeholder:text-text-dim/40 focus:outline-none focus:border-accent-fire/50 transition-colors"
-          />
-          {titleError && (
-            <p className="text-accent-fire text-xs mt-1">{titleError}</p>
-          )}
-        </div>
+      {/* ══════════ QUICK LOG MODE ══════════ */}
+      {mode === 'quick' && (
+        <div className="px-1 mb-6 space-y-3">
+          {/* Title */}
+          <div>
+            <input
+              id="title"
+              type="text"
+              value={draft.title}
+              onChange={(e) => {
+                setDraft((d) => ({ ...d, title: e.target.value }))
+                setTitleError(null)
+              }}
+              placeholder="Class title..."
+              className="w-full bg-transparent border-b border-bg-border/50 py-2 text-text-primary text-lg placeholder:text-text-dim/40 focus:outline-none focus:border-accent-fire/50 transition-colors"
+            />
+            {titleError && (
+              <p className="text-accent-fire text-xs mt-1">{titleError}</p>
+            )}
+          </div>
 
-        {/* Date + Curriculum on one row */}
-        <div className="flex items-center gap-4">
-          <input
-            id="class_date"
-            type="date"
-            required
-            value={draft.class_date}
-            onChange={(e) => setDraft((d) => ({ ...d, class_date: e.target.value }))}
-            className="bg-transparent border-b border-bg-border/40 py-1.5 text-text-muted text-sm focus:outline-none focus:border-accent-fire/40 transition-colors flex-shrink-0"
-            style={{ colorScheme: 'dark' }}
+          {/* Date + Curriculum on one row */}
+          <div className="flex items-center gap-4">
+            <input
+              type="date"
+              required
+              value={draft.class_date}
+              onChange={(e) => setDraft((d) => ({ ...d, class_date: e.target.value }))}
+              className="bg-transparent border-b border-bg-border/40 py-1.5 text-text-muted text-sm focus:outline-none focus:border-accent-fire/40 transition-colors flex-shrink-0"
+              style={{ colorScheme: 'dark' }}
+            />
+            <div className="relative flex-1 min-w-0">
+              <select
+                value={draft.age_group}
+                onChange={(e) => setDraft((d) => ({ ...d, age_group: e.target.value as AgeGroup }))}
+                className="w-full bg-transparent border-b border-bg-border/40 py-1.5 text-text-muted text-sm focus:outline-none focus:border-accent-fire/40 transition-colors appearance-none cursor-pointer pr-5"
+              >
+                {curriculums.map((c) => (
+                  <option key={c.id} value={c.age_group}>{c.label}</option>
+                ))}
+              </select>
+              <svg className="absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-dim/50 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </div>
+
+          {/* Free-text notes */}
+          <textarea
+            value={quickNotes}
+            onChange={(e) => setQuickNotes(e.target.value)}
+            placeholder="What did you cover? Warm up, stations, games, notes for next time..."
+            rows={5}
+            className="w-full bg-bg-card border border-bg-border rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-dim/40 focus:outline-none focus:border-accent-fire/30 transition-colors resize-none"
           />
-          <div className="relative flex-1 min-w-0">
-            <select
-              id="age_group"
-              value={draft.age_group}
-              onChange={(e) => setDraft((d) => ({ ...d, age_group: e.target.value as AgeGroup }))}
-              className="w-full bg-transparent border-b border-bg-border/40 py-1.5 text-text-muted text-sm focus:outline-none focus:border-accent-fire/40 transition-colors appearance-none cursor-pointer pr-5"
-            >
-              {curriculums.map((c) => (
-                <option key={c.id} value={c.age_group}>{c.label}</option>
-              ))}
-            </select>
-            <svg className="absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-dim/50 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
+
+          {/* Photos */}
+          <div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => quickCameraRef.current?.click()}
+                className="flex items-center gap-1.5 text-sm font-semibold text-accent-blue hover:text-accent-blue/80 transition-colors py-2"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Take Photo
+              </button>
+              <button
+                type="button"
+                onClick={() => quickLibraryRef.current?.click()}
+                className="flex items-center gap-1.5 text-sm font-semibold text-text-muted hover:text-text-primary transition-colors py-2"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                From Library
+              </button>
+            </div>
+
+            {/* Photo thumbnails */}
+            {quickPhotos.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {quickPhotos.map((photo) => (
+                  <div key={photo.localId} className="relative group">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={photo.photoPreview!}
+                      alt=""
+                      className="w-16 h-16 rounded-xl object-cover border border-bg-border"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeQuickPhoto(photo.localId)}
+                      className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                    >
+                      <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Hidden file inputs */}
+            <input ref={quickCameraRef} type="file" accept="image/*" capture="environment" onChange={handleQuickPhoto} className="hidden" />
+            <input ref={quickLibraryRef} type="file" accept="image/*" onChange={handleQuickPhoto} className="hidden" />
           </div>
         </div>
+      )}
 
-        {/* Dynamic note lines */}
-        {noteLines.map((note, i) => (
-          <div key={i} className="flex items-center gap-2 group">
-            <input
-              type="text"
-              value={note}
-              onChange={(e) => setNoteLines((prev) => prev.map((n, idx) => idx === i ? e.target.value : n))}
-              placeholder="Note..."
-              autoFocus={i === noteLines.length - 1}
-              className="flex-1 bg-transparent border-b border-bg-border/30 py-1.5 text-text-dim text-sm placeholder:text-text-dim/30 focus:outline-none focus:border-accent-fire/30 transition-colors"
-            />
+      {/* ══════════ DETAILED MODE ══════════ */}
+      {mode === 'detailed' && (
+        <>
+          {/* Compact class details — no card, no section label */}
+          <div className="px-1 mb-5 space-y-2">
+            {/* Title */}
+            <div>
+              <input
+                id="title-detailed"
+                type="text"
+                value={draft.title}
+                onChange={(e) => {
+                  setDraft((d) => ({ ...d, title: e.target.value }))
+                  setTitleError(null)
+                }}
+                placeholder="Class title..."
+                className="w-full bg-transparent border-b border-bg-border/50 py-2 text-text-primary text-lg placeholder:text-text-dim/40 focus:outline-none focus:border-accent-fire/50 transition-colors"
+              />
+              {titleError && (
+                <p className="text-accent-fire text-xs mt-1">{titleError}</p>
+              )}
+            </div>
+
+            {/* Date + Curriculum on one row */}
+            <div className="flex items-center gap-4">
+              <input
+                id="class_date"
+                type="date"
+                required
+                value={draft.class_date}
+                onChange={(e) => setDraft((d) => ({ ...d, class_date: e.target.value }))}
+                className="bg-transparent border-b border-bg-border/40 py-1.5 text-text-muted text-sm focus:outline-none focus:border-accent-fire/40 transition-colors flex-shrink-0"
+                style={{ colorScheme: 'dark' }}
+              />
+              <div className="relative flex-1 min-w-0">
+                <select
+                  id="age_group"
+                  value={draft.age_group}
+                  onChange={(e) => setDraft((d) => ({ ...d, age_group: e.target.value as AgeGroup }))}
+                  className="w-full bg-transparent border-b border-bg-border/40 py-1.5 text-text-muted text-sm focus:outline-none focus:border-accent-fire/40 transition-colors appearance-none cursor-pointer pr-5"
+                >
+                  {curriculums.map((c) => (
+                    <option key={c.id} value={c.age_group}>{c.label}</option>
+                  ))}
+                </select>
+                <svg className="absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-dim/50 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </div>
+
+            {/* Dynamic note lines */}
+            {noteLines.map((note, i) => (
+              <div key={i} className="flex items-center gap-2 group">
+                <input
+                  type="text"
+                  value={note}
+                  onChange={(e) => setNoteLines((prev) => prev.map((n, idx) => idx === i ? e.target.value : n))}
+                  placeholder="Note..."
+                  autoFocus={i === noteLines.length - 1}
+                  className="flex-1 bg-transparent border-b border-bg-border/30 py-1.5 text-text-dim text-sm placeholder:text-text-dim/30 focus:outline-none focus:border-accent-fire/30 transition-colors"
+                />
+                <button
+                  type="button"
+                  onClick={() => setNoteLines((prev) => prev.filter((_, idx) => idx !== i))}
+                  className="text-text-dim/30 hover:text-red-400 transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100 focus:opacity-100"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+
+            {/* + Add Note */}
             <button
               type="button"
-              onClick={() => setNoteLines((prev) => prev.filter((_, idx) => idx !== i))}
-              className="text-text-dim/30 hover:text-red-400 transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100 focus:opacity-100"
+              onClick={() => setNoteLines((prev) => [...prev, ''])}
+              className="flex items-center gap-1.5 text-xs text-text-dim/50 hover:text-text-dim transition-colors py-1"
             >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
               </svg>
+              Add Note
             </button>
           </div>
-        ))}
 
-        {/* + Add Note */}
-        <button
-          type="button"
-          onClick={() => setNoteLines((prev) => [...prev, ''])}
-          className="flex items-center gap-1.5 text-xs text-text-dim/50 hover:text-text-dim transition-colors py-1"
-        >
-          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-          Add Note
-        </button>
-      </div>
-
-      {/* Block builder — hero button when empty, normal builder when blocks exist */}
-      <div className="mb-6">
-        {draft.blocks.length === 0 ? (
-          <AddBlockMenu
-            hero
-            onAdd={(type) => addBlock(type, -1)}
-            onAddFromLibrary={(c) => addBlockFromLibrary(c, -1)}
-            ageGroup={draft.age_group}
-          />
-        ) : (
-          <BlockBuilder
-            blocks={draft.blocks}
-            onAdd={addBlock}
-            onAddFromLibrary={addBlockFromLibrary}
-            onChange={updateBlock}
-            onRemove={removeBlock}
-            onReorder={reorderBlocks}
-            availableSkills={availableSkills}
-            onAddSkill={handleAddSkill}
-            ageGroup={draft.age_group}
-          />
-        )}
-      </div>
+          {/* Block builder — hero button when empty, normal builder when blocks exist */}
+          <div className="mb-6">
+            {draft.blocks.length === 0 ? (
+              <AddBlockMenu
+                hero
+                onAdd={(type) => addBlock(type, -1)}
+                onAddFromLibrary={(c) => addBlockFromLibrary(c, -1)}
+                ageGroup={draft.age_group}
+              />
+            ) : (
+              <BlockBuilder
+                blocks={draft.blocks}
+                onAdd={addBlock}
+                onAddFromLibrary={addBlockFromLibrary}
+                onChange={updateBlock}
+                onRemove={removeBlock}
+                onReorder={reorderBlocks}
+                availableSkills={availableSkills}
+                onAddSkill={handleAddSkill}
+                ageGroup={draft.age_group}
+              />
+            )}
+          </div>
+        </>
+      )}
 
       {/* Submit */}
       <button

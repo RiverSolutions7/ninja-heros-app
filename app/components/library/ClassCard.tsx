@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import Link from 'next/link'
 import type { FullClass } from '@/app/lib/database.types'
 import ClassCardMenu from './ClassCardMenu'
 import RemoveFromHandoffButton from '@/app/components/handoff/RemoveFromHandoffButton'
@@ -34,8 +35,10 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
 
   function handleShare() {
     const url = `${window.location.origin}/class/${cls.id}`
+    const title = cls.title || 'Ninja H.E.R.O.S. Class'
+    const text = `${title} — ${cls.age_group} · ${formatShortDate(cls.class_date)}`
     if (navigator.share) {
-      navigator.share({ title: cls.title || 'Ninja H.E.R.O.S. Class', url })
+      navigator.share({ title, text, url })
     } else {
       navigator.clipboard.writeText(url).then(() => {
         setShareToast(true)
@@ -51,7 +54,7 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
     setLightbox((lb) => lb ? { ...lb, index: (lb.index + 1) % lb.urls.length } : null)
   }
 
-  const photoUrls = cls.blocks.flatMap((b) =>
+  const blockPhotoUrls = cls.blocks.flatMap((b) =>
     b.type === 'lane'
       ? b.stations.flatMap((s) =>
           s.photo_urls?.length > 0
@@ -60,6 +63,8 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
         )
       : []
   )
+  const classLevelPhotos = (cls.photos ?? [])
+  const photoUrls = [...classLevelPhotos, ...blockPhotoUrls]
   const laneVideoUrls = cls.blocks
     .filter((b): b is Extract<typeof b, { type: 'lane' }> => b.type === 'lane')
     .map((b) => b.data.video_url)
@@ -139,17 +144,28 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
                 type="button"
                 onClick={handleShare}
                 aria-label="Share class"
-                className="flex items-center justify-center w-8 h-8 rounded-lg text-text-dim hover:text-text-primary hover:bg-white/5 transition-colors flex-shrink-0"
+                className="flex items-center justify-center w-9 h-9 rounded-lg bg-accent-fire/10 text-accent-fire hover:bg-accent-fire/20 transition-colors flex-shrink-0"
               >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                 </svg>
               </button>
             )}
+            {showActions && cls.blocks.length > 0 && (
+              <Link
+                href={`/class/${cls.id}/run`}
+                aria-label="Run class"
+                className="flex items-center justify-center w-8 h-8 rounded-lg text-text-dim hover:text-accent-fire hover:bg-accent-fire/10 transition-colors flex-shrink-0"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              </Link>
+            )}
             {showActions && (
               <ClassCardMenu
                 classId={cls.id}
-                currentFolderId={cls.folder_id}
                 inHandoff={cls.in_handoff}
                 photoUrls={photoUrls}
                 laneVideoUrls={laneVideoUrls}
@@ -360,6 +376,30 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
               })
             })()}
           </div>
+
+          {/* Class-level photos (Quick Log) */}
+          {classLevelPhotos.length > 0 && cls.blocks.length === 0 && (
+            <div className="px-4 py-3 border-t border-bg-border">
+              <p className="text-xs font-semibold text-text-dim uppercase tracking-wider mb-2">Photos</p>
+              <div className="flex flex-wrap gap-2">
+                {classLevelPhotos.map((url, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    className="flex-shrink-0"
+                    onClick={(e) => { e.stopPropagation(); setLightbox({ urls: classLevelPhotos, index: idx }) }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={url}
+                      alt={`Class photo ${idx + 1}`}
+                      className="w-20 h-20 rounded-xl object-cover border border-bg-border shadow-card hover:scale-105 transition-transform duration-200 cursor-pointer"
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Notes */}
           {cls.notes && (

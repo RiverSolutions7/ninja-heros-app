@@ -3,8 +3,7 @@
 import { useRef, useState } from 'react'
 import type { DraftGameBlock, DraftPhotoItem } from '@/app/lib/database.types'
 import VideoCapture from './VideoCapture'
-import SkillChip from '@/app/components/skills/SkillChip'
-import { supabase } from '@/app/lib/supabase'
+import SkillPickerModal from '@/app/components/skills/SkillPickerModal'
 
 type SectionKey = 'photo' | 'video' | 'videolink' | 'description' | 'duration' | 'skills'
 
@@ -63,11 +62,7 @@ export default function GameBlockForm({
 }: GameBlockFormProps) {
   const [activeSections, setActiveSections] = useState<SectionKey[]>(() => getInitialSections(block))
   const [menuOpen, setMenuOpen] = useState(false)
-  const [addingSkill, setAddingSkill] = useState(false)
-  const [newSkillName, setNewSkillName] = useState('')
-  const [addSkillSaving, setAddSkillSaving] = useState(false)
-  const [addSkillError, setAddSkillError] = useState<string | null>(null)
-  const newSkillInputRef = useRef<HTMLInputElement>(null)
+  const [showSkillPicker, setShowSkillPicker] = useState(false)
   const cameraRef = useRef<HTMLInputElement>(null)
   const libraryRef = useRef<HTMLInputElement>(null)
 
@@ -114,26 +109,6 @@ export default function GameBlockForm({
         ? current.filter((s) => s !== skill)
         : [...current, skill],
     })
-  }
-
-  async function handleAddSkill() {
-    const trimmed = newSkillName.trim()
-    if (!trimmed) return
-    setAddSkillSaving(true)
-    setAddSkillError(null)
-    const { error } = await supabase.from('skills').insert({ name: trimmed, age_group: ageGroup })
-    if (error && error.code !== '23505') {
-      setAddSkillError(error.message)
-      setAddSkillSaving(false)
-      return
-    }
-    onAddSkill(trimmed)
-    const current = block.skills ?? []
-    if (!current.includes(trimmed)) onChange({ skills: [...current, trimmed] })
-    setNewSkillName('')
-    setAddingSkill(false)
-    setAddSkillSaving(false)
-    setAddSkillError(null)
   }
 
   function SectionHeader({ label, sectionKey }: { label: string; sectionKey: SectionKey }) {
@@ -305,58 +280,35 @@ export default function GameBlockForm({
             <div key="skills">
               <SectionHeader label="Skills" sectionKey="skills" />
               <div className="flex flex-wrap gap-2">
-                {availableSkills.map((skill) => (
-                  <SkillChip
+                {(block.skills ?? []).map((skill) => (
+                  <span
                     key={skill}
-                    skill={skill}
-                    selected={(block.skills ?? []).includes(skill)}
-                    onToggle={toggleSkill}
-                  />
-                ))}
-                {addingSkill ? (
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <input
-                      ref={newSkillInputRef}
-                      type="text"
-                      value={newSkillName}
-                      onChange={(e) => setNewSkillName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') { e.preventDefault(); handleAddSkill() }
-                        if (e.key === 'Escape') { setAddingSkill(false); setNewSkillName('') }
-                      }}
-                      placeholder="Skill name..."
-                      className="px-2.5 py-1 bg-bg-card border border-bg-border rounded-full text-sm text-text-primary placeholder:text-text-dim focus:outline-none focus:border-accent-green w-32"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddSkill}
-                      disabled={!newSkillName.trim() || addSkillSaving}
-                      className="px-2.5 py-1 bg-accent-green text-white text-xs font-heading rounded-full disabled:opacity-50"
-                    >
-                      {addSkillSaving ? '…' : 'Add'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setAddingSkill(false); setNewSkillName(''); setAddSkillError(null) }}
-                      className="text-text-dim hover:text-text-primary transition-colors p-1"
-                    >
-                      <XIcon />
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => { setAddingSkill(true); setTimeout(() => newSkillInputRef.current?.focus(), 50) }}
-                    className="flex items-center gap-1 px-2.5 py-1 border border-dashed border-accent-green/40 rounded-full text-xs text-accent-green hover:bg-accent-green/10 transition-colors"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-accent-green/20 border border-accent-green/40 text-accent-green"
                   >
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                    </svg>
-                    New Skill
-                  </button>
-                )}
+                    {skill}
+                  </span>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setShowSkillPicker(true)}
+                  className="flex items-center gap-1 px-2.5 py-1 border border-dashed border-accent-green/40 rounded-full text-xs text-accent-green hover:bg-accent-green/10 transition-colors"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
+                  {(block.skills ?? []).length > 0 ? 'Edit Skills' : 'Add Skills'}
+                </button>
               </div>
-              {addSkillError && <p className="text-xs text-red-400 mt-1">{addSkillError}</p>}
+              {showSkillPicker && (
+                <SkillPickerModal
+                  availableSkills={availableSkills}
+                  selectedSkills={block.skills ?? []}
+                  ageGroup={ageGroup}
+                  onToggle={toggleSkill}
+                  onAddSkill={onAddSkill}
+                  onClose={() => setShowSkillPicker(false)}
+                />
+              )}
             </div>
           )
 

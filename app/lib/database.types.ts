@@ -6,12 +6,8 @@
 // Kept as string so any curriculum name works seamlessly.
 export type AgeGroup = string
 
-export type Difficulty =
-  | 'Beginner'
-  | 'Beginner-Intermediate'
-  | 'Intermediate'
-  | 'Intermediate-Advanced'
-  | 'Advanced'
+// Difficulty removed from the UI — kept as string for DB backward compat
+export type Difficulty = string
 
 export type BlockType = 'warmup' | 'lane' | 'game'
 
@@ -41,13 +37,6 @@ export const ALL_SKILLS = [
 // AGE_GROUPS removed — curriculums are now fetched from the `curriculums` table in Supabase.
 // Use fetchCurriculums() from queries.ts instead.
 
-export const DIFFICULTIES: Difficulty[] = [
-  'Beginner',
-  'Beginner-Intermediate',
-  'Intermediate',
-  'Intermediate-Advanced',
-  'Advanced',
-]
 
 export const WARMUP_TIMES: WarmupTime[] = ['1 min', '2 min', '3 min', '4 min', '5 min', '6 min', '7 min', '8 min', '9 min', '10 min']
 
@@ -93,6 +82,7 @@ export interface ClassRow {
   notes: string | null
   folder_id: string | null
   in_handoff: boolean
+  photos: string[]
   created_at: string
   updated_at: string
 }
@@ -254,6 +244,25 @@ export interface ComponentRow {
   folder_id: string | null
   in_handoff: boolean
   created_at: string
+}
+
+// ============================================================
+// Plans (Today's Plan — synced via Supabase)
+// ============================================================
+
+export interface PlanItem {
+  localId: string
+  component: ComponentRow
+  durationMinutes: number | null
+}
+
+export interface PlanRow {
+  id: string
+  title: string | null
+  curriculum: string | null
+  items: PlanItem[]
+  created_at: string
+  updated_at: string
 }
 
 // ============================================================

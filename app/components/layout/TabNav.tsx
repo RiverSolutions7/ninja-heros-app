@@ -57,6 +57,8 @@ export default function TabNav() {
 
   // Hide nav on public share pages
   if (pathname.startsWith('/class/')) return null
+  // Hide nav on shared plan view (but not the main /plan tab)
+  if (/^\/plan\/[^/]+/.test(pathname)) return null
 
   return (
     <nav className="fixed bottom-0 inset-x-0 z-50 glass safe-area-pb">

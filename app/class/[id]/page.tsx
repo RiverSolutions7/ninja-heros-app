@@ -1,6 +1,8 @@
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { fetchFullClass } from '@/app/lib/queries'
 import StationPhotos from './StationPhotos'
+import ShareClassButton from './ShareClassButton'
 import type { Metadata } from 'next'
 
 interface Props {
@@ -65,12 +67,6 @@ export default async function ShareClassPage({ params }: Props) {
               </svg>
               <span>{cls.age_group}</span>
             </div>
-            <div className="flex items-center gap-2">
-              <svg className="w-4 h-4 text-text-dim flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-              <span>{cls.difficulty}</span>
-            </div>
           </div>
 
           {cls.notes && (
@@ -82,6 +78,47 @@ export default async function ShareClassPage({ params }: Props) {
             </div>
           )}
         </div>
+
+        {/* Action buttons */}
+        <div className="flex gap-2">
+          <ShareClassButton
+            classId={cls.id}
+            title={cls.title || 'Ninja H.E.R.O.S. Class'}
+            ageGroup={cls.age_group}
+            date={formatDate(cls.class_date)}
+          />
+          {cls.blocks.length > 0 && (
+            <Link
+              href={`/class/${cls.id}/run`}
+              className="flex-1 inline-flex items-center justify-center gap-2 bg-accent-fire text-white font-heading text-base px-4 py-3.5 rounded-xl active:scale-95 transition-all shadow-glow-fire min-h-[52px]"
+            >
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+              Run
+            </Link>
+          )}
+        </div>
+
+        {/* Class-level photos (Quick Log) */}
+        {cls.photos && cls.photos.length > 0 && cls.blocks.length === 0 && (
+          <div className="card p-4">
+            <p className="text-xs font-semibold text-text-dim uppercase tracking-wider mb-3">
+              Photos
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {cls.photos.map((url: string, idx: number) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={idx}
+                  src={url}
+                  alt={`Class photo ${idx + 1}`}
+                  className="w-full aspect-[4/3] rounded-xl object-cover border border-bg-border"
+                />
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Class sequence */}
         {cls.blocks.length > 0 && (

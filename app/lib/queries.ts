@@ -187,6 +187,22 @@ export async function fetchHandoffNotes(): Promise<HandoffNoteRow[]> {
 // ============================================================
 // Fetch components (standalone games, warmups, stations)
 // ============================================================
+export async function countClasses(): Promise<number> {
+  const { count, error } = await supabase
+    .from('classes')
+    .select('*', { count: 'exact', head: true })
+  if (error) throw error
+  return count ?? 0
+}
+
+export async function countComponents(): Promise<number> {
+  const { count, error } = await supabase
+    .from('components')
+    .select('*', { count: 'exact', head: true })
+  if (error) throw error
+  return count ?? 0
+}
+
 export async function fetchComponents(type?: string, curriculum?: string): Promise<ComponentRow[]> {
   let query = supabase
     .from('components')

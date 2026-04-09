@@ -1,13 +1,13 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import type { ComponentRow, ComponentType } from '@/app/lib/database.types'
+import type { ComponentRow, ComponentType, PlanItem } from '@/app/lib/database.types'
+import { createPlan, fetchLatestPlan, updatePlanItems } from '@/app/lib/planQueries'
 import ComponentPickerModal from './ComponentPickerModal'
 
-const PLAN_KEY = 'ninja-heros-todays-plan'
 const PREFILL_KEY = 'ninja-heros-plan-prefill'
-const HOURS_36 = 36 * 60 * 60 * 1000
 const HOURS_48 = 48 * 60 * 60 * 1000
 
 const TYPE_META: Record<ComponentType, { label: string; border: string; placeholderBg: string }> = {
@@ -16,58 +16,63 @@ const TYPE_META: Record<ComponentType, { label: string; border: string; placehol
   game: { label: 'Game', border: 'border-l-accent-green', placeholderBg: 'bg-accent-green/20' },
 }
 
-interface PlanItem {
-  localId: string
-  component: ComponentRow
-  durationMinutes: number | null
-}
-
-interface StoredPlan {
-  items: PlanItem[]
-  savedAt: string
-}
-
 export default function TodaysPlanClient() {
   const router = useRouter()
+  const [planId, setPlanId] = useState<string | null>(null)
   const [items, setItems] = useState<PlanItem[]>([])
-  const [savedAt, setSavedAt] = useState<string | null>(null)
   const [showPicker, setShowPicker] = useState(false)
-  const [showExpiryBanner, setShowExpiryBanner] = useState(false)
   const [copyFeedback, setCopyFeedback] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   // Drag state
   const dragId = useRef<string | null>(null)
   const dragOverId = useRef<string | null>(null)
 
-  // Load from localStorage on mount
+  // Debounce save ref
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const itemsRef = useRef(items)
+  useEffect(() => { itemsRef.current = items }, [items])
+
+  // Load latest plan from Supabase on mount
   useEffect(() => {
     setMounted(true)
-    try {
-      const raw = localStorage.getItem(PLAN_KEY)
-      if (!raw) return
-      const parsed: StoredPlan = JSON.parse(raw)
-      const age = Date.now() - new Date(parsed.savedAt).getTime()
-      if (age >= HOURS_48) {
-        localStorage.removeItem(PLAN_KEY)
-        return
-      }
-      setItems(parsed.items ?? [])
-      setSavedAt(parsed.savedAt)
-      if (age >= HOURS_36) setShowExpiryBanner(true)
-    } catch { /* ignore corrupt data */ }
+    fetchLatestPlan()
+      .then((plan) => {
+        if (plan) {
+          const age = Date.now() - new Date(plan.updated_at).getTime()
+          if (age < HOURS_48) {
+            setPlanId(plan.id)
+            setItems(plan.items ?? [])
+          }
+        }
+      })
+      .catch(() => { /* ignore */ })
+      .finally(() => setLoading(false))
   }, [])
 
-  // Persist to localStorage whenever items change
+  // Debounced save to Supabase
+  const debouncedSave = useCallback((currentItems: PlanItem[], currentPlanId: string | null) => {
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(async () => {
+      try {
+        if (currentPlanId) {
+          await updatePlanItems(currentPlanId, currentItems)
+        } else if (currentItems.length > 0) {
+          const plan = await createPlan(currentItems)
+          setPlanId(plan.id)
+        }
+      } catch (err) {
+        console.error('Failed to save plan:', err)
+      }
+    }, 500)
+  }, [])
+
+  // Save whenever items change (after mount + initial load)
   useEffect(() => {
-    if (!mounted) return
-    try {
-      const now = new Date().toISOString()
-      const plan: StoredPlan = { items, savedAt: savedAt ?? now }
-      localStorage.setItem(PLAN_KEY, JSON.stringify(plan))
-      if (!savedAt) setSavedAt(now)
-    } catch { /* ignore quota errors */ }
-  }, [items]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (!mounted || loading) return
+    debouncedSave(items, planId)
+  }, [items, mounted, loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleSelect(component: ComponentRow) {
     setShowPicker(false)
@@ -92,16 +97,14 @@ export default function TodaysPlanClient() {
     )
   }
 
+  function handleClearPlan() {
+    setItems([])
+    setPlanId(null)
+  }
+
   // Drag-to-reorder
-  function handleDragStart(localId: string) {
-    dragId.current = localId
-  }
-
-  function handleDragOver(e: React.DragEvent, localId: string) {
-    e.preventDefault()
-    dragOverId.current = localId
-  }
-
+  function handleDragStart(localId: string) { dragId.current = localId }
+  function handleDragOver(e: React.DragEvent, localId: string) { e.preventDefault(); dragOverId.current = localId }
   function handleDrop() {
     const from = dragId.current
     const to = dragOverId.current
@@ -119,6 +122,23 @@ export default function TodaysPlanClient() {
     dragOverId.current = null
   }
 
+  async function handleShare() {
+    if (!planId) return
+    const url = `${window.location.origin}/plan/${planId}`
+    const text = buildShareText()
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'Today\'s Plan', text, url })
+        return
+      } catch { /* fall through to clipboard */ }
+    }
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopyFeedback(true)
+      setTimeout(() => setCopyFeedback(false), 2000)
+    } catch { /* ignore */ }
+  }
+
   function buildShareText() {
     const lines = ['Today\'s Plan']
     items.forEach((item, idx) => {
@@ -126,21 +146,6 @@ export default function TodaysPlanClient() {
       lines.push(`${idx + 1}. ${item.component.title}${dur}`)
     })
     return lines.join('\n')
-  }
-
-  async function handleShare() {
-    const text = buildShareText()
-    if (navigator.share) {
-      try {
-        await navigator.share({ text })
-        return
-      } catch { /* fall through to clipboard */ }
-    }
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopyFeedback(true)
-      setTimeout(() => setCopyFeedback(false), 2000)
-    } catch { /* ignore */ }
   }
 
   function handleSaveToLibrary() {
@@ -154,36 +159,6 @@ export default function TodaysPlanClient() {
 
   return (
     <div className="min-h-screen pb-24">
-      {/* Expiry banner */}
-      {showExpiryBanner && (
-        <div className="mx-4 mt-3 mb-1 flex items-center gap-3 bg-accent-gold/10 border border-accent-gold/30 rounded-xl px-4 py-3">
-          <svg className="w-4 h-4 text-accent-gold flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-          <p className="text-accent-gold text-xs flex-1">
-            Your plan expires soon — save it to the Library or it will be deleted.
-          </p>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <button
-              type="button"
-              onClick={handleSaveToLibrary}
-              className="text-xs text-accent-gold font-heading underline"
-            >
-              Save
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowExpiryBanner(false)}
-              className="text-accent-gold/60 hover:text-accent-gold transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Page header */}
       <div className="relative flex items-center justify-between px-4 pt-4 pb-3">
         <div className="absolute inset-x-0 -top-4 h-24 bg-gradient-to-b from-accent-fire/[0.07] to-transparent pointer-events-none rounded-2xl -z-10" />
@@ -221,44 +196,66 @@ export default function TodaysPlanClient() {
         </div>
       </div>
 
-      {/* Save to Library link */}
-      {items.length > 0 && (
+      {/* Send to Coaches — prominent share button */}
+      {items.length > 0 && planId && (
         <div className="px-4 pb-2">
           <button
             type="button"
-            onClick={handleSaveToLibrary}
-            className="text-sm text-text-dim hover:text-text-muted transition-colors underline underline-offset-2"
+            onClick={handleShare}
+            className="w-full inline-flex items-center justify-center gap-2 border border-accent-fire/40 text-accent-fire font-heading text-sm px-4 py-3 rounded-xl active:scale-95 transition-all hover:bg-accent-fire/5 min-h-[48px]"
           >
-            Save to Library as a class
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            Send to Coaches
           </button>
         </div>
       )}
 
-      {/* Add button */}
-      <div className="px-4 py-3">
+      {/* Action buttons row */}
+      <div className="px-4 py-3 flex gap-2">
         <button
           type="button"
           onClick={() => setShowPicker(true)}
-          className="w-full inline-flex items-center justify-center gap-2 bg-accent-fire text-white font-heading text-base px-4 py-3.5 rounded-xl active:scale-95 transition-all shadow-glow-fire min-h-[52px]"
+          className="flex-1 inline-flex items-center justify-center gap-2 bg-accent-fire text-white font-heading text-base px-4 py-3.5 rounded-xl active:scale-95 transition-all shadow-glow-fire min-h-[52px]"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
           </svg>
           Add to Plan
         </button>
+        {items.length > 0 && (
+          <button
+            type="button"
+            onClick={handleSaveToLibrary}
+            className="inline-flex items-center gap-1.5 border border-bg-border text-text-muted font-heading text-sm px-4 py-3.5 rounded-xl active:scale-95 transition-all hover:bg-white/5 min-h-[52px]"
+          >
+            Save
+          </button>
+        )}
       </div>
 
+      {/* Loading state */}
+      {loading && (
+        <div className="flex items-center justify-center py-16">
+          <div className="w-8 h-8 border-2 border-accent-fire border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+
       {/* Empty state */}
-      {items.length === 0 && (
+      {!loading && items.length === 0 && (
         <div className="text-center py-16 px-4">
           <div className="text-5xl mb-4">📋</div>
           <p className="font-heading text-text-muted text-lg">No plan yet</p>
           <p className="text-text-dim text-sm mt-2">Tap + Add to Plan to start building your day</p>
+          <Link href="/library" className="text-text-dim text-xs mt-3 inline-block underline underline-offset-2 hover:text-text-muted transition-colors">
+            Add components from the Library tab first
+          </Link>
         </div>
       )}
 
       {/* Plan items */}
-      {items.length > 0 && (
+      {!loading && items.length > 0 && (
         <ul className="mx-4 bg-bg-card rounded-2xl overflow-hidden border border-bg-border">
           {items.map((item) => {
             const meta = TYPE_META[item.component.type]
@@ -276,12 +273,10 @@ export default function TodaysPlanClient() {
                   meta.border,
                 ].join(' ')}
               >
-                {/* Drag handle */}
                 <span className="text-text-dim/30 text-base leading-none select-none flex-shrink-0" aria-hidden>
                   ⠿
                 </span>
 
-                {/* Thumbnail */}
                 <div className="flex-shrink-0 w-14 h-14 rounded-xl overflow-hidden">
                   {firstPhoto ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -291,7 +286,6 @@ export default function TodaysPlanClient() {
                   )}
                 </div>
 
-                {/* Content */}
                 <div className="flex-1 min-w-0">
                   <p className="font-heading text-[15px] text-text-primary leading-snug truncate">
                     {item.component.title}
@@ -301,7 +295,6 @@ export default function TodaysPlanClient() {
                   )}
                 </div>
 
-                {/* Duration input */}
                 <div className="flex items-center gap-1 flex-shrink-0">
                   <input
                     type="number"
@@ -315,7 +308,6 @@ export default function TodaysPlanClient() {
                   <span className="text-text-dim text-xs">m</span>
                 </div>
 
-                {/* Remove */}
                 <button
                   type="button"
                   onClick={() => handleRemove(item.localId)}
@@ -330,6 +322,19 @@ export default function TodaysPlanClient() {
             )
           })}
         </ul>
+      )}
+
+      {/* Clear plan */}
+      {!loading && items.length > 0 && (
+        <div className="px-4 pt-3 flex justify-center">
+          <button
+            type="button"
+            onClick={handleClearPlan}
+            className="text-sm text-text-dim/50 hover:text-text-dim transition-colors"
+          >
+            Clear plan
+          </button>
+        </div>
       )}
 
       {/* Component picker modal */}
