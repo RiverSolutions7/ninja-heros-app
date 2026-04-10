@@ -309,6 +309,7 @@ export default function EditClassForm({ cls, initialSkills }: EditClassFormProps
                 }
               }
 
+              const safeStationUrls = uploadedUrls.filter((u) => !u.startsWith('blob:'))
               if (station.id) {
                 keptStationIds.add(station.id)
                 const { error: sErr } = await supabase
@@ -317,8 +318,8 @@ export default function EditClassForm({ cls, initialSkills }: EditClassFormProps
                     sort_order: j,
                     equipment: station.equipment,
                     description: station.description,
-                    photo_url: uploadedUrls[0] ?? null,
-                    photo_urls: uploadedUrls,
+                    photo_url: safeStationUrls[0] ?? null,
+                    photo_urls: safeStationUrls,
                   })
                   .eq('id', station.id)
                 if (sErr) throw sErr
@@ -330,8 +331,8 @@ export default function EditClassForm({ cls, initialSkills }: EditClassFormProps
                     sort_order: j,
                     equipment: station.equipment,
                     description: station.description,
-                    photo_url: uploadedUrls[0] ?? null,
-                    photo_urls: uploadedUrls,
+                    photo_url: safeStationUrls[0] ?? null,
+                    photo_urls: safeStationUrls,
                   })
                   .select()
                   .single()

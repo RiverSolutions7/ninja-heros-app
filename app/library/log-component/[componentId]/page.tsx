@@ -226,7 +226,7 @@ export default function EditComponentPage() {
         description: description.trim() || null,
         equipment: component?.type === 'station' ? (lane_name.trim() || null) : null,
         skills: skills.length > 0 ? skills : null,
-        photos: allPhotos.length > 0 ? allPhotos : null,
+        photos: allPhotos.filter((u) => !u.startsWith('blob:')),
         duration_minutes,
         video_link: video_link.trim() || null,
         video_url: videoUrl,

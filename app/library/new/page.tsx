@@ -545,13 +545,14 @@ export default function NewClassPage() {
               }
             }
 
+            const safeStationUrls = uploadedUrls.filter((u) => !u.startsWith('blob:'))
             const { error: sErr } = await supabase.from('stations').insert({
               lane_block_id: laneRow.id,
               sort_order: j,
               equipment: station.equipment,
               description: station.description,
-              photo_url: uploadedUrls[0] ?? null,
-              photo_urls: uploadedUrls,
+              photo_url: safeStationUrls[0] ?? null,
+              photo_urls: safeStationUrls,
             })
             if (sErr) throw sErr
 
@@ -562,7 +563,7 @@ export default function NewClassPage() {
               curriculum: draft.age_group,
               description: station.description.trim() || null,
               skills: draftBlock.core_skills.length > 0 ? draftBlock.core_skills : null,
-              photos: uploadedUrls.length > 0 ? uploadedUrls : null,
+              photos: safeStationUrls.length > 0 ? safeStationUrls : null,
               duration_minutes: draftBlock.duration_minutes ?? null,
               equipment: station.equipment.trim(),
               video_link: null,

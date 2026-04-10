@@ -232,7 +232,7 @@ export default function LogComponentPage() {
         description: draft.description.trim() || null,
         equipment: componentType === 'station' ? (draft.lane_name.trim() || null) : null,
         skills: draft.skills.length > 0 ? draft.skills : null,
-        photos: photoUrls.length > 0 ? photoUrls : null,
+        photos: photoUrls.filter((u) => !u.startsWith('blob:')),
         duration_minutes: draft.duration_minutes,
         video_link: draft.video_link.trim() || null,
         video_url: videoUrl,

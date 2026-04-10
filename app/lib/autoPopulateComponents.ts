@@ -53,7 +53,7 @@ export async function autoPopulateComponents(
       const existing = data[0] as { id: string; photos: string[] | null }
       const combinedPhotos = Array.from(
         new Set([...(existing.photos ?? []), ...(candidate.photos ?? [])])
-      )
+      ).filter((u) => !u.startsWith('blob:'))
 
       const updates: Record<string, unknown> = {}
       if (combinedPhotos.length > 0) updates.photos = combinedPhotos
@@ -82,7 +82,7 @@ export async function autoPopulateComponents(
         curriculum: candidate.curriculum || null,
         description: candidate.description,
         skills: candidate.skills,
-        photos: candidate.photos,
+        photos: (candidate.photos ?? []).filter((u) => !u.startsWith('blob:')),
         duration_minutes: candidate.duration_minutes,
         equipment: candidate.equipment,
         video_link: candidate.video_link ?? null,
