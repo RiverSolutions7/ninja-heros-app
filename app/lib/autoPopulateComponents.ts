@@ -30,8 +30,20 @@ export async function autoPopulateComponents(
   )
   if (valid.length === 0) return
 
+  // Track keys inserted in this batch to prevent within-save merging.
+  // Two same-named stations in the same class should not have their photos combined.
+  const insertedInBatch = new Set<string>()
+
   for (const candidate of valid) {
     const title = candidate.title.trim()
+    const batchKey = `${candidate.type}:${title.toLowerCase()}:${candidate.curriculum}`
+
+    // If this exact key was already processed in this save, skip it.
+    if (insertedInBatch.has(batchKey)) {
+      console.log(`[autoPopulateComponents] skipping duplicate in batch: "${title}"`)
+      continue
+    }
+    insertedInBatch.add(batchKey)
 
     // Look for an existing component with the same type + title + curriculum
     const { data, error: selectErr } = await supabase
