@@ -65,6 +65,7 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
               src={photoUrls[0]}
               alt=""
               className="w-full h-full object-cover"
+              onError={(e) => { (e.currentTarget.parentElement as HTMLElement).style.display = 'none' }}
             />
           </div>
         )}

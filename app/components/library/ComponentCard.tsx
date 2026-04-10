@@ -58,6 +58,7 @@ export default function ComponentCard({ component, showMenu = false, onClick }: 
               src={firstPhoto}
               alt={component.title}
               className="w-full h-full object-cover"
+              onError={(e) => { (e.currentTarget.parentElement as HTMLElement).style.display = 'none' }}
             />
           </div>
         )}
