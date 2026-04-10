@@ -51,10 +51,10 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
     .filter(Boolean) as string[]
 
   return (
-    <div className="border-b border-white/[0.06]">
+    <div className="border-b border-bg-border/50 border-l-4 border-l-accent-fire">
       {/* Row header — tap to expand/collapse */}
       <div
-        className="flex items-center gap-3 px-4 py-3 cursor-pointer select-none active:bg-white/[0.03] transition-colors"
+        className="flex items-center gap-3 px-4 py-3 cursor-pointer select-none hover:bg-white/5 active:bg-white/[0.03] transition-colors"
         onClick={() => setExpanded((v) => !v)}
       >
         {/* Thumbnail — only when photo exists */}

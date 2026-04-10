@@ -650,18 +650,22 @@ export default function NewClassPage() {
   return (
     <form onSubmit={handleSubmit}>
       {/* Header */}
-      <div className="flex items-center gap-3 mb-5 pt-2">
+      <div className="relative flex items-center gap-3 mb-5 pt-2">
+        <div className="absolute inset-x-0 -top-4 h-24 bg-gradient-to-b from-accent-fire/[0.07] to-transparent pointer-events-none rounded-2xl -z-10" />
         <Link
           href="/library"
-          className="text-text-dim hover:text-text-primary transition-colors p-1.5 rounded-lg hover:bg-white/5 -ml-1.5"
+          className="flex items-center justify-center w-8 h-8 rounded-lg text-text-dim hover:text-text-primary hover:bg-white/5 transition-colors -ml-1"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
         </Link>
         <div>
-          <h1 className="font-heading text-xl text-text-primary leading-none">Log New Class</h1>
-          <p className="text-text-dim text-xs mt-0.5">Just Tumble Ninja H.E.R.O.S.</p>
+          <h1 className="font-heading text-2xl text-text-primary leading-none">Log New Class</h1>
+          <p className="flex items-center gap-1.5 text-text-dim text-xs mt-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-accent-fire inline-block opacity-60" />
+            Just Tumble · Ninja H.E.R.O.S.
+          </p>
         </div>
       </div>
 
@@ -708,9 +712,12 @@ export default function NewClassPage() {
 
       {/* ══════════ QUICK LOG MODE ══════════ */}
       {mode === 'quick' && (
-        <div className="px-1 mb-6 space-y-3">
+        <div className="mb-6 space-y-4">
           {/* Title */}
           <div>
+            <label className="field-label" htmlFor="title">
+              Title <span className="text-accent-fire">*</span>
+            </label>
             <input
               id="title"
               type="text"
@@ -720,7 +727,7 @@ export default function NewClassPage() {
                 setTitleError(null)
               }}
               placeholder="Class title..."
-              className="w-full bg-transparent border-b border-bg-border/50 py-2 text-text-primary text-lg placeholder:text-text-dim/40 focus:outline-none focus:border-accent-fire/50 transition-colors"
+              className="field-input"
             />
             {titleError && (
               <p className="text-accent-fire text-xs mt-1">{titleError}</p>
@@ -728,39 +735,51 @@ export default function NewClassPage() {
           </div>
 
           {/* Date + Curriculum on one row */}
-          <div className="flex items-center gap-4">
-            <input
-              type="date"
-              required
-              value={draft.class_date}
-              onChange={(e) => setDraft((d) => ({ ...d, class_date: e.target.value }))}
-              className="bg-transparent border-b border-bg-border/40 py-1.5 text-text-muted text-sm focus:outline-none focus:border-accent-fire/40 transition-colors flex-shrink-0"
-              style={{ colorScheme: 'dark' }}
-            />
-            <div className="relative flex-1 min-w-0">
-              <select
-                value={draft.age_group}
-                onChange={(e) => setDraft((d) => ({ ...d, age_group: e.target.value as AgeGroup }))}
-                className="w-full bg-transparent border-b border-bg-border/40 py-1.5 text-text-muted text-sm focus:outline-none focus:border-accent-fire/40 transition-colors appearance-none cursor-pointer pr-5"
-              >
-                {curriculums.map((c) => (
-                  <option key={c.id} value={c.age_group}>{c.label}</option>
-                ))}
-              </select>
-              <svg className="absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-dim/50 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-              </svg>
+          <div className="flex gap-3">
+            <div className="flex-shrink-0">
+              <label className="field-label" htmlFor="classDate">Date</label>
+              <input
+                id="classDate"
+                type="date"
+                required
+                value={draft.class_date}
+                onChange={(e) => setDraft((d) => ({ ...d, class_date: e.target.value }))}
+                className="field-input"
+                style={{ colorScheme: 'dark' }}
+              />
+            </div>
+            <div className="flex-1 min-w-0">
+              <label className="field-label" htmlFor="curriculum">Curriculum</label>
+              <div className="relative">
+                <select
+                  id="curriculum"
+                  value={draft.age_group}
+                  onChange={(e) => setDraft((d) => ({ ...d, age_group: e.target.value as AgeGroup }))}
+                  className="field-select pr-8"
+                >
+                  {curriculums.map((c) => (
+                    <option key={c.id} value={c.age_group}>{c.label}</option>
+                  ))}
+                </select>
+                <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-dim pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
             </div>
           </div>
 
           {/* Free-text notes */}
-          <textarea
-            value={quickNotes}
-            onChange={(e) => setQuickNotes(e.target.value)}
-            placeholder="What did you cover? Warm up, stations, games, notes for next time..."
-            rows={5}
-            className="w-full bg-bg-card border border-bg-border rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-dim/40 focus:outline-none focus:border-accent-fire/30 transition-colors resize-none"
-          />
+          <div>
+            <label className="field-label" htmlFor="quickNotes">Notes</label>
+            <textarea
+              id="quickNotes"
+              value={quickNotes}
+              onChange={(e) => setQuickNotes(e.target.value)}
+              placeholder="What did you cover? Warm up, stations, games, notes for next time..."
+              rows={5}
+              className="field-textarea"
+            />
+          </div>
 
           {/* Photos */}
           <div>
@@ -768,9 +787,9 @@ export default function NewClassPage() {
               <button
                 type="button"
                 onClick={() => quickCameraRef.current?.click()}
-                className="flex items-center gap-1.5 text-sm font-semibold text-accent-blue hover:text-accent-blue/80 transition-colors py-2"
+                className="inline-flex items-center gap-1.5 text-sm text-text-muted border border-bg-border rounded-xl px-3 py-2 hover:bg-white/5 transition-colors"
               >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
@@ -779,9 +798,9 @@ export default function NewClassPage() {
               <button
                 type="button"
                 onClick={() => quickLibraryRef.current?.click()}
-                className="flex items-center gap-1.5 text-sm font-semibold text-text-muted hover:text-text-primary transition-colors py-2"
+                className="inline-flex items-center gap-1.5 text-sm text-text-muted border border-bg-border rounded-xl px-3 py-2 hover:bg-white/5 transition-colors"
               >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
                 From Library

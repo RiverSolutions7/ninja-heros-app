@@ -57,7 +57,7 @@ function SortablePlanItem({
       ref={setNodeRef}
       style={style}
       className={[
-        'flex items-center gap-3 px-3 py-3 border-b border-bg-border/50 last:border-b-0 border-l-4',
+        'flex items-center gap-3 px-4 py-3 border-b border-bg-border/50 last:border-b-0 border-l-4',
         meta.border,
       ].join(' ')}
     >

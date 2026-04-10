@@ -373,19 +373,23 @@ export default function LogComponentPage() {
   return (
     <form onSubmit={handleSubmit}>
       {/* Page header */}
-      <div className="flex items-center gap-3 mb-6 pt-2">
+      <div className="relative flex items-center gap-3 mb-6 pt-2">
+        <div className="absolute inset-x-0 -top-4 h-24 bg-gradient-to-b from-accent-fire/[0.07] to-transparent pointer-events-none rounded-2xl -z-10" />
         <button
           type="button"
           onClick={() => { setStep('choose'); setDraft(EMPTY_DRAFT); setActiveSections([]); setError(null); setTitleError(null) }}
-          className="text-text-dim hover:text-text-primary transition-colors p-1.5 rounded-lg hover:bg-white/5 -ml-1.5"
+          className="flex items-center justify-center w-8 h-8 rounded-lg text-text-dim hover:text-text-primary hover:bg-white/5 transition-colors -ml-1"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
         </button>
         <div>
-          <h1 className="font-heading text-xl text-text-primary leading-none">Log {typeLabel}</h1>
-          <p className="text-text-dim text-xs mt-0.5">Just Tumble Ninja H.E.R.O.S.</p>
+          <h1 className="font-heading text-2xl text-text-primary leading-none">Log {typeLabel}</h1>
+          <p className="flex items-center gap-1.5 text-text-dim text-xs mt-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-accent-fire inline-block opacity-60" />
+            Just Tumble · Ninja H.E.R.O.S.
+          </p>
         </div>
       </div>
 
