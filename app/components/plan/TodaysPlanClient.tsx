@@ -3,6 +3,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import {
+  DndContext,
+  DragEndEvent,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import type { ComponentRow, ComponentType, PlanItem } from '@/app/lib/database.types'
 import { createPlan, fetchLatestPlan, updatePlanItems } from '@/app/lib/planQueries'
 import ComponentPickerModal from './ComponentPickerModal'
@@ -16,6 +31,97 @@ const TYPE_META: Record<ComponentType, { label: string; border: string; placehol
   game: { label: 'Game', border: 'border-l-accent-green', placeholderBg: 'bg-accent-green/20' },
 }
 
+/* ── Sortable plan item ── */
+function SortablePlanItem({
+  item,
+  onRemove,
+  onDurationChange,
+}: {
+  item: PlanItem
+  onRemove: (localId: string) => void
+  onDurationChange: (localId: string, value: string) => void
+}) {
+  const meta = TYPE_META[item.component.type]
+  const firstPhoto = item.component.photos?.[0] ?? null
+  const subMeta = [meta.label, item.component.curriculum].filter(Boolean).join(' · ')
+
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.localId })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={style}
+      className={[
+        'flex items-center gap-3 px-3 py-3 border-b border-bg-border/50 last:border-b-0 border-l-4',
+        meta.border,
+      ].join(' ')}
+    >
+      {/* Drag handle */}
+      <span
+        className="text-text-dim/60 text-base leading-none select-none flex-shrink-0 cursor-grab active:cursor-grabbing p-1"
+        style={{ touchAction: 'none' }}
+        aria-label="Drag to reorder"
+        {...attributes}
+        {...listeners}
+      >
+        ⠿
+      </span>
+
+      {/* Thumbnail */}
+      <div className="flex-shrink-0 w-14 h-14 rounded-xl overflow-hidden">
+        {firstPhoto ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={firstPhoto} alt={item.component.title} className="w-full h-full object-cover" />
+        ) : (
+          <div className={['w-full h-full', meta.placeholderBg].join(' ')} />
+        )}
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        <p className="font-heading text-[15px] text-text-primary leading-snug truncate">
+          {item.component.title}
+        </p>
+        {subMeta && (
+          <p className="text-xs text-text-dim mt-0.5 truncate">{subMeta}</p>
+        )}
+      </div>
+
+      {/* Duration input */}
+      <div className="flex items-center gap-1 flex-shrink-0">
+        <input
+          type="number"
+          min={1}
+          max={120}
+          value={item.durationMinutes ?? ''}
+          onChange={(e) => onDurationChange(item.localId, e.target.value)}
+          placeholder="—"
+          className="w-14 bg-transparent text-text-muted text-sm text-right focus:outline-none focus:text-text-primary [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        />
+        <span className="text-text-dim text-xs">m</span>
+      </div>
+
+      {/* Remove */}
+      <button
+        type="button"
+        onClick={() => onRemove(item.localId)}
+        className="text-text-dim/40 hover:text-text-muted transition-colors flex-shrink-0 p-1 -mr-1"
+        aria-label="Remove"
+      >
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </li>
+  )
+}
+
+/* ── Main component ── */
 export default function TodaysPlanClient() {
   const router = useRouter()
   const [planId, setPlanId] = useState<string | null>(null)
@@ -25,9 +131,11 @@ export default function TodaysPlanClient() {
   const [mounted, setMounted] = useState(false)
   const [loading, setLoading] = useState(true)
 
-  // Drag state
-  const dragId = useRef<string | null>(null)
-  const dragOverId = useRef<string | null>(null)
+  // @dnd-kit sensors (same pattern as BlockBuilder)
+  const sensors = useSensors(
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+  )
 
   // Debounce save ref
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -75,7 +183,6 @@ export default function TodaysPlanClient() {
   }, [items, mounted, loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleSelect(component: ComponentRow) {
-    setShowPicker(false)
     setItems((prev) => [
       ...prev,
       {
@@ -102,24 +209,19 @@ export default function TodaysPlanClient() {
     setPlanId(null)
   }
 
-  // Drag-to-reorder
-  function handleDragStart(localId: string) { dragId.current = localId }
-  function handleDragOver(e: React.DragEvent, localId: string) { e.preventDefault(); dragOverId.current = localId }
-  function handleDrop() {
-    const from = dragId.current
-    const to = dragOverId.current
-    if (!from || !to || from === to) return
+  // @dnd-kit reorder
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
     setItems((prev) => {
-      const fromIdx = prev.findIndex((i) => i.localId === from)
-      const toIdx = prev.findIndex((i) => i.localId === to)
-      if (fromIdx === -1 || toIdx === -1) return prev
+      const fromIndex = prev.findIndex((i) => i.localId === active.id)
+      const toIndex = prev.findIndex((i) => i.localId === over.id)
+      if (fromIndex === -1 || toIndex === -1) return prev
       const next = [...prev]
-      const [moved] = next.splice(fromIdx, 1)
-      next.splice(toIdx, 0, moved)
+      const [moved] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, moved)
       return next
     })
-    dragId.current = null
-    dragOverId.current = null
   }
 
   async function handleShare() {
@@ -245,7 +347,6 @@ export default function TodaysPlanClient() {
       {/* Empty state */}
       {!loading && items.length === 0 && (
         <div className="text-center py-16 px-4">
-          <div className="text-5xl mb-4">📋</div>
           <p className="font-heading text-text-muted text-lg">No plan yet</p>
           <p className="text-text-dim text-sm mt-2">Tap + Add to Plan to start building your day</p>
           <Link href="/library" className="text-text-dim text-xs mt-3 inline-block underline underline-offset-2 hover:text-text-muted transition-colors">
@@ -254,74 +355,22 @@ export default function TodaysPlanClient() {
         </div>
       )}
 
-      {/* Plan items */}
+      {/* Plan items — @dnd-kit sortable */}
       {!loading && items.length > 0 && (
-        <ul className="mx-4 bg-bg-card rounded-2xl overflow-hidden border border-bg-border">
-          {items.map((item) => {
-            const meta = TYPE_META[item.component.type]
-            const firstPhoto = item.component.photos?.[0] ?? null
-            const subMeta = [meta.label, item.component.curriculum].filter(Boolean).join(' · ')
-            return (
-              <li
-                key={item.localId}
-                draggable
-                onDragStart={() => handleDragStart(item.localId)}
-                onDragOver={(e) => handleDragOver(e, item.localId)}
-                onDrop={handleDrop}
-                className={[
-                  'flex items-center gap-3 px-3 py-3 border-b border-bg-border/50 last:border-b-0 border-l-4 cursor-grab active:cursor-grabbing',
-                  meta.border,
-                ].join(' ')}
-              >
-                <span className="text-text-dim/30 text-base leading-none select-none flex-shrink-0" aria-hidden>
-                  ⠿
-                </span>
-
-                <div className="flex-shrink-0 w-14 h-14 rounded-xl overflow-hidden">
-                  {firstPhoto ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={firstPhoto} alt={item.component.title} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className={['w-full h-full', meta.placeholderBg].join(' ')} />
-                  )}
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <p className="font-heading text-[15px] text-text-primary leading-snug truncate">
-                    {item.component.title}
-                  </p>
-                  {subMeta && (
-                    <p className="text-xs text-text-dim mt-0.5 truncate">{subMeta}</p>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  <input
-                    type="number"
-                    min={1}
-                    max={120}
-                    value={item.durationMinutes ?? ''}
-                    onChange={(e) => handleDurationChange(item.localId, e.target.value)}
-                    placeholder="—"
-                    className="w-10 bg-transparent text-text-muted text-sm text-right focus:outline-none focus:text-text-primary [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                  />
-                  <span className="text-text-dim text-xs">m</span>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => handleRemove(item.localId)}
-                  className="text-text-dim/40 hover:text-text-muted transition-colors flex-shrink-0 p-1 -mr-1"
-                  aria-label="Remove"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </li>
-            )
-          })}
-        </ul>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={items.map((i) => i.localId)} strategy={verticalListSortingStrategy}>
+            <ul className="mx-4 bg-bg-card rounded-2xl overflow-hidden border border-bg-border">
+              {items.map((item) => (
+                <SortablePlanItem
+                  key={item.localId}
+                  item={item}
+                  onRemove={handleRemove}
+                  onDurationChange={handleDurationChange}
+                />
+              ))}
+            </ul>
+          </SortableContext>
+        </DndContext>
       )}
 
       {/* Clear plan */}
@@ -342,6 +391,7 @@ export default function TodaysPlanClient() {
         <ComponentPickerModal
           onSelect={handleSelect}
           onClose={() => setShowPicker(false)}
+          existingIds={new Set(items.map((i) => i.component.id))}
         />
       )}
     </div>

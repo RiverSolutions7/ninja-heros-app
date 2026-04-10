@@ -1,8 +1,10 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import type { FullClass, FullBlock } from '@/app/lib/database.types'
+
+const SWIPE_THRESHOLD = 60
 
 interface Props {
   cls: FullClass
@@ -16,19 +18,44 @@ function formatDate(dateStr: string) {
 export default function RunViewClient({ cls }: Props) {
   // Steps: 0 = overview, 1..N = blocks
   const totalSteps = 1 + cls.blocks.length
+  const isQuickLog = cls.blocks.length === 0
   const [step, setStep] = useState(0)
   const touchStartX = useRef(0)
+  const touchStartY = useRef(0)
 
   function prev() { setStep((s) => Math.max(0, s - 1)) }
   function next() { setStep((s) => Math.min(totalSteps - 1, s + 1)) }
 
+  // Arrow key navigation
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'ArrowRight' && step < totalSteps - 1) setStep((s) => s + 1)
+      if (e.key === 'ArrowLeft' && step > 0) setStep((s) => s - 1)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [step, totalSteps])
+
   function handleTouchStart(e: React.TouchEvent) {
     touchStartX.current = e.touches[0].clientX
+    touchStartY.current = e.touches[0].clientY
   }
   function handleTouchEnd(e: React.TouchEvent) {
-    const diff = touchStartX.current - e.changedTouches[0].clientX
-    if (diff > 60) next()
-    else if (diff < -60) prev()
+    const deltaX = touchStartX.current - e.changedTouches[0].clientX
+    const deltaY = touchStartY.current - e.changedTouches[0].clientY
+    // Ignore if not primarily horizontal or below threshold
+    if (Math.abs(deltaX) < SWIPE_THRESHOLD || Math.abs(deltaX) < Math.abs(deltaY)) return
+    if (deltaX > 0) next()
+    else prev()
+  }
+
+  // Compute station number for lane blocks
+  function getStationNumber(blockIndex: number): number {
+    let count = 0
+    for (let i = 0; i <= blockIndex; i++) {
+      if (cls.blocks[i].type === 'lane') count++
+    }
+    return count
   }
 
   const progress = totalSteps > 1 ? ((step + 1) / totalSteps) * 100 : 100
@@ -40,12 +67,14 @@ export default function RunViewClient({ cls }: Props) {
       onTouchEnd={handleTouchEnd}
     >
       {/* Progress bar */}
-      <div className="h-1 bg-bg-border flex-shrink-0">
-        <div
-          className="h-full bg-accent-fire transition-all duration-300 ease-out rounded-r-full"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
+      {!isQuickLog && (
+        <div className="h-1 bg-bg-border flex-shrink-0">
+          <div
+            className="h-full bg-accent-fire transition-all duration-300 ease-out rounded-r-full"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      )}
 
       {/* Step indicator */}
       <div className="flex items-center justify-between px-4 py-2 flex-shrink-0">
@@ -55,9 +84,11 @@ export default function RunViewClient({ cls }: Props) {
         >
           Exit
         </Link>
-        <span className="text-xs text-text-dim font-heading">
-          {step + 1} / {totalSteps}
-        </span>
+        {!isQuickLog && (
+          <span className="text-xs text-text-dim font-heading">
+            {step + 1} / {totalSteps}
+          </span>
+        )}
       </div>
 
       {/* Content area */}
@@ -65,37 +96,39 @@ export default function RunViewClient({ cls }: Props) {
         {step === 0 ? (
           <OverviewStep cls={cls} />
         ) : (
-          <BlockStep block={cls.blocks[step - 1]} blockIndex={step - 1} cls={cls} />
+          <BlockStep block={cls.blocks[step - 1]} blockIndex={step - 1} cls={cls} getStationNumber={getStationNumber} />
         )}
       </div>
 
       {/* Fixed bottom nav */}
-      <div className="fixed bottom-0 inset-x-0 z-40 bg-bg-primary/95 backdrop-blur-sm border-t border-bg-border safe-area-pb">
-        <div className="max-w-2xl mx-auto flex items-center gap-3 px-4 py-3">
-          <button
-            type="button"
-            onClick={prev}
-            disabled={step === 0}
-            className="flex-1 inline-flex items-center justify-center gap-2 font-heading text-sm px-4 py-3 rounded-xl border border-bg-border text-text-muted disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 transition-all min-h-[48px]"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-            Previous
-          </button>
-          <button
-            type="button"
-            onClick={next}
-            disabled={step === totalSteps - 1}
-            className="flex-1 inline-flex items-center justify-center gap-2 font-heading text-sm px-4 py-3 rounded-xl bg-accent-fire text-white disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 transition-all shadow-glow-fire min-h-[48px]"
-          >
-            Next
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
+      {!isQuickLog && (
+        <div className="fixed bottom-0 inset-x-0 z-40 bg-bg-primary/95 backdrop-blur-sm border-t border-bg-border safe-area-pb">
+          <div className="max-w-2xl mx-auto flex items-center gap-3 px-4 py-3">
+            <button
+              type="button"
+              onClick={prev}
+              disabled={step === 0}
+              className="flex-1 inline-flex items-center justify-center gap-2 font-heading text-sm px-4 py-3 rounded-xl border border-bg-border text-text-muted disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 transition-all min-h-[48px]"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+              Previous
+            </button>
+            <button
+              type="button"
+              onClick={next}
+              disabled={step === totalSteps - 1}
+              className="flex-1 inline-flex items-center justify-center gap-2 font-heading text-sm px-4 py-3 rounded-xl bg-accent-fire text-white disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 transition-all shadow-glow-fire min-h-[48px]"
+            >
+              Next
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
@@ -179,9 +212,19 @@ function BlockSummaryCard({ block, index }: { block: FullBlock; index: number })
 /* ------------------------------------------------------------------ */
 /* Block Step                                                          */
 /* ------------------------------------------------------------------ */
-function BlockStep({ block, blockIndex, cls }: { block: FullBlock; blockIndex: number; cls: FullClass }) {
+function BlockStep({
+  block,
+  blockIndex,
+  cls,
+  getStationNumber,
+}: {
+  block: FullBlock
+  blockIndex: number
+  cls: FullClass
+  getStationNumber: (idx: number) => number
+}) {
   if (block.type === 'warmup') return <WarmupStep block={block} />
-  if (block.type === 'lane') return <LaneStep block={block} blockIndex={blockIndex} cls={cls} />
+  if (block.type === 'lane') return <LaneStep block={block} stationNumber={getStationNumber(blockIndex)} />
   if (block.type === 'game') return <GameStep block={block} />
   return null
 }
@@ -213,19 +256,13 @@ function WarmupStep({ block }: { block: Extract<FullBlock, { type: 'warmup' }> }
   )
 }
 
-function LaneStep({ block, blockIndex, cls }: { block: Extract<FullBlock, { type: 'lane' }>; blockIndex: number; cls: FullClass }) {
-  // Count how many lane blocks come before this one to get the station number
-  let stationNum = 0
-  for (let i = 0; i <= blockIndex; i++) {
-    if (cls.blocks[i].type === 'lane') stationNum++
-  }
-
+function LaneStep({ block, stationNumber }: { block: Extract<FullBlock, { type: 'lane' }>; stationNumber: number }) {
   return (
     <div className="pt-4">
       <div className="text-center mb-6">
         <span className="text-4xl mb-2 block">📍</span>
         <h2 className="font-heading text-xl text-accent-fire">
-          Station {stationNum}
+          Station {stationNumber}
         </h2>
         {block.data.instructor_name && (
           <p className="text-text-dim text-sm mt-1">{block.data.instructor_name}</p>
@@ -260,6 +297,14 @@ function LaneStep({ block, blockIndex, cls }: { block: Extract<FullBlock, { type
                   className="w-full object-cover"
                   style={{ maxHeight: '280px' }}
                 />
+                {urls.length > 1 && (
+                  <div className="flex gap-2 p-2">
+                    {urls.slice(1).map((url, i) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img key={i} src={url} alt="" className="w-14 h-14 rounded-xl object-cover border border-bg-border" />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
             <div className="p-4">
