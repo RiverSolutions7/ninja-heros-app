@@ -25,6 +25,18 @@
 
 ---
 
+## DESIGN
+[ ] Full visual redesign — elevate app from prototype aesthetic to
+    premium SaaS quality. Goals:
+    - Clean typography hierarchy, one font, precise sizing, generous whitespace
+    - Restrained color palette — one or two accent colors used intentionally
+    - Remove all visual noise: gradients, glows, emoji icons
+    - Every screen feels consistent, intentional, and spacious
+    - Reference: Notion, Linear, Apple native apps
+    - Target feel: software worth paying $20-50/month for
+
+---
+
 ## QUICK WINS (Do Next)
 [x] Auto-populate components from logged classes
 [x] Toast confirmation after save ("Class saved ✓")
