@@ -103,7 +103,7 @@ async function ComponentList({
   let components = []
 
   try {
-    components = await fetchComponents(activeType || undefined, activeCurriculum || undefined)
+    components = await fetchComponents(undefined, activeCurriculum || undefined)
   } catch {
     return (
       <div className="text-center py-12">
