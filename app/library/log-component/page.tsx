@@ -73,6 +73,7 @@ const DURATIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30]
 export default function LogComponentPage() {
   const router = useRouter()
   const [step, setStep] = useState<'choose' | 'form'>('choose')
+  const [pendingType, setPendingType] = useState<ComponentType>('game')
   const [componentType, setComponentType] = useState<ComponentType | null>(null)
   const [draft, setDraft] = useState<ComponentDraft>(EMPTY_DRAFT)
   const [activeSections, setActiveSections] = useState<SectionKey[]>([])
@@ -255,67 +256,49 @@ export default function LogComponentPage() {
   if (step === 'choose') {
     return (
       <div>
-        <div className="flex items-center gap-3 mb-8 pt-2">
+        <div className="relative flex items-center gap-3 mb-6 pt-2">
+          <div className="absolute inset-x-0 -top-4 h-24 bg-gradient-to-b from-accent-fire/[0.07] to-transparent pointer-events-none rounded-2xl -z-10" />
           <Link
             href="/library?view=components"
-            className="text-text-dim hover:text-text-primary transition-colors p-1.5 rounded-lg hover:bg-white/5 -ml-1.5"
+            className="flex items-center justify-center w-8 h-8 rounded-lg text-text-dim hover:text-text-primary hover:bg-white/5 transition-colors -ml-1"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
           </Link>
           <div>
-            <h1 className="font-heading text-xl text-text-primary leading-none">Log Component</h1>
-            <p className="text-text-dim text-xs mt-0.5">What are you logging?</p>
+            <h1 className="font-heading text-2xl text-text-primary leading-none">Log Component</h1>
+            <p className="flex items-center gap-1.5 text-text-dim text-xs mt-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-accent-fire inline-block opacity-60" />
+              Just Tumble · Ninja H.E.R.O.S.
+            </p>
           </div>
         </div>
 
-        <div className="space-y-3">
-          <button
-            type="button"
-            onClick={() => chooseType('game')}
-            className="w-full card p-5 flex items-center gap-4 text-left active:scale-[0.98] transition-all border-l-4 border-l-accent-green hover:bg-white/[0.03]"
-          >
-            <span className="text-3xl">🎮</span>
-            <div>
-              <p className="font-heading text-text-primary text-base">Game</p>
-              <p className="text-text-dim text-sm mt-0.5">Tag games, obstacle challenges, team activities</p>
-            </div>
-            <svg className="w-5 h-5 text-text-dim ml-auto flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => chooseType('warmup')}
-            className="w-full card p-5 flex items-center gap-4 text-left active:scale-[0.98] transition-all border-l-4 border-l-accent-gold hover:bg-white/[0.03]"
-          >
-            <span className="text-3xl">🔥</span>
-            <div>
-              <p className="font-heading text-text-primary text-base">Warmup</p>
-              <p className="text-text-dim text-sm mt-0.5">Dynamic warmups, stretches, movement prep</p>
-            </div>
-            <svg className="w-5 h-5 text-text-dim ml-auto flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => chooseType('station')}
-            className="w-full card p-5 flex items-center gap-4 text-left active:scale-[0.98] transition-all border-l-4 border-l-accent-blue hover:bg-white/[0.03]"
-          >
-            <span className="text-3xl">🏃</span>
-            <div>
-              <p className="font-heading text-text-primary text-base">Station / Drill</p>
-              <p className="text-text-dim text-sm mt-0.5">Individual stations, skill drills, obstacle setups</p>
-            </div>
-            <svg className="w-5 h-5 text-text-dim ml-auto flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
+        <div className="flex bg-bg-card rounded-xl p-1 mb-6 border border-bg-border">
+          {(['game', 'warmup', 'station'] as ComponentType[]).map((type) => (
+            <button
+              key={type}
+              type="button"
+              onClick={() => setPendingType(type)}
+              className={`flex-1 py-2 text-sm font-heading rounded-lg transition-all ${
+                pendingType === type
+                  ? 'bg-accent-fire text-white shadow-lg'
+                  : 'text-text-dim hover:text-text-muted'
+              }`}
+            >
+              {type === 'game' ? 'Game' : type === 'warmup' ? 'Warmup' : 'Station'}
+            </button>
+          ))}
         </div>
+
+        <button
+          type="button"
+          onClick={() => chooseType(pendingType)}
+          className="w-full inline-flex items-center justify-center gap-2 bg-accent-fire text-white font-heading text-base px-4 py-3.5 rounded-xl active:scale-95 transition-all shadow-glow-fire min-h-[52px]"
+        >
+          Continue
+        </button>
       </div>
     )
   }
