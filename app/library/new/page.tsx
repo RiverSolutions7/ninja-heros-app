@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { supabase } from '@/app/lib/supabase'
 import { uploadStationPhoto } from '@/app/lib/uploadPhoto'
 import { uploadLaneVideo, uploadGameVideo } from '@/app/lib/uploadVideo'
+import type { DraftPhotoItem } from '@/app/lib/database.types'
 import { autoPopulateComponents } from '@/app/lib/autoPopulateComponents'
 import type { ComponentCandidate } from '@/app/lib/autoPopulateComponents'
 import { componentToDraftBlock } from '@/app/lib/componentUtils'
@@ -92,11 +93,18 @@ const defaultDraft: ClassDraft = {
 
 export default function NewClassPage() {
   const router = useRouter()
+  const [mode, setMode] = useState<'simple' | 'advanced'>('simple')
   const [draft, setDraft] = useState<ClassDraft>(defaultDraft)
   const [submitting, setSubmitting] = useState(false)
   const [titleError, setTitleError] = useState<string | null>(null)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const [noteLines, setNoteLines] = useState<string[]>([])
+
+  // Simple mode state
+  const [simpleNotes, setSimpleNotes] = useState('')
+  const [simplePhotos, setSimplePhotos] = useState<DraftPhotoItem[]>([])
+  const simpleCameraRef = useRef<HTMLInputElement>(null)
+  const simpleLibraryRef = useRef<HTMLInputElement>(null)
 
   // Draft auto-save
   const [savedDraft, setSavedDraft] = useState<StoredDraft | null>(null)
@@ -565,6 +573,65 @@ export default function NewClassPage() {
     }
   }
 
+  // ── Simple mode helpers ──────────────────────────────────────
+
+  function handleSimplePhotoFiles(files: FileList | null) {
+    if (!files) return
+    const newPhotos: DraftPhotoItem[] = Array.from(files).map((f) => ({
+      localId: crypto.randomUUID(),
+      photoFile: f,
+      photoPreview: URL.createObjectURL(f),
+      photo_url: null,
+    }))
+    setSimplePhotos((prev) => [...prev, ...newPhotos])
+  }
+
+  function removeSimplePhoto(localId: string) {
+    setSimplePhotos((prev) => {
+      const item = prev.find((p) => p.localId === localId)
+      if (item?.photoPreview) URL.revokeObjectURL(item.photoPreview)
+      return prev.filter((p) => p.localId !== localId)
+    })
+  }
+
+  async function handleSimpleSubmit() {
+    if (!draft.title.trim()) {
+      setTitleError('Class title is required')
+      return
+    }
+    setSubmitting(true)
+
+    try {
+      const uploadedUrls: string[] = []
+      for (const p of simplePhotos) {
+        if (p.photoFile) {
+          const url = await uploadStationPhoto(p.photoFile)
+          uploadedUrls.push(url)
+        }
+      }
+
+      const { data, error } = await supabase
+        .from('classes')
+        .insert({
+          title: draft.title.trim(),
+          class_date: draft.class_date,
+          age_group: draft.age_group,
+          difficulty: 'Intermediate' as Difficulty,
+          notes: simpleNotes.trim() || null,
+          photos: uploadedUrls,
+        })
+        .select('id')
+        .single()
+
+      if (error) throw error
+      router.push(`/library/${data.id}`)
+    } catch (err) {
+      console.error('Quick log save failed:', err)
+      setToast({ message: 'Failed to save. Please try again.', type: 'error' })
+      setSubmitting(false)
+    }
+  }
+
   // ── Render ───────────────────────────────────────────────────
 
   return (
@@ -585,6 +652,160 @@ export default function NewClassPage() {
         </div>
       </div>
 
+      {/* Simple / Advanced toggle */}
+      <div className="flex gap-1 mb-5 bg-bg-card border border-bg-border rounded-xl p-1">
+        <button
+          type="button"
+          onClick={() => setMode('simple')}
+          className={[
+            'flex-1 py-2 rounded-lg text-sm font-heading transition-all text-center',
+            mode === 'simple'
+              ? 'bg-accent-fire text-white shadow-glow-fire'
+              : 'text-text-muted hover:text-text-primary',
+          ].join(' ')}
+        >
+          Simple
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('advanced')}
+          className={[
+            'flex-1 py-2 rounded-lg text-sm font-heading transition-all text-center',
+            mode === 'advanced'
+              ? 'bg-accent-fire text-white shadow-glow-fire'
+              : 'text-text-muted hover:text-text-primary',
+          ].join(' ')}
+        >
+          Advanced
+        </button>
+      </div>
+
+      {/* ── Simple mode ── */}
+      {mode === 'simple' && (
+        <div className="px-1 space-y-4">
+          {/* Title */}
+          <div>
+            <input
+              type="text"
+              value={draft.title}
+              onChange={(e) => { setDraft((d) => ({ ...d, title: e.target.value })); setTitleError(null) }}
+              placeholder="Class title..."
+              className="w-full bg-transparent border-b border-bg-border/50 py-2 text-text-primary text-lg placeholder:text-text-dim/40 focus:outline-none focus:border-accent-fire/50 transition-colors"
+            />
+            {titleError && <p className="text-accent-fire text-xs mt-1">{titleError}</p>}
+          </div>
+
+          {/* Date + Curriculum */}
+          <div className="flex items-center gap-4">
+            <input
+              type="date"
+              value={draft.class_date}
+              onChange={(e) => setDraft((d) => ({ ...d, class_date: e.target.value }))}
+              className="bg-transparent border-b border-bg-border/40 py-1.5 text-text-muted text-sm focus:outline-none focus:border-accent-fire/40 transition-colors flex-shrink-0"
+              style={{ colorScheme: 'dark' }}
+            />
+            <div className="relative flex-1 min-w-0">
+              <select
+                value={draft.age_group}
+                onChange={(e) => setDraft((d) => ({ ...d, age_group: e.target.value }))}
+                className="w-full bg-transparent border-b border-bg-border/40 py-1.5 text-text-muted text-sm focus:outline-none focus:border-accent-fire/40 transition-colors appearance-none cursor-pointer pr-5"
+              >
+                {curriculums.map((c) => (
+                  <option key={c.id} value={c.age_group}>{c.label}</option>
+                ))}
+              </select>
+              <svg className="absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-dim/50 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </div>
+
+          {/* Notes textarea */}
+          <textarea
+            value={simpleNotes}
+            onChange={(e) => setSimpleNotes(e.target.value)}
+            placeholder="What did you cover? Warmup, stations, games, notes for next time..."
+            rows={5}
+            className="w-full bg-bg-card border border-bg-border rounded-xl px-3 py-2.5 text-sm text-text-primary placeholder:text-text-dim/40 focus:outline-none focus:border-accent-fire/50 transition-colors resize-none"
+          />
+
+          {/* Photo buttons */}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => simpleCameraRef.current?.click()}
+              className="inline-flex items-center gap-1.5 text-sm text-text-muted border border-bg-border rounded-xl px-3 py-2 hover:bg-white/5 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              Take Photo
+            </button>
+            <button
+              type="button"
+              onClick={() => simpleLibraryRef.current?.click()}
+              className="inline-flex items-center gap-1.5 text-sm text-text-muted border border-bg-border rounded-xl px-3 py-2 hover:bg-white/5 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              From Library
+            </button>
+            <input ref={simpleCameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleSimplePhotoFiles(e.target.files)} />
+            <input ref={simpleLibraryRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleSimplePhotoFiles(e.target.files)} />
+          </div>
+
+          {/* Photo thumbnails */}
+          {simplePhotos.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {simplePhotos.map((p) => (
+                <div key={p.localId} className="relative">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={p.photoPreview!} alt="" className="w-16 h-16 rounded-xl object-cover border border-bg-border" />
+                  <button
+                    type="button"
+                    onClick={() => removeSimplePhoto(p.localId)}
+                    className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-bg-primary border border-bg-border rounded-full flex items-center justify-center text-text-dim hover:text-accent-fire transition-colors"
+                  >
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Save button */}
+          <div className="mt-6">
+            <button
+              type="button"
+              onClick={handleSimpleSubmit}
+              disabled={submitting}
+              className="w-full py-4 bg-accent-fire text-white font-heading text-base rounded-xl active:scale-95 transition-all shadow-lg shadow-accent-fire/25 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 min-h-[56px]"
+            >
+              {submitting ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                  Save Class
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Advanced mode ── */}
+      {mode === 'advanced' && (
+      <div>
       {/* Draft restore banner */}
       {savedDraft && (
         <div className="mb-4 flex items-center justify-between gap-3 px-3 py-2.5 bg-amber-900/25 border border-amber-700/40 rounded-xl">
@@ -738,6 +959,8 @@ export default function NewClassPage() {
       </button>
 
       <div className="h-4" />
+
+      </div>)}
 
       {toast && (
         <Toast

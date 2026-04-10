@@ -28,7 +28,7 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
     setLightbox((lb) => lb ? { ...lb, index: (lb.index + 1) % lb.urls.length } : null)
   }
 
-  const photoUrls = cls.blocks.flatMap((b) =>
+  const blockPhotoUrls = cls.blocks.flatMap((b) =>
     b.type === 'lane'
       ? b.stations.flatMap((s) =>
           s.photo_urls?.length > 0
@@ -37,6 +37,8 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
         )
       : []
   )
+  // Quick-logged classes have no blocks — fall back to class-level photos
+  const photoUrls = blockPhotoUrls.length > 0 ? blockPhotoUrls : (cls.photos ?? [])
   const laneVideoUrls = cls.blocks
     .filter((b): b is Extract<typeof b, { type: 'lane' }> => b.type === 'lane')
     .map((b) => b.data.video_url)
@@ -110,6 +112,32 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
                 Coach Notes
               </p>
               <p className="text-sm text-text-muted leading-relaxed italic">{cls.notes}</p>
+            </div>
+          )}
+
+          {/* Quick-logged class photos (no blocks) */}
+          {cls.blocks.length === 0 && photoUrls.length > 0 && (
+            <div className="px-4 py-3 border-b border-bg-border">
+              <p className="text-xs font-semibold text-text-dim uppercase tracking-wider mb-2">
+                Photos
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {photoUrls.map((url, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    className="flex-shrink-0"
+                    onClick={(e) => { e.stopPropagation(); setLightbox({ urls: photoUrls, index: i }) }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={url}
+                      alt={`Class photo ${i + 1}`}
+                      className="w-14 h-14 rounded-xl object-cover border border-bg-border shadow-card hover:scale-105 transition-transform duration-200 cursor-pointer"
+                    />
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 

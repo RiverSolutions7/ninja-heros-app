@@ -83,6 +83,26 @@ export default async function ShareClassPage({ params }: Props) {
           )}
         </div>
 
+        {/* Quick-logged class photos (no blocks) */}
+        {cls.blocks.length === 0 && cls.photos && cls.photos.length > 0 && (
+          <div className="card p-4">
+            <p className="font-heading text-xs text-text-dim uppercase tracking-wider mb-3">
+              Photos
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {cls.photos.map((url: string, i: number) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={i}
+                  src={url}
+                  alt={`Class photo ${i + 1}`}
+                  className="w-20 h-20 rounded-xl object-cover border border-bg-border"
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Class sequence */}
         {cls.blocks.length > 0 && (
           <div>

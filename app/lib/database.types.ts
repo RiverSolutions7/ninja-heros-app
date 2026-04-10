@@ -93,6 +93,7 @@ export interface ClassRow {
   notes: string | null
   folder_id: string | null
   in_handoff: boolean
+  photos: string[]
   created_at: string
   updated_at: string
 }
