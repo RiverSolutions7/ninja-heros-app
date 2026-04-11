@@ -26,6 +26,7 @@ import {
 import BlockBuilder from '@/app/components/block-builder/BlockBuilder'
 import AddBlockMenu from '@/app/components/block-builder/AddBlockMenu'
 import Toast from '@/app/components/ui/Toast'
+import { useVoiceLog } from '@/app/hooks/useVoiceLog'
 
 type LogMode = 'quick' | 'detailed'
 
@@ -106,6 +107,30 @@ export default function NewClassPage() {
   const [quickPhotos, setQuickPhotos] = useState<DraftPhotoItem[]>([])
   const quickCameraRef = useRef<HTMLInputElement>(null)
   const quickLibraryRef = useRef<HTMLInputElement>(null)
+
+  // Voice log
+  const {
+    voiceState,
+    transcript: voiceTranscript,
+    errorMessage: voiceError,
+    isSupported: voiceSupported,
+    startRecording,
+    stopRecording,
+    parseTranscript,
+    reset: resetVoice,
+  } = useVoiceLog()
+
+  async function handleVoiceDone() {
+    const result = await parseTranscript(curriculums)
+    if (result.title && !draft.title.trim()) {
+      setDraft((d) => ({ ...d, title: result.title! }))
+    }
+    if (result.matched_curriculum_id) {
+      const match = curriculums.find((c) => c.id === result.matched_curriculum_id)
+      if (match) setDraft((d) => ({ ...d, age_group: match.age_group }))
+    }
+    setQuickNotes((prev) => (prev.trim() ? prev + '\n\n' + result.notes : result.notes))
+  }
 
   // Draft auto-save
   const [savedDraft, setSavedDraft] = useState<StoredDraft | null>(null)
@@ -767,6 +792,70 @@ export default function NewClassPage() {
               </div>
             </div>
           </div>
+
+          {/* Voice log */}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                if (voiceState === 'recording') {
+                  stopRecording()
+                  handleVoiceDone()
+                } else if (voiceState === 'idle' || voiceState === 'done' || voiceState === 'error') {
+                  resetVoice()
+                  startRecording()
+                }
+              }}
+              disabled={voiceState === 'processing' || !voiceSupported}
+              className={`relative flex-shrink-0 flex items-center justify-center w-11 h-11 rounded-full transition-all ${
+                voiceState === 'recording'
+                  ? 'bg-accent-fire/20 border border-accent-fire/60 text-accent-fire'
+                  : 'bg-bg-card border border-bg-border text-text-dim hover:text-text-muted hover:border-bg-border/60'
+              } ${voiceState === 'processing' ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              {voiceState === 'recording' && (
+                <span className="absolute inset-0 rounded-full bg-accent-fire/20 animate-ping" />
+              )}
+              {voiceState === 'processing' ? (
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4 relative" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                </svg>
+              )}
+            </button>
+
+            <div className="flex-1 min-w-0">
+              {!voiceSupported && (
+                <p className="text-xs text-text-dim">Voice not supported in this browser</p>
+              )}
+              {voiceSupported && voiceState === 'idle' && (
+                <p className="text-xs text-text-dim">Tap mic · speak · AI fills the form</p>
+              )}
+              {voiceState === 'recording' && (
+                <p className="text-xs text-accent-fire animate-pulse">Listening… tap to stop</p>
+              )}
+              {voiceState === 'processing' && (
+                <p className="text-xs text-text-muted">Filling in form…</p>
+              )}
+              {voiceState === 'done' && (
+                <p className="text-xs text-accent-green">Done — review and edit below</p>
+              )}
+              {voiceState === 'error' && (
+                <p className="text-xs text-accent-fire">{voiceError ?? 'Could not process. Try typing instead.'}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Live transcript preview */}
+          {voiceState === 'recording' && voiceTranscript && (
+            <p className="text-xs text-text-dim/70 italic leading-relaxed -mt-2 line-clamp-2 px-1">
+              {voiceTranscript}
+            </p>
+          )}
 
           {/* Free-text notes */}
           <div>
