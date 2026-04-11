@@ -36,10 +36,12 @@ function SortablePlanItem({
   item,
   onRemove,
   onDurationChange,
+  onPhotoTap,
 }: {
   item: PlanItem
   onRemove: (localId: string) => void
   onDurationChange: (localId: string, value: string) => void
+  onPhotoTap: (url: string) => void
 }) {
   const meta = TYPE_META[item.component.type]
   const firstPhoto = item.component.photos?.[0] ?? null
@@ -72,15 +74,24 @@ function SortablePlanItem({
         ⠿
       </span>
 
-      {/* Thumbnail */}
-      <div className="flex-shrink-0 w-14 h-14 rounded-xl overflow-hidden">
+      {/* Thumbnail — tappable if photo exists */}
+      <button
+        type="button"
+        onClick={() => firstPhoto && onPhotoTap(firstPhoto)}
+        className={[
+          'flex-shrink-0 w-14 h-14 rounded-xl overflow-hidden',
+          firstPhoto ? 'cursor-pointer active:opacity-80 transition-opacity' : 'cursor-default',
+        ].join(' ')}
+        tabIndex={firstPhoto ? 0 : -1}
+        aria-label={firstPhoto ? `View photo of ${item.component.title}` : undefined}
+      >
         {firstPhoto ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={firstPhoto} alt={item.component.title} className="w-full h-full object-cover" />
         ) : (
           <div className={['w-full h-full', meta.placeholderBg].join(' ')} />
         )}
-      </div>
+      </button>
 
       {/* Content */}
       <div className="flex-1 min-w-0">
@@ -92,18 +103,47 @@ function SortablePlanItem({
         )}
       </div>
 
-      {/* Duration input */}
-      <div className="flex items-center gap-1 flex-shrink-0">
-        <input
-          type="number"
-          min={1}
-          max={120}
-          value={item.durationMinutes ?? ''}
-          onChange={(e) => onDurationChange(item.localId, e.target.value)}
-          placeholder="—"
-          className="w-14 bg-transparent text-text-muted text-sm text-right focus:outline-none focus:text-text-primary [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-        />
-        <span className="text-text-dim text-xs">m</span>
+      {/* Duration stepper chip */}
+      <div className="flex items-center flex-shrink-0">
+        {/* − button */}
+        <button
+          type="button"
+          onClick={() => {
+            const current = item.durationMinutes ?? 0
+            onDurationChange(item.localId, current <= 5 ? '' : String(Math.max(5, Math.round(current / 5) * 5 - 5)))
+          }}
+          disabled={!item.durationMinutes}
+          className="w-8 h-8 flex items-center justify-center rounded-l-lg border border-bg-border bg-bg-input text-text-muted active:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          aria-label="Decrease duration"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" />
+          </svg>
+        </button>
+
+        {/* Value display */}
+        <div className="h-8 px-2 flex items-center justify-center border-t border-b border-bg-border bg-bg-input min-w-[52px]">
+          <span className="text-text-muted text-xs font-heading whitespace-nowrap">
+            {item.durationMinutes ? `${item.durationMinutes} min` : '— min'}
+          </span>
+        </div>
+
+        {/* + button */}
+        <button
+          type="button"
+          onClick={() => {
+            const current = item.durationMinutes ?? 0
+            const next = current === 0 ? 5 : Math.min(120, Math.round(current / 5) * 5 + 5)
+            onDurationChange(item.localId, String(next))
+          }}
+          disabled={!!item.durationMinutes && item.durationMinutes >= 120}
+          className="w-8 h-8 flex items-center justify-center rounded-r-lg border border-bg-border bg-bg-input text-text-muted active:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          aria-label="Increase duration"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+        </button>
       </div>
 
       {/* Remove */}
@@ -130,8 +170,9 @@ export default function TodaysPlanClient() {
   const [copyFeedback, setCopyFeedback] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
 
-  // @dnd-kit sensors (same pattern as BlockBuilder)
+  // @dnd-kit sensors
   const sensors = useSensors(
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -141,6 +182,14 @@ export default function TodaysPlanClient() {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const itemsRef = useRef(items)
   useEffect(() => { itemsRef.current = items }, [items])
+
+  // Close lightbox on Escape
+  useEffect(() => {
+    if (!lightboxUrl) return
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setLightboxUrl(null) }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [lightboxUrl])
 
   // Load latest plan from Supabase on mount
   useEffect(() => {
@@ -359,13 +408,14 @@ export default function TodaysPlanClient() {
       {!loading && items.length > 0 && (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={items.map((i) => i.localId)} strategy={verticalListSortingStrategy}>
-            <ul className="mx-4 bg-bg-card rounded-2xl overflow-hidden border border-bg-border">
+            <ul className="mx-4">
               {items.map((item) => (
                 <SortablePlanItem
                   key={item.localId}
                   item={item}
                   onRemove={handleRemove}
                   onDurationChange={handleDurationChange}
+                  onPhotoTap={setLightboxUrl}
                 />
               ))}
             </ul>
@@ -393,6 +443,32 @@ export default function TodaysPlanClient() {
           onClose={() => setShowPicker(false)}
           existingIds={new Set(items.map((i) => i.component.id))}
         />
+      )}
+
+      {/* Photo lightbox */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setLightboxUrl(null)}
+            className="absolute top-4 right-4 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
+            aria-label="Close"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={lightboxUrl}
+            alt="Full size photo"
+            className="max-w-[90vw] max-h-[85vh] rounded-2xl object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
       )}
     </div>
   )
