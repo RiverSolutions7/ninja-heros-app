@@ -277,6 +277,8 @@ export interface InspirationClipRow {
   source_domain: string | null
   tags: string[]
   notes: string | null
+  start_seconds: number | null
+  end_seconds: number | null
   created_at: string
 }
 
