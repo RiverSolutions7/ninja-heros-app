@@ -691,7 +691,7 @@ export default function TodaysPlanClient() {
             </div>
           )}
 
-          {/* ── Add to Plan button ── */}
+          {/* ── Start / Add button ── */}
           <div className="px-4 py-3">
             <button
               type="button"
@@ -701,7 +701,7 @@ export default function TodaysPlanClient() {
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
               </svg>
-              Add to Plan
+              {items.length === 0 ? 'Start New Plan' : 'Add Component'}
             </button>
           </div>
 
@@ -709,7 +709,7 @@ export default function TodaysPlanClient() {
           {items.length === 0 && drafts.length === 0 && (
             <div className="text-center py-10 px-4">
               <p className="font-heading text-text-muted text-lg">No plan yet</p>
-              <p className="text-text-dim text-sm mt-2">Tap + Add to Plan to start building your class</p>
+              <p className="text-text-dim text-sm mt-2">Tap Start New Plan to begin building your class</p>
               <Link href="/library" className="text-text-dim text-xs mt-3 inline-block underline underline-offset-2 hover:text-text-muted transition-colors">
                 Add components from the Library tab first
               </Link>
