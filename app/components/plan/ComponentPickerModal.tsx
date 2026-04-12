@@ -179,44 +179,48 @@ export default function ComponentPickerModal({ onSelect, onClose, existingIds }:
               const extraCount = photos.length - 1
 
               return (
-                <li key={component.id}>
+                <li
+                  key={component.id}
+                  className={[
+                    'flex items-center gap-3 px-4 border-b border-bg-border/50 transition-colors',
+                    inPlan ? 'bg-accent-green/5' : '',
+                  ].join(' ')}
+                >
+                  {/* Thumbnail — always tappable, lives outside the selection button */}
+                  <div className="relative flex-shrink-0 py-3.5">
+                    <button
+                      type="button"
+                      onClick={(e) => hasPhoto && handlePhotoTap(e, photos)}
+                      className={[
+                        'w-14 h-14 rounded-xl overflow-hidden block',
+                        TYPE_PLACEHOLDER[component.type],
+                        hasPhoto ? 'cursor-pointer active:opacity-75 transition-opacity' : 'cursor-default',
+                      ].join(' ')}
+                      tabIndex={hasPhoto ? 0 : -1}
+                      aria-label={hasPhoto ? `View photos of ${component.title}` : undefined}
+                    >
+                      {hasPhoto ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={photos[0]} alt={component.title} className="w-full h-full object-cover" />
+                      ) : null}
+                    </button>
+                    {extraCount > 0 && (
+                      <span className="absolute bottom-4 right-0 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">
+                        +{extraCount}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Row content — selection button (disabled when in plan) */}
                   <button
                     type="button"
                     onClick={() => handleItemSelect(component)}
                     disabled={inPlan}
                     className={[
-                      'w-full flex items-center gap-3 px-4 py-3.5 border-b border-bg-border/50 transition-colors text-left',
-                      inPlan
-                        ? 'bg-accent-green/5 cursor-default'
-                        : 'hover:bg-white/5 active:bg-white/10',
+                      'flex-1 flex items-center gap-2 py-3.5 text-left min-w-0 transition-colors',
+                      inPlan ? 'cursor-default' : 'hover:opacity-80 active:opacity-60',
                     ].join(' ')}
                   >
-                    {/* Thumbnail — tappable to open lightbox */}
-                    <div className="relative flex-shrink-0">
-                      <button
-                        type="button"
-                        onClick={(e) => hasPhoto && handlePhotoTap(e, photos)}
-                        className={[
-                          'w-14 h-14 rounded-xl overflow-hidden block',
-                          TYPE_PLACEHOLDER[component.type],
-                          hasPhoto ? 'cursor-pointer active:opacity-75 transition-opacity' : 'cursor-default',
-                        ].join(' ')}
-                        tabIndex={hasPhoto ? 0 : -1}
-                        aria-label={hasPhoto ? `View photos of ${component.title}` : undefined}
-                      >
-                        {hasPhoto ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={photos[0]} alt={component.title} className="w-full h-full object-cover" />
-                        ) : null}
-                      </button>
-                      {/* Multi-photo badge */}
-                      {extraCount > 0 && (
-                        <span className="absolute bottom-1 right-1 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">
-                          +{extraCount}
-                        </span>
-                      )}
-                    </div>
-
                     <div className="flex-1 min-w-0">
                       <p className={['font-heading text-sm truncate', inPlan ? 'text-text-dim' : 'text-text-primary'].join(' ')}>
                         {component.title}
