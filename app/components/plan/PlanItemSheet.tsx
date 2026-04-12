@@ -29,7 +29,6 @@ export function PlanItemSheet({ item, planDate, onSaveNote, onDurationChange, on
   const [visible, setVisible] = useState(false)
   // Pre-fill with existing coach note, or fall back to library description as a starting point
   const [noteText, setNoteText] = useState(item.coachNote ?? item.component.description ?? '')
-  const [saved, setSaved] = useState(false)
   const [lightbox, setLightbox] = useState<{ photos: string[]; index: number } | null>(null)
   // Local copy of duration so stepper updates feel instant
   const [localDuration, setLocalDuration] = useState<number | null>(item.durationMinutes ?? null)
@@ -56,6 +55,8 @@ export function PlanItemSheet({ item, planDate, onSaveNote, onDurationChange, on
   }, [])
 
   function handleClose() {
+    // Auto-save note when closing — no explicit Save button needed
+    onSaveNote(item.localId, noteText)
     setVisible(false)
     setTimeout(onClose, 300)
   }
@@ -72,15 +73,6 @@ export function PlanItemSheet({ item, planDate, onSaveNote, onDurationChange, on
       const structured = await parseNote()
       if (structured) setNoteText(structured)
     }
-  }
-
-  function handleSave() {
-    onSaveNote(item.localId, noteText)
-    setSaved(true)
-    setTimeout(() => {
-      setVisible(false)
-      setTimeout(onClose, 300)
-    }, 700)
   }
 
   function handleDurationStep(delta: number) {
@@ -312,28 +304,13 @@ export function PlanItemSheet({ item, planDate, onSaveNote, onDurationChange, on
               className="w-full bg-bg-input border border-bg-border rounded-xl px-3 py-2.5 text-sm text-text-primary placeholder:text-text-dim focus:outline-none focus:border-accent-fire/50 transition-colors resize-none leading-relaxed"
             />
 
-            {/* Save Note button */}
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saved}
-              className={[
-                'mt-3 w-full font-heading text-base py-3.5 rounded-xl transition-all min-h-[52px]',
-                saved
-                  ? 'bg-accent-green/20 border border-accent-green/40 text-accent-green'
-                  : 'bg-accent-fire text-white shadow-glow-fire active:scale-[0.98]',
-              ].join(' ')}
-            >
-              {saved ? '✓ Note Saved!' : 'Save Note'}
-            </button>
-
-            {/* Close */}
+            {/* Done — auto-saves note on close */}
             <button
               type="button"
               onClick={handleClose}
-              className="mt-2 w-full text-sm text-text-dim/50 hover:text-text-dim transition-colors py-2"
+              className="mt-3 w-full font-heading text-base py-3.5 rounded-xl transition-all min-h-[52px] bg-accent-fire text-white shadow-glow-fire active:scale-[0.98]"
             >
-              Close without saving
+              Done
             </button>
           </div>
         </div>
