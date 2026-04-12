@@ -86,6 +86,8 @@ interface PlanCalendarSheetProps {
   onSaveToCal: (date: string, title: string) => void
   onLoadPlan: (plan: PlanRow) => void
   onClose: () => void
+  /** Override the initial view. Defaults to 'week' for browse, 'month' for save. */
+  defaultView?: ViewMode
 }
 
 type ViewMode = 'week' | 'month'
@@ -126,11 +128,12 @@ export function PlanCalendarSheet({
   onSaveToCal,
   onLoadPlan,
   onClose,
+  defaultView,
 }: PlanCalendarSheetProps) {
   const today = new Date(todayIso + 'T00:00:00')
 
   // Shared
-  const [viewMode, setViewMode] = useState<ViewMode>(mode === 'browse' ? 'week' : 'month')
+  const [viewMode, setViewMode] = useState<ViewMode>(defaultView ?? (mode === 'browse' ? 'week' : 'month'))
   const [visible, setVisible] = useState(false)
 
   // Month view

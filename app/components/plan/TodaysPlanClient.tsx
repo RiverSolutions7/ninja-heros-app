@@ -64,6 +64,55 @@ function saveDraftsToStorage(drafts: Draft[]) {
   try { localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts)) } catch { /* ignore */ }
 }
 
+// ── Week strip helpers ────────────────────────────────────────────────────────
+
+function getWeekStart(iso: string): Date {
+  const d = new Date(iso + 'T00:00:00')
+  const day = d.getDay()
+  d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day))
+  return d
+}
+
+function addDays(d: Date, n: number): Date {
+  const r = new Date(d)
+  r.setDate(r.getDate() + n)
+  return r
+}
+
+function dateToIso(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function formatWeekRange(start: Date): string {
+  const end = addDays(start, 6)
+  return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+}
+
+function formatShortDay(iso: string): string {
+  return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+}
+
+function formatSavedAt(ts: string): string {
+  return new Date(ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+}
+
+/** Auto-label a plan from component types when no title is set */
+function autoLabel(plan: PlanRow): string {
+  if (plan.title) return plan.title
+  const its = plan.items ?? []
+  const w = its.filter(i => i.component.type === 'warmup').length
+  const s = its.filter(i => i.component.type === 'station').length
+  const g = its.filter(i => i.component.type === 'game').length
+  const parts = [
+    w > 0 && `${w} warmup${w > 1 ? 's' : ''}`,
+    s > 0 && `${s} station${s > 1 ? 's' : ''}`,
+    g > 0 && `${g} game${g > 1 ? 's' : ''}`,
+  ].filter(Boolean) as string[]
+  return parts.length ? parts.join(' · ') : 'Class Plan'
+}
+
+const WEEK_DAY_LABELS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
+
 // ── Type icons + placeholder ──────────────────────────────────────────────────
 
 const TYPE_META: Record<ComponentType, { label: string; border: string; textColor: string; placeholderBg: string }> = {
@@ -135,12 +184,9 @@ function SortablePlanItem({
         meta.border,
       ].join(' ')}
     >
-      {/* Sequence number */}
       <span className="text-[11px] font-heading text-text-dim/40 w-4 text-right flex-shrink-0 tabular-nums">
         {index + 1}
       </span>
-
-      {/* Drag handle */}
       <span
         className="text-text-dim/40 text-base leading-none select-none flex-shrink-0 cursor-grab active:cursor-grabbing p-1"
         style={{ touchAction: 'none' }}
@@ -150,8 +196,6 @@ function SortablePlanItem({
       >
         ⠿
       </span>
-
-      {/* Thumbnail — always rendered with icon placeholder */}
       <div className="relative flex-shrink-0">
         <button
           type="button"
@@ -176,8 +220,6 @@ function SortablePlanItem({
           </span>
         )}
       </div>
-
-      {/* Content — tappable to open sheet */}
       <button
         type="button"
         onClick={() => onRowTap(item)}
@@ -188,7 +230,6 @@ function SortablePlanItem({
             <p className="font-heading text-[15px] text-text-primary leading-snug truncate">
               {item.component.title}
             </p>
-            {/* Type + curriculum — always visible */}
             <div className="flex items-center gap-1 mt-0.5">
               <span className={['text-[10px] font-heading uppercase tracking-wide flex-shrink-0', meta.textColor].join(' ')}>
                 {meta.label}
@@ -200,7 +241,6 @@ function SortablePlanItem({
                 </>
               )}
             </div>
-            {/* Coach note on its own line */}
             {item.coachNote && (
               <p className="text-[11px] text-accent-fire/70 mt-0.5 truncate">
                 {item.coachNote.split('\n')[0]}
@@ -212,14 +252,11 @@ function SortablePlanItem({
               {item.durationMinutes}m
             </span>
           ) : null}
-          {/* Note indicator — tap row to add/edit */}
           {!item.coachNote && (
             <span className="text-[10px] text-text-dim/30 flex-shrink-0 font-heading">note</span>
           )}
         </div>
       </button>
-
-      {/* Remove */}
       <button
         type="button"
         onClick={() => onRemove(item.localId)}
@@ -245,13 +282,11 @@ function DraftCard({
   onContinue: () => void
   onDiscard: () => void
 }) {
-  // Cap preview at 5 thumbnails
   const preview = draft.items.slice(0, 5)
   const extra = draft.items.length - preview.length
 
   return (
     <div className="bg-bg-card rounded-2xl border border-bg-border p-4">
-      {/* Header row */}
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-full bg-accent-fire/10 flex items-center justify-center flex-shrink-0">
@@ -279,8 +314,6 @@ function DraftCard({
           </svg>
         </button>
       </div>
-
-      {/* Component thumbnails only — no text (prevents overflow) */}
       <div className="flex items-center gap-1.5 mb-4 flex-wrap">
         {preview.map((item) => {
           const meta = TYPE_META[item.component.type]
@@ -304,8 +337,6 @@ function DraftCard({
           <span className="text-[11px] text-text-dim/60 ml-0.5">+{extra}</span>
         )}
       </div>
-
-      {/* Continue button */}
       <button
         type="button"
         onClick={onContinue}
@@ -322,40 +353,38 @@ function DraftCard({
 export default function TodaysPlanClient() {
   const [todayIso] = useState(() => new Date().toLocaleDateString('en-CA'))
 
-  // Today's date label for the header
   const todayLabel = (() => {
     const d = new Date(todayIso + 'T00:00:00')
-    const weekday = d.toLocaleDateString('en-US', { weekday: 'short' })
-    const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    return `${weekday} · ${date}`
+    return `${d.toLocaleDateString('en-US', { weekday: 'short' })} · ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
   })()
 
-  // Working scratchpad
+  // ── View mode ────────────────────────────────────────────────────────────────
+  const [viewMode, setViewMode] = useState<'dashboard' | 'editing'>('dashboard')
+
+  // ── Scratchpad ───────────────────────────────────────────────────────────────
   const [items, setItems] = useState<PlanItem[]>([])
-  // Set when coach loads a calendar plan — enables auto-save to Supabase
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null)
   const [editingPlanLabel, setEditingPlanLabel] = useState<string | null>(null)
-  // Track the last plan added to calendar (for share button)
   const [lastAddedPlanId, setLastAddedPlanId] = useState<string | null>(null)
 
-  // Today's calendar plans (for sub use case)
-  const [todaysPlans, setTodaysPlans] = useState<PlanRow[]>([])
+  // ── Week strip ───────────────────────────────────────────────────────────────
+  const [weekStart, setWeekStart] = useState<Date>(() => getWeekStart(todayIso))
+  const [selectedDayIso, setSelectedDayIso] = useState<string>(todayIso)
+  const [selectedDayPlans, setSelectedDayPlans] = useState<PlanRow[]>([])
+  const [selectedDayLoading, setSelectedDayLoading] = useState(false)
 
-  // Draft state (localStorage)
+  // ── Drafts ───────────────────────────────────────────────────────────────────
   const [drafts, setDrafts] = useState<Draft[]>([])
   const activeDraftIdRef = useRef<string | null>(null)
-  // Draft name input
   const [showDraftNameInput, setShowDraftNameInput] = useState(false)
   const [draftNameValue, setDraftNameValue] = useState('')
-
-  // Transient feedback
   const [draftSavedFeedback, setDraftSavedFeedback] = useState(false)
+
+  // ── Calendar ─────────────────────────────────────────────────────────────────
+  const [datesWithPlans, setDatesWithPlans] = useState<Set<string>>(new Set())
   const [calendarAddedTo, setCalendarAddedTo] = useState<string | null>(null)
 
-  // Calendar dots
-  const [datesWithPlans, setDatesWithPlans] = useState<Set<string>>(new Set())
-
-  // UI state
+  // ── UI ───────────────────────────────────────────────────────────────────────
   const [showPicker, setShowPicker] = useState(false)
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [showCalendar, setShowCalendar] = useState(false)
@@ -368,7 +397,7 @@ export default function TodaysPlanClient() {
   const [classLength, setClassLength] = useState<number | null>(null)
   const [showLengthPicker, setShowLengthPicker] = useState(false)
 
-  // Derived
+  // ── Derived ──────────────────────────────────────────────────────────────────
   const totalMinutes = items.reduce((s, i) => s + (i.durationMinutes ?? 0), 0)
   const isOverBudget = !!(classLength && totalMinutes > classLength)
   const warmupCount = items.filter(i => i.component.type === 'warmup').length
@@ -380,7 +409,12 @@ export default function TodaysPlanClient() {
     gameCount > 0 && `${gameCount} game${gameCount > 1 ? 's' : ''}`,
   ].filter(Boolean).join(' · ')
 
-  // @dnd-kit
+  const weekDays = Array.from({ length: 7 }, (_, i) => {
+    const d = addDays(weekStart, i)
+    const iso = dateToIso(d)
+    return { iso, label: WEEK_DAY_LABELS[i], num: d.getDate() }
+  })
+
   const sensors = useSensors(
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -394,38 +428,55 @@ export default function TodaysPlanClient() {
   useEffect(() => {
     setMounted(true)
 
-    // Session recovery — restore unsaved scratchpad items from previous visit
+    // Session recovery
     try {
       const session = sessionStorage.getItem(SESSION_KEY)
       if (session) {
         const recovered = JSON.parse(session) as PlanItem[]
-        if (recovered.length > 0) setItems(recovered)
+        if (recovered.length > 0) {
+          setItems(recovered)
+          setViewMode('editing') // restore editing view
+        }
       }
     } catch { /* ignore */ }
 
-    // Load localStorage drafts
+    // Drafts
     try {
       const raw = localStorage.getItem(DRAFTS_KEY)
       if (raw) setDrafts(JSON.parse(raw) as Draft[])
     } catch { /* ignore */ }
 
-    // Load class length
+    // Class length
     try {
       const stored = parseInt(localStorage.getItem('ninja-class-length') || '', 10)
       if (stored > 0) setClassLength(stored)
     } catch { /* ignore */ }
 
-    // Load calendar dots + today's plans in parallel
+    // Calendar dots
     const from = offsetDate(todayIso, -180)
     const to = offsetDate(todayIso, 180)
-    Promise.all([fetchDatesWithPlans(from, to), fetchPlansForDate(todayIso)])
-      .then(([dates, todayPlans]) => {
-        setDatesWithPlans(new Set(dates))
-        setTodaysPlans(todayPlans)
-      })
+    fetchDatesWithPlans(from, to)
+      .then(dates => setDatesWithPlans(new Set(dates)))
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [todayIso])
+
+  // Fetch plans for selected day (drives dashboard Planned section)
+  useEffect(() => {
+    if (!mounted) return
+    if (!datesWithPlans.has(selectedDayIso)) {
+      setSelectedDayPlans([])
+      return
+    }
+    setSelectedDayLoading(true)
+    setSelectedDayPlans([])
+    fetchPlansForDate(selectedDayIso)
+      .then(plans => {
+        setSelectedDayPlans(plans)
+        setSelectedDayLoading(false)
+      })
+      .catch(() => setSelectedDayLoading(false))
+  }, [selectedDayIso, mounted, datesWithPlans])
 
   // Persist class length
   useEffect(() => {
@@ -435,7 +486,7 @@ export default function TodaysPlanClient() {
     } catch { /* ignore */ }
   }, [classLength])
 
-  // Auto-save to Supabase — only when a calendar plan is loaded
+  // Auto-save to Supabase when editing a calendar plan
   const debouncedSave = useCallback((currentItems: PlanItem[], planId: string) => {
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(async () => {
@@ -457,27 +508,22 @@ export default function TodaysPlanClient() {
     debouncedSave(items, editingPlanId)
   }, [items, mounted, loading, editingPlanId, debouncedSave]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Write fresh scratchpad to sessionStorage (when not editing a calendar plan)
-  useEffect(() => {
-    if (!mounted) return
-    if (editingPlanId !== null) return  // Supabase handles it
-    try {
-      if (items.length > 0) {
-        sessionStorage.setItem(SESSION_KEY, JSON.stringify(items))
-      } else {
-        sessionStorage.removeItem(SESSION_KEY)
-      }
-    } catch { /* ignore */ }
-  }, [items, mounted, editingPlanId])
-
-  // Auto-save active draft to localStorage (when coach is editing a named draft)
+  // Write scratchpad to sessionStorage (when not editing a calendar plan)
   useEffect(() => {
     if (!mounted) return
     if (editingPlanId !== null) return
+    try {
+      if (items.length > 0) sessionStorage.setItem(SESSION_KEY, JSON.stringify(items))
+      else sessionStorage.removeItem(SESSION_KEY)
+    } catch { /* ignore */ }
+  }, [items, mounted, editingPlanId])
 
+  // Auto-save active draft to localStorage
+  useEffect(() => {
+    if (!mounted) return
+    if (editingPlanId !== null) return
     const id = activeDraftIdRef.current
-    if (!id) return  // no active draft — wait for explicit "Save Draft"
-
+    if (!id) return
     if (items.length === 0) {
       setDrafts(prev => {
         const next = prev.filter(d => d.id !== id)
@@ -487,7 +533,6 @@ export default function TodaysPlanClient() {
       activeDraftIdRef.current = null
       return
     }
-
     setDrafts(prev => {
       const existing = prev.find(d => d.id === id)
       const without = prev.filter(d => d.id !== id)
@@ -500,17 +545,12 @@ export default function TodaysPlanClient() {
     })
   }, [items, mounted, editingPlanId])
 
-  // ── Handlers ─────────────────────────────────────────────────────────────────
+  // ── Handlers ──────────────────────────────────────────────────────────────────
 
   function handleSelect(component: ComponentRow) {
     setItems(prev => [
       ...prev,
-      {
-        localId: crypto.randomUUID(),
-        component,
-        durationMinutes: component.duration_minutes ?? null,
-        coachNote: null,
-      },
+      { localId: crypto.randomUUID(), component, durationMinutes: component.duration_minutes ?? null, coachNote: null },
     ])
   }
 
@@ -531,13 +571,36 @@ export default function TodaysPlanClient() {
     )
   }
 
+  // ── Week strip handlers ───────────────────────────────────────────────────────
+
+  function prevWeek() {
+    const s = addDays(weekStart, -7)
+    setWeekStart(s)
+    setSelectedDayIso(dateToIso(s))
+  }
+
+  function nextWeek() {
+    const s = addDays(weekStart, 7)
+    setWeekStart(s)
+    setSelectedDayIso(dateToIso(s))
+  }
+
+  function handleDaySelect(iso: string) {
+    setSelectedDayIso(iso)
+  }
+
+  // ── View mode handlers ────────────────────────────────────────────────────────
+
+  function handleBackToDashboard() {
+    setViewMode('dashboard')
+    // Items stay in state / session storage — not cleared
+  }
+
+  // ── Draft handlers ────────────────────────────────────────────────────────────
+
   function handleSaveDraftTap() {
     if (items.length === 0) return
-    if (!showDraftNameInput) {
-      setShowDraftNameInput(true)
-      return
-    }
-    // Already showing input — save with whatever name was typed
+    if (!showDraftNameInput) { setShowDraftNameInput(true); return }
     confirmSaveDraft()
   }
 
@@ -556,7 +619,6 @@ export default function TodaysPlanClient() {
     setShowDraftNameInput(false)
     setDraftSavedFeedback(true)
     setTimeout(() => setDraftSavedFeedback(false), 1500)
-    // Clear session since it's now a proper draft
     try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
   }
 
@@ -568,16 +630,11 @@ export default function TodaysPlanClient() {
       setLastAddedPlanId(plan.id)
       const from = offsetDate(todayIso, -180)
       const to = offsetDate(todayIso, 180)
-      const [dates, todayPlans] = await Promise.all([
-        fetchDatesWithPlans(from, to),
-        fetchPlansForDate(todayIso),
-      ])
+      const dates = await fetchDatesWithPlans(from, to)
       setDatesWithPlans(new Set(dates))
-      setTodaysPlans(todayPlans)
       setSaveStatus('idle')
       setCalendarAddedTo(formatDisplayDate(date))
       setTimeout(() => setCalendarAddedTo(null), 3000)
-      // Clear session — plan is now in Supabase
       try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
     } catch (err) {
       console.error('Add to calendar failed:', err)
@@ -589,7 +646,6 @@ export default function TodaysPlanClient() {
     if (saveTimer.current) clearTimeout(saveTimer.current)
     activeDraftIdRef.current = null
     setEditingPlanId(plan.id)
-    // Build a label for the header
     const titlePart = plan.title ? plan.title : null
     const datePart = plan.plan_date ? formatDisplayDate(plan.plan_date) : null
     setEditingPlanLabel([titlePart, datePart].filter(Boolean).join(' · '))
@@ -598,8 +654,8 @@ export default function TodaysPlanClient() {
     setCalendarAddedTo(null)
     setLastAddedPlanId(null)
     setShowDraftNameInput(false)
-    // Clear session — scratchpad is now this loaded plan
     try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
+    setViewMode('editing')
   }
 
   function handleContinueDraft(draft: Draft) {
@@ -611,6 +667,7 @@ export default function TodaysPlanClient() {
     setLastAddedPlanId(null)
     setSaveStatus('idle')
     setShowDraftNameInput(false)
+    setViewMode('editing')
   }
 
   function handleDiscardDraft(draftId: string) {
@@ -650,6 +707,7 @@ export default function TodaysPlanClient() {
     setDraftNameValue('')
     activeDraftIdRef.current = null
     try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
+    setViewMode('dashboard')
   }
 
   function handleDragEnd(event: DragEndEvent) {
@@ -690,20 +748,38 @@ export default function TodaysPlanClient() {
     <div className="min-h-screen pb-24">
 
       {/* ── Header ── */}
-      <div className="relative flex items-center justify-between px-4 pt-4 pb-3">
+      <div className="relative flex items-center px-4 pt-4 pb-3 gap-2">
         <div className="absolute inset-x-0 -top-4 h-24 bg-gradient-to-b from-accent-fire/[0.07] to-transparent pointer-events-none rounded-2xl -z-10" />
-        <div>
+
+        {/* Back button — editing mode only */}
+        {viewMode === 'editing' && (
+          <button
+            type="button"
+            onClick={handleBackToDashboard}
+            className="w-10 h-10 flex items-center justify-center rounded-xl border border-bg-border text-text-muted hover:bg-white/5 active:scale-95 transition-all flex-shrink-0"
+            aria-label="Back to dashboard"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+        )}
+
+        {/* Title + subtitle */}
+        <div className="flex-1 min-w-0">
           <h1 className="font-heading text-2xl text-text-primary leading-none">{"Today's Plan"}</h1>
           <p className="flex items-center gap-1.5 text-text-dim text-xs mt-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-accent-fire inline-block opacity-60" />
-            {editingPlanLabel ? `Editing: ${editingPlanLabel}` : todayLabel}
+            {viewMode === 'editing' && editingPlanLabel ? `Editing: ${editingPlanLabel}` : todayLabel}
           </p>
-          {saveStatus === 'saving' && (
+          {viewMode === 'editing' && saveStatus === 'saving' && (
             <p className="text-[11px] mt-1 text-text-dim">Saving…</p>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          {/* View Calendar */}
+
+        {/* Right actions */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Calendar icon — opens month browse */}
           <button
             type="button"
             onClick={() => setShowCalendar(true)}
@@ -714,8 +790,8 @@ export default function TodaysPlanClient() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           </button>
-          {/* Share — when a plan has been saved/loaded */}
-          {sharePlanId && items.length > 0 && (
+          {/* Share — editing mode only */}
+          {viewMode === 'editing' && sharePlanId && items.length > 0 && (
             <button
               type="button"
               onClick={handleShare}
@@ -741,80 +817,223 @@ export default function TodaysPlanClient() {
         </div>
       </div>
 
-      {/* ── Loading ── */}
+      {/* ── Loading spinner ── */}
       {loading && (
         <div className="flex items-center justify-center py-16">
           <div className="w-8 h-8 border-2 border-accent-fire border-t-transparent rounded-full animate-spin" />
         </div>
       )}
 
-      {!loading && (
-        <>
-          {/* ── Today's calendar plans (sub use case — shown when scratchpad empty) ── */}
-          {todaysPlans.length > 0 && items.length === 0 && (
-            <div className="px-4 pt-2 mb-1">
-              <p className="text-[11px] font-heading uppercase tracking-wider text-accent-fire px-0.5 mb-2">
-                {todaysPlans.length === 1 ? "Today's Class" : `${todaysPlans.length} Plans Today`}
-              </p>
+      {/* ════════════════════════════════════════════ */}
+      {/* DASHBOARD VIEW                              */}
+      {/* ════════════════════════════════════════════ */}
+      {!loading && viewMode === 'dashboard' && (
+        <div>
+
+          {/* ── Week strip ── */}
+          <div className="px-4 pt-1 pb-2">
+            <div className="flex items-center justify-between mb-2">
+              <button
+                type="button"
+                onClick={prevWeek}
+                className="w-8 h-8 flex items-center justify-center rounded-full text-text-muted hover:bg-white/5 active:bg-white/10 transition-colors"
+                aria-label="Previous week"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <p className="text-xs font-heading text-text-dim">{formatWeekRange(weekStart)}</p>
+              <button
+                type="button"
+                onClick={nextWeek}
+                className="w-8 h-8 flex items-center justify-center rounded-full text-text-muted hover:bg-white/5 active:bg-white/10 transition-colors"
+                aria-label="Next week"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+            <div className="grid grid-cols-7 gap-1">
+              {weekDays.map(({ iso, label, num }) => {
+                const isSelected = iso === selectedDayIso
+                const isToday = iso === todayIso
+                const hasPlan = datesWithPlans.has(iso)
+                return (
+                  <button
+                    key={iso}
+                    type="button"
+                    onClick={() => handleDaySelect(iso)}
+                    className={[
+                      'flex flex-col items-center py-2.5 rounded-xl transition-all select-none',
+                      isSelected
+                        ? 'bg-accent-fire'
+                        : isToday
+                        ? 'border border-accent-fire/40'
+                        : 'hover:bg-white/5 active:bg-white/10',
+                    ].join(' ')}
+                  >
+                    <span className={[
+                      'text-[10px] font-heading uppercase tracking-wide leading-none mb-1',
+                      isSelected ? 'text-white/70' : 'text-text-dim',
+                    ].join(' ')}>{label}</span>
+                    <span className={[
+                      'text-sm font-heading leading-none',
+                      isSelected ? 'text-white' : isToday ? 'text-accent-fire' : 'text-text-muted',
+                    ].join(' ')}>{num}</span>
+                    <span className={[
+                      'w-1 h-1 rounded-full mt-1.5',
+                      hasPlan ? (isSelected ? 'bg-white/70' : 'bg-accent-fire/60') : 'invisible',
+                    ].join(' ')} />
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* ── Planned section ── */}
+          <div className="px-4 mt-4">
+            <div className="flex items-center gap-2 mb-3">
+              <p className="text-[11px] font-heading uppercase tracking-wider text-text-dim">Planned</p>
+              <span className="text-[11px] text-text-dim/50">{formatShortDay(selectedDayIso)}</span>
+              {selectedDayPlans.length > 0 && (
+                <span className="ml-auto text-[11px] text-text-dim/50">{selectedDayPlans.length}</span>
+              )}
+            </div>
+
+            {selectedDayLoading && (
+              <div className="flex justify-center py-8">
+                <div className="w-5 h-5 border-2 border-accent-fire border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+
+            {!selectedDayLoading && selectedDayPlans.length > 0 && (
               <div className="space-y-2">
-                {todaysPlans.map(plan => (
+                {selectedDayPlans.map(plan => (
                   <button
                     key={plan.id}
                     type="button"
                     onClick={() => handleLoadPlan(plan)}
-                    className="w-full flex items-center gap-3 bg-accent-fire/10 border border-accent-fire/30 rounded-2xl px-4 py-3.5 active:scale-[0.98] transition-all text-left"
+                    className="w-full text-left bg-accent-fire/10 border border-accent-fire/25 rounded-2xl px-4 py-3.5 active:bg-accent-fire/20 transition-colors"
                   >
-                    <div className="flex-1 min-w-0">
-                      <p className="font-heading text-sm text-text-primary leading-snug truncate">
-                        {plan.title || 'Class Plan'}
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-heading text-sm text-text-primary leading-snug truncate flex-1">
+                        {autoLabel(plan)}
                       </p>
-                      <p className="text-[11px] text-text-dim mt-0.5">
-                        {(plan.items ?? []).length} component{(plan.items ?? []).length !== 1 ? 's' : ''}
-                      </p>
+                      <svg className="w-4 h-4 text-accent-fire flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
                     </div>
-                    <svg className="w-4 h-4 text-accent-fire flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                    </svg>
+                    <p className="text-[11px] text-text-dim mt-0.5">
+                      {(plan.items ?? []).length} component{(plan.items ?? []).length !== 1 ? 's' : ''}
+                      {plan.updated_at && (
+                        <span className="text-text-dim/50"> · saved {formatSavedAt(plan.updated_at)}</span>
+                      )}
+                    </p>
                   </button>
                 ))}
               </div>
-            </div>
+            )}
+
+            {!selectedDayLoading && selectedDayPlans.length === 0 && (() => {
+              const isPast = selectedDayIso < todayIso
+              const isToday = selectedDayIso === todayIso
+              if (isPast) return (
+                <p className="text-xs text-text-dim/50 text-center py-8">Nothing was logged for this day</p>
+              )
+              return (
+                <div className="text-center py-8">
+                  <p className="text-xs text-text-dim/50 mb-3">
+                    {isToday ? 'No class today' : 'Nothing scheduled yet'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('editing')}
+                    className="inline-flex items-center gap-1.5 text-sm font-heading text-accent-fire border border-accent-fire/30 rounded-xl px-4 py-2.5 hover:bg-accent-fire/10 transition-colors active:scale-[0.97]"
+                  >
+                    + Plan {isToday ? 'today' : formatShortDay(selectedDayIso)}
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+              )
+            })()}
+          </div>
+
+          {/* ── Drafts ── */}
+          {drafts.length > 0 && (
+            <>
+              <div className="mx-4 mt-5 border-t border-bg-border/40" />
+              <div className="px-4 mt-5">
+                <p className="text-[11px] font-heading uppercase tracking-wider text-text-dim mb-3">Drafts</p>
+                <div className="space-y-3">
+                  {drafts.map(draft => (
+                    <DraftCard
+                      key={draft.id}
+                      draft={draft}
+                      onContinue={() => handleContinueDraft(draft)}
+                      onDiscard={() => handleDiscardDraft(draft.id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            </>
           )}
 
-          {/* ── Draft cards (shown when scratchpad is empty and drafts exist) ── */}
-          {items.length === 0 && drafts.length > 0 && (
-            <div className="px-4 pt-2 space-y-3">
-              {todaysPlans.length === 0 && (
-                <p className="text-[11px] font-heading uppercase tracking-wider text-text-dim px-0.5">
-                  Saved Drafts
-                </p>
-              )}
-              {todaysPlans.length > 0 && (
-                <p className="text-[11px] font-heading uppercase tracking-wider text-text-dim px-0.5 pt-2">
-                  Your Drafts
-                </p>
-              )}
-              {drafts.map(draft => (
-                <DraftCard
-                  key={draft.id}
-                  draft={draft}
-                  onContinue={() => handleContinueDraft(draft)}
-                  onDiscard={() => handleDiscardDraft(draft.id)}
-                />
-              ))}
-              {(todaysPlans.length > 0 || drafts.length > 0) && (
-                <div className="flex items-center gap-3 py-1">
-                  <div className="flex-1 h-px bg-bg-border" />
-                  <span className="text-[11px] text-text-dim/50 font-heading uppercase tracking-wider">or start fresh</span>
-                  <div className="flex-1 h-px bg-bg-border" />
-                </div>
-              )}
+          {/* ── Start New Plan CTA ── */}
+          <div className="px-4 mt-5 pb-2">
+            <button
+              type="button"
+              onClick={() => { setViewMode('editing'); setShowPicker(true) }}
+              className="w-full inline-flex items-center justify-center gap-2 bg-accent-fire text-white font-heading text-base py-4 rounded-2xl shadow-glow-fire active:scale-[0.98] transition-all min-h-[56px]"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              Start New Plan
+            </button>
+          </div>
+
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════ */}
+      {/* EDITING VIEW                                */}
+      {/* ════════════════════════════════════════════ */}
+      {!loading && viewMode === 'editing' && (
+        <>
+          {/* ── Add Component button ── */}
+          <div className="px-4 py-3">
+            <button
+              type="button"
+              onClick={() => setShowPicker(true)}
+              className="w-full inline-flex items-center justify-center gap-2 bg-accent-fire text-white font-heading text-base px-4 py-3.5 rounded-xl active:scale-95 transition-all shadow-glow-fire min-h-[52px]"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              {items.length === 0 ? 'Add Component' : 'Add Component'}
+            </button>
+          </div>
+
+          {/* ── Empty state for new plan ── */}
+          {items.length === 0 && (
+            <div className="text-center py-10 px-6">
+              <p className="font-heading text-text-muted text-lg">Build today's class</p>
+              <p className="text-text-dim text-sm mt-2 leading-relaxed">
+                Pick warmups, stations, and games from your library. Drag to reorder, tap any row to add a coach note.
+              </p>
+              <Link href="/library" className="text-text-dim text-xs mt-3 inline-block underline underline-offset-2 hover:text-text-muted transition-colors">
+                Build your component library first
+              </Link>
             </div>
           )}
 
           {/* ── Time budget ── */}
           {items.length > 0 && (totalMinutes > 0 || classLength) && (
-            <div className="px-4 pt-3 pb-1">
+            <div className="px-4 pt-1 pb-1">
               <div className="flex items-center gap-2">
                 <svg className="w-3.5 h-3.5 text-text-dim flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -868,33 +1087,6 @@ export default function TodaysPlanClient() {
             </div>
           )}
 
-          {/* ── Start / Add button ── */}
-          <div className="px-4 py-3">
-            <button
-              type="button"
-              onClick={() => setShowPicker(true)}
-              className="w-full inline-flex items-center justify-center gap-2 bg-accent-fire text-white font-heading text-base px-4 py-3.5 rounded-xl active:scale-95 transition-all shadow-glow-fire min-h-[52px]"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-              {items.length === 0 ? 'Start New Plan' : 'Add Component'}
-            </button>
-          </div>
-
-          {/* ── Empty state (no items, no drafts, no today's plans) ── */}
-          {items.length === 0 && drafts.length === 0 && todaysPlans.length === 0 && (
-            <div className="text-center py-10 px-6">
-              <p className="font-heading text-text-muted text-lg">Build today's class</p>
-              <p className="text-text-dim text-sm mt-2 leading-relaxed">
-                Pick warmups, stations, and games from your library. Drag to reorder, tap any row to add a coach note.
-              </p>
-              <Link href="/library" className="text-text-dim text-xs mt-3 inline-block underline underline-offset-2 hover:text-text-muted transition-colors">
-                Build your component library first
-              </Link>
-            </div>
-          )}
-
           {/* ── Plan items (sortable) ── */}
           {items.length > 0 && (
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -922,7 +1114,7 @@ export default function TodaysPlanClient() {
             </p>
           )}
 
-          {/* ── Draft name input (slides in when Save Draft tapped) ── */}
+          {/* ── Draft name input ── */}
           {items.length > 0 && showDraftNameInput && (
             <div className="px-4 pt-4 pb-1">
               <div className="flex gap-2">
@@ -953,7 +1145,6 @@ export default function TodaysPlanClient() {
           {/* ── Two-button action row ── */}
           {items.length > 0 && (
             <div className="px-4 pt-3 pb-2 flex gap-2">
-              {/* Save Draft */}
               <button
                 type="button"
                 onClick={showDraftNameInput ? confirmSaveDraft : handleSaveDraftTap}
@@ -961,8 +1152,6 @@ export default function TodaysPlanClient() {
               >
                 {draftSavedFeedback ? '✓ Draft Saved' : showDraftNameInput ? 'Confirm Save' : 'Save Draft'}
               </button>
-
-              {/* Add to Calendar */}
               <button
                 type="button"
                 onClick={() => setShowDatePicker(true)}
@@ -979,18 +1168,18 @@ export default function TodaysPlanClient() {
           {/* ── Transient confirmation ── */}
           {calendarAddedTo && (
             <p className="text-center text-xs text-accent-green px-4 pb-2">
-              ✓ Added to {calendarAddedTo} — visible in View Calendar
+              ✓ Added to {calendarAddedTo}
             </p>
           )}
 
-          {/* ── Editing indicator (loaded from calendar) ── */}
+          {/* ── Editing indicator ── */}
           {editingPlanId && (
             <p className="text-center text-[11px] text-text-dim/50 px-4 pb-1">
               Editing saved plan · changes auto-save
             </p>
           )}
 
-          {/* ── Clear & start over ── */}
+          {/* ── Clear & back to dashboard ── */}
           {items.length > 0 && (
             <div className="px-4 pb-4 flex justify-center gap-4">
               <button
@@ -1039,7 +1228,6 @@ export default function TodaysPlanClient() {
         />
       )}
 
-      {/* Add to Calendar picker */}
       {showDatePicker && (
         <PlanCalendarSheet
           mode="save"
@@ -1054,12 +1242,12 @@ export default function TodaysPlanClient() {
         />
       )}
 
-      {/* View Calendar browser */}
       {showCalendar && (
         <PlanCalendarSheet
           mode="browse"
           todayIso={todayIso}
           datesWithPlans={datesWithPlans}
+          defaultView="month"
           onSaveToCal={() => {}}
           onLoadPlan={(plan) => {
             setShowCalendar(false)
@@ -1068,6 +1256,7 @@ export default function TodaysPlanClient() {
           onClose={() => setShowCalendar(false)}
         />
       )}
+
     </div>
   )
 }
