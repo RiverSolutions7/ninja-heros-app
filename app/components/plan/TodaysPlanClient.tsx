@@ -17,8 +17,8 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import type { ComponentRow, ComponentType, PlanItem } from '@/app/lib/database.types'
-import { fetchPlanForDate, upsertPlanForDate, fetchDatesWithPlans } from '@/app/lib/planQueries'
+import type { ComponentRow, ComponentType, PlanItem, PlanRow } from '@/app/lib/database.types'
+import { addPlanToCalendar, updatePlanById, fetchDatesWithPlans } from '@/app/lib/planQueries'
 import ComponentPickerModal from './ComponentPickerModal'
 import { PhotoLightbox } from '@/app/components/ui/PhotoLightbox'
 import { PlanItemSheet } from './PlanItemSheet'
@@ -277,16 +277,21 @@ function DraftCard({
 export default function TodaysPlanClient() {
   const [todayIso] = useState(() => new Date().toLocaleDateString('en-CA'))
 
-  // Plan state
-  const [planId, setPlanId] = useState<string | null>(null)
-  const [planDate, setPlanDate] = useState<string | null>(null)
+  // Working scratchpad
   const [items, setItems] = useState<PlanItem[]>([])
-  const [datesWithPlans, setDatesWithPlans] = useState<Set<string>>(new Set())
+  // Set when coach loads a calendar plan — enables auto-save to Supabase
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null)
 
-  // Draft state
+  // Draft state (localStorage)
   const [drafts, setDrafts] = useState<Draft[]>([])
-  const [expandedEditing, setExpandedEditing] = useState(false)
   const activeDraftIdRef = useRef<string | null>(null)
+
+  // Transient feedback
+  const [draftSavedFeedback, setDraftSavedFeedback] = useState(false)
+  const [calendarAddedTo, setCalendarAddedTo] = useState<string | null>(null)
+
+  // Calendar dots
+  const [datesWithPlans, setDatesWithPlans] = useState<Set<string>>(new Set())
 
   // UI state
   const [showPicker, setShowPicker] = useState(false)
@@ -297,15 +302,13 @@ export default function TodaysPlanClient() {
   const [loading, setLoading] = useState(true)
   const [lightbox, setLightbox] = useState<{ photos: string[] } | null>(null)
   const [activeSheet, setActiveSheet] = useState<PlanItem | null>(null)
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving'>('idle')
   const [classLength, setClassLength] = useState<number | null>(null)
   const [showLengthPicker, setShowLengthPicker] = useState(false)
 
   // Derived
-  const isEditing = expandedEditing || planDate !== null
   const totalMinutes = items.reduce((s, i) => s + (i.durationMinutes ?? 0), 0)
   const isOverBudget = !!(classLength && totalMinutes > classLength)
-  const headerTitle = planDate && planDate !== todayIso ? formatDisplayDate(planDate) : "Today's Plan"
 
   // @dnd-kit
   const sensors = useSensors(
@@ -313,41 +316,28 @@ export default function TodaysPlanClient() {
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
   )
 
-  // Auto-save ref
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // ── Effects ──────────────────────────────────────────────────────────────────
+  // ── Effects ───────────────────────────────────────────────────────────────────
 
-  // Mount: load localStorage drafts + today's Supabase plan
+  // Mount: load localStorage drafts + calendar dots
   useEffect(() => {
     setMounted(true)
 
-    // Load drafts
     try {
       const raw = localStorage.getItem(DRAFTS_KEY)
       if (raw) setDrafts(JSON.parse(raw) as Draft[])
     } catch { /* ignore */ }
 
-    // Load class length
     try {
       const stored = parseInt(localStorage.getItem('ninja-class-length') || '', 10)
       if (stored > 0) setClassLength(stored)
     } catch { /* ignore */ }
 
-    // Load today's plan + calendar dots
-    setLoading(true)
     const from = offsetDate(todayIso, -180)
     const to = offsetDate(todayIso, 180)
-    Promise.all([fetchPlanForDate(todayIso), fetchDatesWithPlans(from, to)])
-      .then(([plan, dates]) => {
-        if (plan) {
-          setPlanId(plan.id)
-          setPlanDate(todayIso)
-          setItems(plan.items ?? [])
-          setExpandedEditing(true)
-        }
-        setDatesWithPlans(new Set(dates))
-      })
+    fetchDatesWithPlans(from, to)
+      .then(dates => setDatesWithPlans(new Set(dates)))
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [todayIso])
@@ -360,41 +350,35 @@ export default function TodaysPlanClient() {
     } catch { /* ignore */ }
   }, [classLength])
 
-  // Auto-save to Supabase (when plan has a date)
-  const debouncedSave = useCallback((currentItems: PlanItem[], date: string) => {
+  // Auto-save to Supabase — only when a calendar plan is loaded
+  const debouncedSave = useCallback((currentItems: PlanItem[], planId: string) => {
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(async () => {
       setSaveStatus('saving')
       try {
-        const plan = await upsertPlanForDate(date, currentItems)
-        setPlanId(plan.id)
-        const from = offsetDate(date, -180)
-        const to = offsetDate(date, 180)
-        const dates = await fetchDatesWithPlans(from, to)
-        setDatesWithPlans(new Set(dates))
-        setSaveStatus('saved')
+        await updatePlanById(planId, currentItems)
+        setSaveStatus('idle')
       } catch (err) {
         setSaveStatus('idle')
         console.error('Auto-save failed:', err)
       }
-    }, 500)
+    }, 800)
   }, [])
 
   useEffect(() => {
     if (!mounted || loading) return
-    if (!planDate) return
-    if (items.length === 0 && !planId) return
-    debouncedSave(items, planDate)
-  }, [items, mounted, loading, planDate, debouncedSave]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (!editingPlanId) return
+    if (items.length === 0) return
+    debouncedSave(items, editingPlanId)
+  }, [items, mounted, loading, editingPlanId, debouncedSave]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-save draft to localStorage (when no calendar date set)
+  // Auto-save draft to localStorage (when no calendar plan loaded)
   useEffect(() => {
-    if (!mounted || !expandedEditing) return
-    if (planDate !== null) return
+    if (!mounted) return
+    if (editingPlanId !== null) return  // Supabase handles it
 
     const id = activeDraftIdRef.current
     if (items.length === 0) {
-      // Remove draft if items cleared
       if (id) {
         setDrafts(prev => {
           const next = prev.filter(d => d.id !== id)
@@ -406,19 +390,20 @@ export default function TodaysPlanClient() {
       return
     }
 
-    // Upsert this session's draft
-    const finalId = id ?? crypto.randomUUID()
-    activeDraftIdRef.current = finalId
+    // Only auto-save to draft if an activeDraftId is already set (i.e. coach was editing a draft)
+    // New fresh plans only become drafts when the coach explicitly taps "Save Draft"
+    if (!id) return
+
     setDrafts(prev => {
-      const without = prev.filter(d => d.id !== finalId)
+      const without = prev.filter(d => d.id !== id)
       const updated = [
-        { id: finalId, items, createdAt: new Date().toISOString() },
+        { id, items, createdAt: new Date().toISOString() },
         ...without,
       ].slice(0, MAX_DRAFTS)
       saveDraftsToStorage(updated)
       return updated
     })
-  }, [items, mounted, expandedEditing, planDate])
+  }, [items, mounted, editingPlanId])
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
 
@@ -432,7 +417,6 @@ export default function TodaysPlanClient() {
         coachNote: null,
       },
     ])
-    setExpandedEditing(true)
   }
 
   function handleRemove(localId: string) {
@@ -452,61 +436,53 @@ export default function TodaysPlanClient() {
     )
   }
 
-  async function handleSaveToDate(date: string) {
+  function handleSaveDraft() {
     if (items.length === 0) return
-    if (saveTimer.current) clearTimeout(saveTimer.current)
+    const id = activeDraftIdRef.current ?? crypto.randomUUID()
+    activeDraftIdRef.current = id
+    setDrafts(prev => {
+      const without = prev.filter(d => d.id !== id)
+      const updated = [{ id, items, createdAt: new Date().toISOString() }, ...without].slice(0, MAX_DRAFTS)
+      saveDraftsToStorage(updated)
+      return updated
+    })
+    setDraftSavedFeedback(true)
+    setTimeout(() => setDraftSavedFeedback(false), 1500)
+  }
+
+  async function handleAddToCalendar(date: string, title: string) {
+    if (items.length === 0) return
     setSaveStatus('saving')
     try {
-      const plan = await upsertPlanForDate(date, items)
-      setPlanId(plan.id)
-      setPlanDate(date)
-      // Remove draft since it's now saved
-      const id = activeDraftIdRef.current
-      if (id) {
-        setDrafts(prev => {
-          const next = prev.filter(d => d.id !== id)
-          saveDraftsToStorage(next)
-          return next
-        })
-        activeDraftIdRef.current = null
-      }
-      // Refresh calendar dots
-      const from = offsetDate(date, -180)
-      const to = offsetDate(date, 180)
+      await addPlanToCalendar(date, items, title || undefined)
+      const from = offsetDate(todayIso, -180)
+      const to = offsetDate(todayIso, 180)
       const dates = await fetchDatesWithPlans(from, to)
       setDatesWithPlans(new Set(dates))
-      setSaveStatus('saved')
+      setSaveStatus('idle')
+      setCalendarAddedTo(formatDisplayDate(date))
+      setTimeout(() => setCalendarAddedTo(null), 3000)
     } catch (err) {
-      console.error('Save failed:', err)
+      console.error('Add to calendar failed:', err)
       setSaveStatus('idle')
     }
   }
 
-  async function handleLoadDate(date: string) {
+  function handleLoadPlan(plan: PlanRow) {
     if (saveTimer.current) clearTimeout(saveTimer.current)
-    setShowCalendar(false)
-    setLoading(true)
-    setSaveStatus('idle')
     activeDraftIdRef.current = null
-    try {
-      const plan = await fetchPlanForDate(date)
-      setPlanId(plan?.id ?? null)
-      setPlanDate(date)
-      setItems(plan?.items ?? [])
-      setExpandedEditing(true)
-    } finally {
-      setLoading(false)
-    }
+    setEditingPlanId(plan.id)
+    setItems(plan.items ?? [])
+    setSaveStatus('idle')
+    setCalendarAddedTo(null)
   }
 
   function handleContinueDraft(draft: Draft) {
     if (saveTimer.current) clearTimeout(saveTimer.current)
     activeDraftIdRef.current = draft.id
     setItems(draft.items)
-    setPlanId(null)
-    setPlanDate(null)
+    setEditingPlanId(null)
     setSaveStatus('idle')
-    setExpandedEditing(true)
   }
 
   function handleDiscardDraft(draftId: string) {
@@ -518,22 +494,10 @@ export default function TodaysPlanClient() {
     if (activeDraftIdRef.current === draftId) {
       if (saveTimer.current) clearTimeout(saveTimer.current)
       setItems([])
-      setPlanId(null)
-      setPlanDate(null)
+      setEditingPlanId(null)
       setSaveStatus('idle')
       activeDraftIdRef.current = null
-      setExpandedEditing(false)
     }
-  }
-
-  function handleStartNewPlan() {
-    if (saveTimer.current) clearTimeout(saveTimer.current)
-    activeDraftIdRef.current = null
-    setItems([])
-    setPlanId(null)
-    setPlanDate(null)
-    setSaveStatus('idle')
-    setExpandedEditing(true)
   }
 
   function handleClearPlan() {
@@ -547,11 +511,10 @@ export default function TodaysPlanClient() {
       })
     }
     setItems([])
-    setPlanId(null)
-    setPlanDate(null)
+    setEditingPlanId(null)
     setSaveStatus('idle')
+    setCalendarAddedTo(null)
     activeDraftIdRef.current = null
-    setExpandedEditing(false)
   }
 
   function handleDragEnd(event: DragEndEvent) {
@@ -569,16 +532,10 @@ export default function TodaysPlanClient() {
   }
 
   async function handleShare() {
-    if (!planId) return
-    const url = `${window.location.origin}/plan/${planId}`
-    const lines = [planDate ? formatDisplayDate(planDate) : "Today's Plan"]
-    items.forEach((item, idx) => {
-      const dur = item.durationMinutes ? ` — ${item.durationMinutes} min` : ''
-      lines.push(`${idx + 1}. ${item.component.title}${dur}`)
-    })
-    const text = lines.join('\n')
+    if (!editingPlanId) return
+    const url = `${window.location.origin}/plan/${editingPlanId}`
     if (navigator.share) {
-      try { await navigator.share({ title: "Today's Plan", text, url }); return }
+      try { await navigator.share({ title: "Today's Plan", url }); return }
       catch { /* fall through */ }
     }
     try {
@@ -599,15 +556,13 @@ export default function TodaysPlanClient() {
       <div className="relative flex items-center justify-between px-4 pt-4 pb-3">
         <div className="absolute inset-x-0 -top-4 h-24 bg-gradient-to-b from-accent-fire/[0.07] to-transparent pointer-events-none rounded-2xl -z-10" />
         <div>
-          <h1 className="font-heading text-2xl text-text-primary leading-none">{headerTitle}</h1>
+          <h1 className="font-heading text-2xl text-text-primary leading-none">{"Today's Plan"}</h1>
           <p className="flex items-center gap-1.5 text-text-dim text-xs mt-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-accent-fire inline-block opacity-60" />
             Just Tumble · Ninja H.E.R.O.S.
           </p>
-          {saveStatus !== 'idle' && (
-            <p className={['text-[11px] mt-1', saveStatus === 'saved' ? 'text-accent-green' : 'text-text-dim'].join(' ')}>
-              {saveStatus === 'saving' ? 'Saving…' : `✓ Saved · ${formatDisplayDate(planDate!)}`}
-            </p>
+          {saveStatus === 'saving' && (
+            <p className="text-[11px] mt-1 text-text-dim">Saving…</p>
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -622,8 +577,8 @@ export default function TodaysPlanClient() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           </button>
-          {/* Share — only when saved to Supabase */}
-          {planId && items.length > 0 && (
+          {/* Share — only when editing a loaded calendar plan */}
+          {editingPlanId && items.length > 0 && (
             <button
               type="button"
               onClick={handleShare}
@@ -658,8 +613,8 @@ export default function TodaysPlanClient() {
 
       {!loading && (
         <>
-          {/* ── Draft cards (shown when not in editing mode and drafts exist) ── */}
-          {!isEditing && drafts.length > 0 && (
+          {/* ── Draft cards (shown when scratchpad is empty and drafts exist) ── */}
+          {items.length === 0 && drafts.length > 0 && (
             <div className="px-4 pt-2 space-y-3">
               <p className="text-[11px] font-heading uppercase tracking-wider text-text-dim px-0.5">
                 Saved Drafts
@@ -672,11 +627,16 @@ export default function TodaysPlanClient() {
                   onDiscard={() => handleDiscardDraft(draft.id)}
                 />
               ))}
+              <div className="flex items-center gap-3 py-1">
+                <div className="flex-1 h-px bg-bg-border" />
+                <span className="text-[11px] text-text-dim/50 font-heading uppercase tracking-wider">or start fresh</span>
+                <div className="flex-1 h-px bg-bg-border" />
+              </div>
             </div>
           )}
 
-          {/* ── Time budget (only if durations set or class length configured) ── */}
-          {isEditing && (totalMinutes > 0 || classLength) && (
+          {/* ── Time budget ── */}
+          {items.length > 0 && (totalMinutes > 0 || classLength) && (
             <div className="px-4 pt-3 pb-1">
               <div className="flex items-center gap-2">
                 <svg className="w-3.5 h-3.5 text-text-dim flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -745,20 +705,9 @@ export default function TodaysPlanClient() {
             </button>
           </div>
 
-          {/* ── Empty state ── */}
-          {isEditing && items.length === 0 && (
-            <div className="text-center py-12 px-4">
-              <p className="font-heading text-text-muted text-lg">No components yet</p>
-              <p className="text-text-dim text-sm mt-2">Tap + Add to Plan to start building your class</p>
-              <Link href="/library" className="text-text-dim text-xs mt-3 inline-block underline underline-offset-2 hover:text-text-muted transition-colors">
-                Build your component library first
-              </Link>
-            </div>
-          )}
-
-          {/* ── No drafts empty state ── */}
-          {!isEditing && drafts.length === 0 && (
-            <div className="text-center py-12 px-4">
+          {/* ── Empty state (no items, no drafts) ── */}
+          {items.length === 0 && drafts.length === 0 && (
+            <div className="text-center py-10 px-4">
               <p className="font-heading text-text-muted text-lg">No plan yet</p>
               <p className="text-text-dim text-sm mt-2">Tap + Add to Plan to start building your class</p>
               <Link href="/library" className="text-text-dim text-xs mt-3 inline-block underline underline-offset-2 hover:text-text-muted transition-colors">
@@ -768,7 +717,7 @@ export default function TodaysPlanClient() {
           )}
 
           {/* ── Plan items (sortable) ── */}
-          {isEditing && items.length > 0 && (
+          {items.length > 0 && (
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <SortableContext items={items.map(i => i.localId)} strategy={verticalListSortingStrategy}>
                 <ul className="mx-4 bg-bg-card rounded-2xl overflow-hidden border border-bg-border">
@@ -786,42 +735,48 @@ export default function TodaysPlanClient() {
             </DndContext>
           )}
 
-          {/* ── Save to Calendar button ── */}
-          {isEditing && items.length > 0 && (
-            <div className="px-4 pt-4 pb-2">
+          {/* ── Two-button action row ── */}
+          {items.length > 0 && (
+            <div className="px-4 pt-4 pb-2 flex gap-2">
+              {/* Save Draft */}
+              <button
+                type="button"
+                onClick={handleSaveDraft}
+                className="flex-1 py-3.5 rounded-xl border border-bg-border font-heading text-sm text-text-muted hover:border-accent-fire/30 active:scale-[0.98] transition-all min-h-[52px]"
+              >
+                {draftSavedFeedback ? '✓ Draft Saved' : 'Save Draft'}
+              </button>
+
+              {/* Add to Calendar */}
               <button
                 type="button"
                 onClick={() => setShowDatePicker(true)}
-                className={[
-                  'w-full font-heading text-base py-4 rounded-xl min-h-[56px] flex items-center justify-center gap-2 transition-all active:scale-[0.98]',
-                  planDate
-                    ? 'bg-bg-card border border-bg-border text-text-muted hover:border-accent-fire/40'
-                    : 'bg-accent-fire text-white shadow-glow-fire',
-                ].join(' ')}
+                className="flex-1 py-3.5 rounded-xl bg-accent-fire text-white font-heading text-sm shadow-glow-fire active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 min-h-[52px]"
               >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
-                {planDate
-                  ? `Saved · ${formatDisplayDate(planDate)} · Change Date`
-                  : 'Save to Calendar'}
+                Add to Calendar
               </button>
             </div>
           )}
 
-          {/* ── Start New Plan (shown below drafts when not editing) ── */}
-          {!isEditing && drafts.length > 0 && (
-            <div className="px-4 pt-2">
-              <div className="flex items-center gap-3 py-2">
-                <div className="flex-1 h-px bg-bg-border" />
-                <span className="text-[11px] text-text-dim/50 font-heading uppercase tracking-wider">or</span>
-                <div className="flex-1 h-px bg-bg-border" />
-              </div>
-            </div>
+          {/* ── Transient confirmation ── */}
+          {calendarAddedTo && (
+            <p className="text-center text-xs text-accent-green px-4 pb-2">
+              ✓ Added to {calendarAddedTo} — visible in View Calendar
+            </p>
+          )}
+
+          {/* ── Editing indicator (loaded from calendar) ── */}
+          {editingPlanId && (
+            <p className="text-center text-[11px] text-text-dim/50 px-4 pb-1">
+              Editing saved plan · changes auto-save
+            </p>
           )}
 
           {/* ── Clear / Share links ── */}
-          {isEditing && items.length > 0 && (
+          {items.length > 0 && (
             <div className="px-4 pb-3 flex justify-center gap-4">
               <button
                 type="button"
@@ -830,7 +785,7 @@ export default function TodaysPlanClient() {
               >
                 Clear plan
               </button>
-              {planId && (
+              {editingPlanId && (
                 <button
                   type="button"
                   onClick={handleShare}
@@ -864,7 +819,7 @@ export default function TodaysPlanClient() {
       {activeSheet && (
         <PlanItemSheet
           item={activeSheet}
-          planDate={planDate ?? todayIso}
+          planDate={todayIso}
           onSaveNote={(localId, note) => {
             handleNoteChange(localId, note)
             setActiveSheet(prev => prev ? { ...prev, coachNote: note || null } : null)
@@ -878,17 +833,17 @@ export default function TodaysPlanClient() {
         />
       )}
 
-      {/* Save to Calendar picker */}
+      {/* Add to Calendar picker */}
       {showDatePicker && (
         <PlanCalendarSheet
           mode="save"
           todayIso={todayIso}
-          currentPlanDate={planDate}
           datesWithPlans={datesWithPlans}
-          onConfirmDate={async (date) => {
+          onSaveToCal={async (date, title) => {
             setShowDatePicker(false)
-            await handleSaveToDate(date)
+            await handleAddToCalendar(date, title)
           }}
+          onLoadPlan={() => {}}
           onClose={() => setShowDatePicker(false)}
         />
       )}
@@ -898,9 +853,12 @@ export default function TodaysPlanClient() {
         <PlanCalendarSheet
           mode="browse"
           todayIso={todayIso}
-          currentPlanDate={planDate}
           datesWithPlans={datesWithPlans}
-          onConfirmDate={(date) => handleLoadDate(date)}
+          onSaveToCal={() => {}}
+          onLoadPlan={(plan) => {
+            setShowCalendar(false)
+            handleLoadPlan(plan)
+          }}
           onClose={() => setShowCalendar(false)}
         />
       )}
