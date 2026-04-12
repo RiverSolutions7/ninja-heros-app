@@ -18,11 +18,38 @@ const TYPE_PLACEHOLDER: Record<ComponentType, string> = {
   game: 'bg-accent-green/20',
 }
 
+const TYPE_ICON_COLOR: Record<ComponentType, string> = {
+  warmup: 'text-accent-gold',
+  station: 'text-accent-blue',
+  game: 'text-accent-green',
+}
+
+const TYPE_ICONS: Record<ComponentType, React.ReactNode> = {
+  warmup: (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+    </svg>
+  ),
+  game: (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+    </svg>
+  ),
+  station: (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+    </svg>
+  ),
+}
+
 const TYPE_LABEL: Record<ComponentType, string> = {
   warmup: 'Warmup',
   station: 'Station',
   game: 'Game',
 }
+
+// Module-level variable so the last selected tab persists across modal open/close
+let _lastTypeFilter: ComponentType = 'warmup'
 
 interface ComponentPickerModalProps {
   onSelect: (component: ComponentRow) => void
@@ -35,7 +62,7 @@ interface ComponentPickerModalProps {
 export default function ComponentPickerModal({ onSelect, onClose, existingIds }: ComponentPickerModalProps) {
   const [components, setComponents] = useState<ComponentRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [typeFilter, setTypeFilter] = useState<ComponentType>('warmup')
+  const [typeFilter, setTypeFilter] = useState<ComponentType>(_lastTypeFilter)
   const [curriculumFilter, setCurriculumFilter] = useState('')
   const [search, setSearch] = useState('')
   const [curriculums, setCurriculums] = useState<CurriculumRow[]>([])
@@ -60,6 +87,12 @@ export default function ComponentPickerModal({ onSelect, onClose, existingIds }:
       .then(({ data }) => setCurriculums((data as CurriculumRow[]) ?? []))
   }, [])
 
+  function handleTypeChange(type: ComponentType) {
+    _lastTypeFilter = type
+    setTypeFilter(type)
+    setSearch('')
+  }
+
   let filtered = components
   filtered = filtered.filter((c) => c.type === typeFilter)
   if (curriculumFilter) filtered = filtered.filter((c) => c.curriculum === curriculumFilter)
@@ -74,7 +107,7 @@ export default function ComponentPickerModal({ onSelect, onClose, existingIds }:
   }
 
   function handlePhotoTap(e: React.MouseEvent, photos: string[]) {
-    e.stopPropagation() // don't trigger the row's onSelect
+    e.stopPropagation()
     setLightbox({ photos, index: 0 })
   }
 
@@ -125,7 +158,7 @@ export default function ComponentPickerModal({ onSelect, onClose, existingIds }:
           <button
             key={f.value}
             type="button"
-            onClick={() => { setTypeFilter(f.value); setSearch('') }}
+            onClick={() => handleTypeChange(f.value)}
             className={[
               'flex-1 py-2.5 text-sm font-heading transition-colors',
               typeFilter === f.value
@@ -186,14 +219,13 @@ export default function ComponentPickerModal({ onSelect, onClose, existingIds }:
                     inPlan ? 'bg-accent-green/5' : '',
                   ].join(' ')}
                 >
-                  {/* Thumbnail — always tappable, lives outside the selection button */}
+                  {/* Thumbnail — always rendered with icon placeholder */}
                   <div className="relative flex-shrink-0 py-3.5">
                     <button
                       type="button"
                       onClick={(e) => hasPhoto && handlePhotoTap(e, photos)}
                       className={[
                         'w-14 h-14 rounded-xl overflow-hidden block',
-                        TYPE_PLACEHOLDER[component.type],
                         hasPhoto ? 'cursor-pointer active:opacity-75 transition-opacity' : 'cursor-default',
                       ].join(' ')}
                       tabIndex={hasPhoto ? 0 : -1}
@@ -202,7 +234,13 @@ export default function ComponentPickerModal({ onSelect, onClose, existingIds }:
                       {hasPhoto ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={photos[0]} alt={component.title} className="w-full h-full object-cover" />
-                      ) : null}
+                      ) : (
+                        <div className={['w-full h-full flex items-center justify-center', TYPE_PLACEHOLDER[component.type]].join(' ')}>
+                          <span className={TYPE_ICON_COLOR[component.type]}>
+                            {TYPE_ICONS[component.type]}
+                          </span>
+                        </div>
+                      )}
                     </button>
                     {extraCount > 0 && (
                       <span className="absolute bottom-4 right-0 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">
@@ -211,7 +249,7 @@ export default function ComponentPickerModal({ onSelect, onClose, existingIds }:
                     )}
                   </div>
 
-                  {/* Row content — selection button (disabled when in plan) */}
+                  {/* Row content */}
                   <button
                     type="button"
                     onClick={() => handleItemSelect(component)}
@@ -225,9 +263,17 @@ export default function ComponentPickerModal({ onSelect, onClose, existingIds }:
                       <p className={['font-heading text-sm truncate', inPlan ? 'text-text-dim' : 'text-text-primary'].join(' ')}>
                         {component.title}
                       </p>
-                      {component.curriculum && (
-                        <p className="text-text-dim text-xs mt-0.5 truncate">{component.curriculum}</p>
-                      )}
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className={['text-[10px] font-heading uppercase tracking-wide flex-shrink-0', TYPE_ICON_COLOR[component.type]].join(' ')}>
+                          {TYPE_LABEL[component.type]}
+                        </span>
+                        {component.curriculum && (
+                          <>
+                            <span className="text-text-dim/30 text-[10px] flex-shrink-0">·</span>
+                            <span className="text-[10px] text-text-dim truncate">{component.curriculum}</span>
+                          </>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       {inPlan ? (
@@ -238,12 +284,9 @@ export default function ComponentPickerModal({ onSelect, onClose, existingIds }:
                           <span className="text-xs text-accent-green font-heading">In plan</span>
                         </div>
                       ) : (
-                        <>
-                          {component.duration_minutes && (
-                            <span className="text-xs text-text-dim">{component.duration_minutes}m</span>
-                          )}
-                          <span className="text-xs text-text-dim font-medium">{TYPE_LABEL[component.type]}</span>
-                        </>
+                        component.duration_minutes ? (
+                          <span className="text-xs text-text-dim">{component.duration_minutes}m</span>
+                        ) : null
                       )}
                     </div>
                   </button>

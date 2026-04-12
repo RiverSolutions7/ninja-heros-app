@@ -18,7 +18,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import type { ComponentRow, ComponentType, PlanItem, PlanRow } from '@/app/lib/database.types'
-import { addPlanToCalendar, updatePlanById, fetchDatesWithPlans } from '@/app/lib/planQueries'
+import { addPlanToCalendar, updatePlanById, fetchDatesWithPlans, fetchPlansForDate } from '@/app/lib/planQueries'
 import ComponentPickerModal from './ComponentPickerModal'
 import { PhotoLightbox } from '@/app/components/ui/PhotoLightbox'
 import { PlanItemSheet } from './PlanItemSheet'
@@ -28,11 +28,13 @@ import { PlanCalendarSheet } from './PlanCalendarSheet'
 
 interface Draft {
   id: string
+  name?: string
   items: PlanItem[]
   createdAt: string
 }
 
 const DRAFTS_KEY = 'ninja-plan-drafts'
+const SESSION_KEY = 'ninja-plan-session'
 const MAX_DRAFTS = 5
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -62,21 +64,52 @@ function saveDraftsToStorage(drafts: Draft[]) {
   try { localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts)) } catch { /* ignore */ }
 }
 
-// ── Sortable plan item ────────────────────────────────────────────────────────
+// ── Type icons + placeholder ──────────────────────────────────────────────────
 
-const TYPE_META: Record<ComponentType, { label: string; border: string; placeholderBg: string }> = {
-  warmup: { label: 'Warmup', border: 'border-l-accent-gold', placeholderBg: 'bg-accent-gold/20' },
-  station: { label: 'Station', border: 'border-l-accent-blue', placeholderBg: 'bg-accent-blue/20' },
-  game: { label: 'Game', border: 'border-l-accent-green', placeholderBg: 'bg-accent-green/20' },
+const TYPE_META: Record<ComponentType, { label: string; border: string; textColor: string; placeholderBg: string }> = {
+  warmup: { label: 'Warmup', border: 'border-l-accent-gold', textColor: 'text-accent-gold', placeholderBg: 'bg-accent-gold/20' },
+  station: { label: 'Station', border: 'border-l-accent-blue', textColor: 'text-accent-blue', placeholderBg: 'bg-accent-blue/20' },
+  game: { label: 'Game', border: 'border-l-accent-green', textColor: 'text-accent-green', placeholderBg: 'bg-accent-green/20' },
 }
+
+const TYPE_ICONS: Record<ComponentType, React.ReactNode> = {
+  warmup: (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+    </svg>
+  ),
+  game: (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+    </svg>
+  ),
+  station: (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+    </svg>
+  ),
+}
+
+function TypePlaceholder({ type, className }: { type: ComponentType; className?: string }) {
+  const meta = TYPE_META[type]
+  return (
+    <div className={['flex items-center justify-center', meta.placeholderBg, className].join(' ')}>
+      <span className={meta.textColor}>{TYPE_ICONS[type]}</span>
+    </div>
+  )
+}
+
+// ── Sortable plan item ────────────────────────────────────────────────────────
 
 function SortablePlanItem({
   item,
+  index,
   onRemove,
   onPhotoTap,
   onRowTap,
 }: {
   item: PlanItem
+  index: number
   onRemove: (localId: string) => void
   onPhotoTap: (photos: string[]) => void
   onRowTap: (item: PlanItem) => void
@@ -85,7 +118,6 @@ function SortablePlanItem({
   const photos = (item.component.photos ?? []).filter(Boolean)
   const firstPhoto = photos[0] ?? null
   const extraCount = photos.length - 1
-  const subMeta = [meta.label, item.component.curriculum].filter(Boolean).join(' · ')
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.localId })
   const style = {
@@ -103,6 +135,11 @@ function SortablePlanItem({
         meta.border,
       ].join(' ')}
     >
+      {/* Sequence number */}
+      <span className="text-[11px] font-heading text-text-dim/40 w-4 text-right flex-shrink-0 tabular-nums">
+        {index + 1}
+      </span>
+
       {/* Drag handle */}
       <span
         className="text-text-dim/40 text-base leading-none select-none flex-shrink-0 cursor-grab active:cursor-grabbing p-1"
@@ -114,7 +151,7 @@ function SortablePlanItem({
         ⠿
       </span>
 
-      {/* Thumbnail */}
+      {/* Thumbnail — always rendered with icon placeholder */}
       <div className="relative flex-shrink-0">
         <button
           type="button"
@@ -130,7 +167,7 @@ function SortablePlanItem({
             // eslint-disable-next-line @next/next/no-img-element
             <img src={firstPhoto} alt={item.component.title} className="w-full h-full object-cover" />
           ) : (
-            <div className={['w-full h-full', meta.placeholderBg].join(' ')} />
+            <TypePlaceholder type={item.component.type} className="w-full h-full rounded-xl" />
           )}
         </button>
         {extraCount > 0 && (
@@ -151,28 +188,34 @@ function SortablePlanItem({
             <p className="font-heading text-[15px] text-text-primary leading-snug truncate">
               {item.component.title}
             </p>
-            {item.coachNote ? (
+            {/* Type + curriculum — always visible */}
+            <div className="flex items-center gap-1 mt-0.5">
+              <span className={['text-[10px] font-heading uppercase tracking-wide flex-shrink-0', meta.textColor].join(' ')}>
+                {meta.label}
+              </span>
+              {item.component.curriculum && (
+                <>
+                  <span className="text-text-dim/30 text-[10px] flex-shrink-0">·</span>
+                  <span className="text-[10px] text-text-dim truncate">{item.component.curriculum}</span>
+                </>
+              )}
+            </div>
+            {/* Coach note on its own line */}
+            {item.coachNote && (
               <p className="text-[11px] text-accent-fire/70 mt-0.5 truncate">
                 {item.coachNote.split('\n')[0]}
               </p>
-            ) : subMeta ? (
-              <p className="text-xs text-text-dim mt-0.5 truncate">{subMeta}</p>
-            ) : null}
+            )}
           </div>
           {item.durationMinutes ? (
             <span className="text-[11px] text-text-dim font-heading flex-shrink-0">
               {item.durationMinutes}m
             </span>
           ) : null}
-          {/* Mic affordance */}
-          <svg
-            className={['w-3.5 h-3.5 flex-shrink-0', item.coachNote ? 'text-accent-fire' : 'text-text-dim/25'].join(' ')}
-            fill="currentColor"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
-            <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zM8 11a4 4 0 008 0h2a6 6 0 01-5 5.91V19h3v2H8v-2h3v-2.09A6 6 0 016 11h2z" />
-          </svg>
+          {/* Note indicator — tap row to add/edit */}
+          {!item.coachNote && (
+            <span className="text-[10px] text-text-dim/30 flex-shrink-0 font-heading">note</span>
+          )}
         </div>
       </button>
 
@@ -202,7 +245,8 @@ function DraftCard({
   onContinue: () => void
   onDiscard: () => void
 }) {
-  const preview = draft.items.slice(0, 3)
+  // Cap preview at 5 thumbnails
+  const preview = draft.items.slice(0, 5)
   const extra = draft.items.length - preview.length
 
   return (
@@ -217,7 +261,7 @@ function DraftCard({
           </div>
           <div>
             <p className="font-heading text-sm text-text-primary leading-snug">
-              Draft Plan
+              {draft.name || 'Draft Plan'}
             </p>
             <p className="text-[11px] text-text-dim mt-0.5">
               {draft.items.length} component{draft.items.length !== 1 ? 's' : ''} · {formatDraftTime(draft.createdAt)}
@@ -236,27 +280,28 @@ function DraftCard({
         </button>
       </div>
 
-      {/* Component preview thumbnails */}
-      <div className="flex items-center gap-2 mb-4">
+      {/* Component thumbnails only — no text (prevents overflow) */}
+      <div className="flex items-center gap-1.5 mb-4 flex-wrap">
         {preview.map((item) => {
           const meta = TYPE_META[item.component.type]
           const photo = item.component.photos?.[0] ?? null
           return (
-            <div key={item.localId} className="flex items-center gap-1.5">
-              <div className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0">
-                {photo ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={photo} alt={item.component.title} className="w-full h-full object-cover" />
-                ) : (
-                  <div className={['w-full h-full', meta.placeholderBg].join(' ')} />
-                )}
-              </div>
-              <p className="text-[11px] text-text-dim truncate max-w-[80px]">{item.component.title}</p>
+            <div key={item.localId} className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0">
+              {photo ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={photo} alt={item.component.title} className="w-full h-full object-cover" />
+              ) : (
+                <div className={['w-full h-full flex items-center justify-center', meta.placeholderBg].join(' ')}>
+                  <span className={['w-3.5 h-3.5', meta.textColor].join(' ')}>
+                    {TYPE_ICONS[item.component.type]}
+                  </span>
+                </div>
+              )}
             </div>
           )
         })}
         {extra > 0 && (
-          <p className="text-[11px] text-text-dim/60">+{extra} more</p>
+          <span className="text-[11px] text-text-dim/60 ml-0.5">+{extra}</span>
         )}
       </div>
 
@@ -277,14 +322,31 @@ function DraftCard({
 export default function TodaysPlanClient() {
   const [todayIso] = useState(() => new Date().toLocaleDateString('en-CA'))
 
+  // Today's date label for the header
+  const todayLabel = (() => {
+    const d = new Date(todayIso + 'T00:00:00')
+    const weekday = d.toLocaleDateString('en-US', { weekday: 'short' })
+    const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    return `${weekday} · ${date}`
+  })()
+
   // Working scratchpad
   const [items, setItems] = useState<PlanItem[]>([])
   // Set when coach loads a calendar plan — enables auto-save to Supabase
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null)
+  const [editingPlanLabel, setEditingPlanLabel] = useState<string | null>(null)
+  // Track the last plan added to calendar (for share button)
+  const [lastAddedPlanId, setLastAddedPlanId] = useState<string | null>(null)
+
+  // Today's calendar plans (for sub use case)
+  const [todaysPlans, setTodaysPlans] = useState<PlanRow[]>([])
 
   // Draft state (localStorage)
   const [drafts, setDrafts] = useState<Draft[]>([])
   const activeDraftIdRef = useRef<string | null>(null)
+  // Draft name input
+  const [showDraftNameInput, setShowDraftNameInput] = useState(false)
+  const [draftNameValue, setDraftNameValue] = useState('')
 
   // Transient feedback
   const [draftSavedFeedback, setDraftSavedFeedback] = useState(false)
@@ -309,6 +371,14 @@ export default function TodaysPlanClient() {
   // Derived
   const totalMinutes = items.reduce((s, i) => s + (i.durationMinutes ?? 0), 0)
   const isOverBudget = !!(classLength && totalMinutes > classLength)
+  const warmupCount = items.filter(i => i.component.type === 'warmup').length
+  const stationCount = items.filter(i => i.component.type === 'station').length
+  const gameCount = items.filter(i => i.component.type === 'game').length
+  const typeSummary = [
+    warmupCount > 0 && `${warmupCount} warmup${warmupCount > 1 ? 's' : ''}`,
+    stationCount > 0 && `${stationCount} station${stationCount > 1 ? 's' : ''}`,
+    gameCount > 0 && `${gameCount} game${gameCount > 1 ? 's' : ''}`,
+  ].filter(Boolean).join(' · ')
 
   // @dnd-kit
   const sensors = useSensors(
@@ -320,24 +390,39 @@ export default function TodaysPlanClient() {
 
   // ── Effects ───────────────────────────────────────────────────────────────────
 
-  // Mount: load localStorage drafts + calendar dots
+  // Mount: session recovery → drafts → calendar data
   useEffect(() => {
     setMounted(true)
 
+    // Session recovery — restore unsaved scratchpad items from previous visit
+    try {
+      const session = sessionStorage.getItem(SESSION_KEY)
+      if (session) {
+        const recovered = JSON.parse(session) as PlanItem[]
+        if (recovered.length > 0) setItems(recovered)
+      }
+    } catch { /* ignore */ }
+
+    // Load localStorage drafts
     try {
       const raw = localStorage.getItem(DRAFTS_KEY)
       if (raw) setDrafts(JSON.parse(raw) as Draft[])
     } catch { /* ignore */ }
 
+    // Load class length
     try {
       const stored = parseInt(localStorage.getItem('ninja-class-length') || '', 10)
       if (stored > 0) setClassLength(stored)
     } catch { /* ignore */ }
 
+    // Load calendar dots + today's plans in parallel
     const from = offsetDate(todayIso, -180)
     const to = offsetDate(todayIso, 180)
-    fetchDatesWithPlans(from, to)
-      .then(dates => setDatesWithPlans(new Set(dates)))
+    Promise.all([fetchDatesWithPlans(from, to), fetchPlansForDate(todayIso)])
+      .then(([dates, todayPlans]) => {
+        setDatesWithPlans(new Set(dates))
+        setTodaysPlans(todayPlans)
+      })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [todayIso])
@@ -372,32 +457,42 @@ export default function TodaysPlanClient() {
     debouncedSave(items, editingPlanId)
   }, [items, mounted, loading, editingPlanId, debouncedSave]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-save draft to localStorage (when no calendar plan loaded)
+  // Write fresh scratchpad to sessionStorage (when not editing a calendar plan)
   useEffect(() => {
     if (!mounted) return
     if (editingPlanId !== null) return  // Supabase handles it
+    try {
+      if (items.length > 0) {
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify(items))
+      } else {
+        sessionStorage.removeItem(SESSION_KEY)
+      }
+    } catch { /* ignore */ }
+  }, [items, mounted, editingPlanId])
+
+  // Auto-save active draft to localStorage (when coach is editing a named draft)
+  useEffect(() => {
+    if (!mounted) return
+    if (editingPlanId !== null) return
 
     const id = activeDraftIdRef.current
+    if (!id) return  // no active draft — wait for explicit "Save Draft"
+
     if (items.length === 0) {
-      if (id) {
-        setDrafts(prev => {
-          const next = prev.filter(d => d.id !== id)
-          saveDraftsToStorage(next)
-          return next
-        })
-        activeDraftIdRef.current = null
-      }
+      setDrafts(prev => {
+        const next = prev.filter(d => d.id !== id)
+        saveDraftsToStorage(next)
+        return next
+      })
+      activeDraftIdRef.current = null
       return
     }
 
-    // Only auto-save to draft if an activeDraftId is already set (i.e. coach was editing a draft)
-    // New fresh plans only become drafts when the coach explicitly taps "Save Draft"
-    if (!id) return
-
     setDrafts(prev => {
+      const existing = prev.find(d => d.id === id)
       const without = prev.filter(d => d.id !== id)
       const updated = [
-        { id, items, createdAt: new Date().toISOString() },
+        { id, name: existing?.name, items, createdAt: new Date().toISOString() },
         ...without,
       ].slice(0, MAX_DRAFTS)
       saveDraftsToStorage(updated)
@@ -436,32 +531,54 @@ export default function TodaysPlanClient() {
     )
   }
 
-  function handleSaveDraft() {
+  function handleSaveDraftTap() {
+    if (items.length === 0) return
+    if (!showDraftNameInput) {
+      setShowDraftNameInput(true)
+      return
+    }
+    // Already showing input — save with whatever name was typed
+    confirmSaveDraft()
+  }
+
+  function confirmSaveDraft() {
     if (items.length === 0) return
     const id = activeDraftIdRef.current ?? crypto.randomUUID()
     activeDraftIdRef.current = id
+    const name = draftNameValue.trim() || undefined
     setDrafts(prev => {
       const without = prev.filter(d => d.id !== id)
-      const updated = [{ id, items, createdAt: new Date().toISOString() }, ...without].slice(0, MAX_DRAFTS)
+      const updated = [{ id, name, items, createdAt: new Date().toISOString() }, ...without].slice(0, MAX_DRAFTS)
       saveDraftsToStorage(updated)
       return updated
     })
+    setDraftNameValue('')
+    setShowDraftNameInput(false)
     setDraftSavedFeedback(true)
     setTimeout(() => setDraftSavedFeedback(false), 1500)
+    // Clear session since it's now a proper draft
+    try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
   }
 
   async function handleAddToCalendar(date: string, title: string) {
     if (items.length === 0) return
     setSaveStatus('saving')
     try {
-      await addPlanToCalendar(date, items, title || undefined)
+      const plan = await addPlanToCalendar(date, items, title || undefined)
+      setLastAddedPlanId(plan.id)
       const from = offsetDate(todayIso, -180)
       const to = offsetDate(todayIso, 180)
-      const dates = await fetchDatesWithPlans(from, to)
+      const [dates, todayPlans] = await Promise.all([
+        fetchDatesWithPlans(from, to),
+        fetchPlansForDate(todayIso),
+      ])
       setDatesWithPlans(new Set(dates))
+      setTodaysPlans(todayPlans)
       setSaveStatus('idle')
       setCalendarAddedTo(formatDisplayDate(date))
       setTimeout(() => setCalendarAddedTo(null), 3000)
+      // Clear session — plan is now in Supabase
+      try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
     } catch (err) {
       console.error('Add to calendar failed:', err)
       setSaveStatus('idle')
@@ -472,9 +589,17 @@ export default function TodaysPlanClient() {
     if (saveTimer.current) clearTimeout(saveTimer.current)
     activeDraftIdRef.current = null
     setEditingPlanId(plan.id)
+    // Build a label for the header
+    const titlePart = plan.title ? plan.title : null
+    const datePart = plan.plan_date ? formatDisplayDate(plan.plan_date) : null
+    setEditingPlanLabel([titlePart, datePart].filter(Boolean).join(' · '))
     setItems(plan.items ?? [])
     setSaveStatus('idle')
     setCalendarAddedTo(null)
+    setLastAddedPlanId(null)
+    setShowDraftNameInput(false)
+    // Clear session — scratchpad is now this loaded plan
+    try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
   }
 
   function handleContinueDraft(draft: Draft) {
@@ -482,7 +607,10 @@ export default function TodaysPlanClient() {
     activeDraftIdRef.current = draft.id
     setItems(draft.items)
     setEditingPlanId(null)
+    setEditingPlanLabel(null)
+    setLastAddedPlanId(null)
     setSaveStatus('idle')
+    setShowDraftNameInput(false)
   }
 
   function handleDiscardDraft(draftId: string) {
@@ -495,8 +623,10 @@ export default function TodaysPlanClient() {
       if (saveTimer.current) clearTimeout(saveTimer.current)
       setItems([])
       setEditingPlanId(null)
+      setEditingPlanLabel(null)
       setSaveStatus('idle')
       activeDraftIdRef.current = null
+      setShowDraftNameInput(false)
     }
   }
 
@@ -512,9 +642,14 @@ export default function TodaysPlanClient() {
     }
     setItems([])
     setEditingPlanId(null)
+    setEditingPlanLabel(null)
+    setLastAddedPlanId(null)
     setSaveStatus('idle')
     setCalendarAddedTo(null)
+    setShowDraftNameInput(false)
+    setDraftNameValue('')
     activeDraftIdRef.current = null
+    try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
   }
 
   function handleDragEnd(event: DragEndEvent) {
@@ -531,9 +666,11 @@ export default function TodaysPlanClient() {
     })
   }
 
+  const sharePlanId = editingPlanId ?? lastAddedPlanId
+
   async function handleShare() {
-    if (!editingPlanId) return
-    const url = `${window.location.origin}/plan/${editingPlanId}`
+    if (!sharePlanId) return
+    const url = `${window.location.origin}/plan/${sharePlanId}`
     if (navigator.share) {
       try { await navigator.share({ title: "Today's Plan", url }); return }
       catch { /* fall through */ }
@@ -559,7 +696,7 @@ export default function TodaysPlanClient() {
           <h1 className="font-heading text-2xl text-text-primary leading-none">{"Today's Plan"}</h1>
           <p className="flex items-center gap-1.5 text-text-dim text-xs mt-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-accent-fire inline-block opacity-60" />
-            Just Tumble · Ninja H.E.R.O.S.
+            {editingPlanLabel ? `Editing: ${editingPlanLabel}` : todayLabel}
           </p>
           {saveStatus === 'saving' && (
             <p className="text-[11px] mt-1 text-text-dim">Saving…</p>
@@ -577,8 +714,8 @@ export default function TodaysPlanClient() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           </button>
-          {/* Share — only when editing a loaded calendar plan */}
-          {editingPlanId && items.length > 0 && (
+          {/* Share — when a plan has been saved/loaded */}
+          {sharePlanId && items.length > 0 && (
             <button
               type="button"
               onClick={handleShare}
@@ -613,12 +750,50 @@ export default function TodaysPlanClient() {
 
       {!loading && (
         <>
+          {/* ── Today's calendar plans (sub use case — shown when scratchpad empty) ── */}
+          {todaysPlans.length > 0 && items.length === 0 && (
+            <div className="px-4 pt-2 mb-1">
+              <p className="text-[11px] font-heading uppercase tracking-wider text-accent-fire px-0.5 mb-2">
+                {todaysPlans.length === 1 ? "Today's Class" : `${todaysPlans.length} Plans Today`}
+              </p>
+              <div className="space-y-2">
+                {todaysPlans.map(plan => (
+                  <button
+                    key={plan.id}
+                    type="button"
+                    onClick={() => handleLoadPlan(plan)}
+                    className="w-full flex items-center gap-3 bg-accent-fire/10 border border-accent-fire/30 rounded-2xl px-4 py-3.5 active:scale-[0.98] transition-all text-left"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="font-heading text-sm text-text-primary leading-snug truncate">
+                        {plan.title || 'Class Plan'}
+                      </p>
+                      <p className="text-[11px] text-text-dim mt-0.5">
+                        {(plan.items ?? []).length} component{(plan.items ?? []).length !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+                    <svg className="w-4 h-4 text-accent-fire flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* ── Draft cards (shown when scratchpad is empty and drafts exist) ── */}
           {items.length === 0 && drafts.length > 0 && (
             <div className="px-4 pt-2 space-y-3">
-              <p className="text-[11px] font-heading uppercase tracking-wider text-text-dim px-0.5">
-                Saved Drafts
-              </p>
+              {todaysPlans.length === 0 && (
+                <p className="text-[11px] font-heading uppercase tracking-wider text-text-dim px-0.5">
+                  Saved Drafts
+                </p>
+              )}
+              {todaysPlans.length > 0 && (
+                <p className="text-[11px] font-heading uppercase tracking-wider text-text-dim px-0.5 pt-2">
+                  Your Drafts
+                </p>
+              )}
               {drafts.map(draft => (
                 <DraftCard
                   key={draft.id}
@@ -627,11 +802,13 @@ export default function TodaysPlanClient() {
                   onDiscard={() => handleDiscardDraft(draft.id)}
                 />
               ))}
-              <div className="flex items-center gap-3 py-1">
-                <div className="flex-1 h-px bg-bg-border" />
-                <span className="text-[11px] text-text-dim/50 font-heading uppercase tracking-wider">or start fresh</span>
-                <div className="flex-1 h-px bg-bg-border" />
-              </div>
+              {(todaysPlans.length > 0 || drafts.length > 0) && (
+                <div className="flex items-center gap-3 py-1">
+                  <div className="flex-1 h-px bg-bg-border" />
+                  <span className="text-[11px] text-text-dim/50 font-heading uppercase tracking-wider">or start fresh</span>
+                  <div className="flex-1 h-px bg-bg-border" />
+                </div>
+              )}
             </div>
           )}
 
@@ -705,13 +882,15 @@ export default function TodaysPlanClient() {
             </button>
           </div>
 
-          {/* ── Empty state (no items, no drafts) ── */}
-          {items.length === 0 && drafts.length === 0 && (
-            <div className="text-center py-10 px-4">
-              <p className="font-heading text-text-muted text-lg">No plan yet</p>
-              <p className="text-text-dim text-sm mt-2">Tap Start New Plan to begin building your class</p>
+          {/* ── Empty state (no items, no drafts, no today's plans) ── */}
+          {items.length === 0 && drafts.length === 0 && todaysPlans.length === 0 && (
+            <div className="text-center py-10 px-6">
+              <p className="font-heading text-text-muted text-lg">Build today's class</p>
+              <p className="text-text-dim text-sm mt-2 leading-relaxed">
+                Pick warmups, stations, and games from your library. Drag to reorder, tap any row to add a coach note.
+              </p>
               <Link href="/library" className="text-text-dim text-xs mt-3 inline-block underline underline-offset-2 hover:text-text-muted transition-colors">
-                Add components from the Library tab first
+                Build your component library first
               </Link>
             </div>
           )}
@@ -721,10 +900,11 @@ export default function TodaysPlanClient() {
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <SortableContext items={items.map(i => i.localId)} strategy={verticalListSortingStrategy}>
                 <ul className="mx-4 bg-bg-card rounded-2xl overflow-hidden border border-bg-border">
-                  {items.map(item => (
+                  {items.map((item, idx) => (
                     <SortablePlanItem
                       key={item.localId}
                       item={item}
+                      index={idx}
                       onRemove={handleRemove}
                       onPhotoTap={photos => setLightbox({ photos })}
                       onRowTap={i => setActiveSheet(i)}
@@ -735,16 +915,51 @@ export default function TodaysPlanClient() {
             </DndContext>
           )}
 
+          {/* ── Type summary ── */}
+          {items.length > 0 && typeSummary && (
+            <p className="text-center text-[11px] text-text-dim/50 px-4 pt-2">
+              {typeSummary}
+            </p>
+          )}
+
+          {/* ── Draft name input (slides in when Save Draft tapped) ── */}
+          {items.length > 0 && showDraftNameInput && (
+            <div className="px-4 pt-4 pb-1">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={draftNameValue}
+                  onChange={e => setDraftNameValue(e.target.value)}
+                  placeholder="Name this draft (optional) — e.g. Coach Mike"
+                  maxLength={50}
+                  autoFocus
+                  onKeyDown={e => e.key === 'Enter' && confirmSaveDraft()}
+                  className="flex-1 bg-bg-input border border-bg-border rounded-xl px-3 py-2.5 text-sm text-text-primary placeholder:text-text-dim focus:outline-none focus:border-accent-fire/50 transition-colors"
+                />
+                <button
+                  type="button"
+                  onClick={() => { setShowDraftNameInput(false); setDraftNameValue('') }}
+                  className="text-text-dim/40 hover:text-text-muted transition-colors px-2"
+                  aria-label="Cancel"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* ── Two-button action row ── */}
           {items.length > 0 && (
-            <div className="px-4 pt-4 pb-2 flex gap-2">
+            <div className="px-4 pt-3 pb-2 flex gap-2">
               {/* Save Draft */}
               <button
                 type="button"
-                onClick={handleSaveDraft}
+                onClick={showDraftNameInput ? confirmSaveDraft : handleSaveDraftTap}
                 className="flex-1 py-3.5 rounded-xl border border-bg-border font-heading text-sm text-text-muted hover:border-accent-fire/30 active:scale-[0.98] transition-all min-h-[52px]"
               >
-                {draftSavedFeedback ? '✓ Draft Saved' : 'Save Draft'}
+                {draftSavedFeedback ? '✓ Draft Saved' : showDraftNameInput ? 'Confirm Save' : 'Save Draft'}
               </button>
 
               {/* Add to Calendar */}
@@ -775,25 +990,16 @@ export default function TodaysPlanClient() {
             </p>
           )}
 
-          {/* ── Clear / Share links ── */}
+          {/* ── Clear & start over ── */}
           {items.length > 0 && (
-            <div className="px-4 pb-3 flex justify-center gap-4">
+            <div className="px-4 pb-4 flex justify-center gap-4">
               <button
                 type="button"
                 onClick={handleClearPlan}
                 className="text-sm text-text-dim/50 hover:text-text-dim transition-colors"
               >
-                Clear plan
+                Clear & start over
               </button>
-              {editingPlanId && (
-                <button
-                  type="button"
-                  onClick={handleShare}
-                  className="text-sm text-text-dim/50 hover:text-text-dim transition-colors"
-                >
-                  Share link
-                </button>
-              )}
             </div>
           )}
         </>
