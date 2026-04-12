@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/app/lib/supabase'
 import type { ComponentRow, ComponentType, CurriculumRow } from '@/app/lib/database.types'
@@ -29,6 +29,117 @@ interface ComponentPickerModalProps {
   existingIds?: Set<string>
 }
 
+// ── Photo lightbox with swipe ─────────────────────────────────
+
+function PhotoLightbox({
+  photos,
+  initialIndex,
+  onClose,
+}: {
+  photos: string[]
+  initialIndex: number
+  onClose: () => void
+}) {
+  const [index, setIndex] = useState(initialIndex)
+  const touchStartX = useRef<number | null>(null)
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+      if (e.key === 'ArrowRight') setIndex((i) => Math.min(i + 1, photos.length - 1))
+      if (e.key === 'ArrowLeft') setIndex((i) => Math.max(i - 1, 0))
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose, photos.length])
+
+  function handleTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0].clientX
+  }
+
+  function handleTouchEnd(e: React.TouchEvent) {
+    if (touchStartX.current == null) return
+    const delta = e.changedTouches[0].clientX - touchStartX.current
+    if (delta < -50) setIndex((i) => Math.min(i + 1, photos.length - 1))
+    if (delta > 50) setIndex((i) => Math.max(i - 1, 0))
+    touchStartX.current = null
+  }
+
+  return (
+    <div
+      style={{ zIndex: 10000 }}
+      className="fixed inset-0 flex items-center justify-center bg-black/95"
+      onClick={onClose}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* Close */}
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute top-4 right-4 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
+        aria-label="Close"
+      >
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+
+      {/* Photo */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={photos[index]}
+        alt={`Photo ${index + 1}`}
+        className="max-w-[90vw] max-h-[80vh] rounded-2xl object-contain"
+        onClick={(e) => e.stopPropagation()}
+      />
+
+      {/* Prev / Next arrows — only if multiple photos */}
+      {photos.length > 1 && (
+        <>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setIndex((i) => Math.max(i - 1, 0)) }}
+            disabled={index === 0}
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors disabled:opacity-20"
+            aria-label="Previous photo"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setIndex((i) => Math.min(i + 1, photos.length - 1)) }}
+            disabled={index === photos.length - 1}
+            className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors disabled:opacity-20"
+            aria-label="Next photo"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+
+          {/* Dot indicators */}
+          <div className="absolute bottom-6 left-0 right-0 flex justify-center gap-1.5">
+            {photos.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setIndex(i) }}
+                className={`w-1.5 h-1.5 rounded-full transition-all ${i === index ? 'bg-white scale-125' : 'bg-white/40'}`}
+                aria-label={`Photo ${i + 1}`}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── Main modal ────────────────────────────────────────────────
+
 export default function ComponentPickerModal({ onSelect, onClose, existingIds }: ComponentPickerModalProps) {
   const [components, setComponents] = useState<ComponentRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -37,6 +148,7 @@ export default function ComponentPickerModal({ onSelect, onClose, existingIds }:
   const [search, setSearch] = useState('')
   const [curriculums, setCurriculums] = useState<CurriculumRow[]>([])
   const [mounted, setMounted] = useState(false)
+  const [lightbox, setLightbox] = useState<{ photos: string[]; index: number } | null>(null)
 
   useEffect(() => {
     setMounted(true)
@@ -67,6 +179,11 @@ export default function ComponentPickerModal({ onSelect, onClose, existingIds }:
   function handleItemSelect(component: ComponentRow) {
     if (existingIds?.has(component.id)) return
     onSelect(component)
+  }
+
+  function handlePhotoTap(e: React.MouseEvent, photos: string[]) {
+    e.stopPropagation() // don't trigger the row's onSelect
+    setLightbox({ photos, index: 0 })
   }
 
   if (!mounted) return null
@@ -165,6 +282,10 @@ export default function ComponentPickerModal({ onSelect, onClose, existingIds }:
           <ul>
             {filtered.map((component) => {
               const inPlan = existingIds?.has(component.id) ?? false
+              const photos = (component.photos ?? []).filter(Boolean)
+              const hasPhoto = photos.length > 0
+              const extraCount = photos.length - 1
+
               return (
                 <li key={component.id}>
                   <button
@@ -178,12 +299,32 @@ export default function ComponentPickerModal({ onSelect, onClose, existingIds }:
                         : 'hover:bg-white/5 active:bg-white/10',
                     ].join(' ')}
                   >
-                    <div className={['flex-shrink-0 w-14 h-14 rounded-xl overflow-hidden', TYPE_PLACEHOLDER[component.type]].join(' ')}>
-                      {component.photos?.[0] ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={component.photos[0]} alt={component.title} className="w-full h-full object-cover" />
-                      ) : null}
+                    {/* Thumbnail — tappable to open lightbox */}
+                    <div className="relative flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={(e) => hasPhoto && handlePhotoTap(e, photos)}
+                        className={[
+                          'w-14 h-14 rounded-xl overflow-hidden block',
+                          TYPE_PLACEHOLDER[component.type],
+                          hasPhoto ? 'cursor-pointer active:opacity-75 transition-opacity' : 'cursor-default',
+                        ].join(' ')}
+                        tabIndex={hasPhoto ? 0 : -1}
+                        aria-label={hasPhoto ? `View photos of ${component.title}` : undefined}
+                      >
+                        {hasPhoto ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={photos[0]} alt={component.title} className="w-full h-full object-cover" />
+                        ) : null}
+                      </button>
+                      {/* Multi-photo badge */}
+                      {extraCount > 0 && (
+                        <span className="absolute bottom-1 right-1 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">
+                          +{extraCount}
+                        </span>
+                      )}
                     </div>
+
                     <div className="flex-1 min-w-0">
                       <p className={['font-heading text-sm truncate', inPlan ? 'text-text-dim' : 'text-text-primary'].join(' ')}>
                         {component.title}
@@ -216,6 +357,15 @@ export default function ComponentPickerModal({ onSelect, onClose, existingIds }:
           </ul>
         )}
       </div>
+
+      {/* Photo lightbox */}
+      {lightbox && (
+        <PhotoLightbox
+          photos={lightbox.photos}
+          initialIndex={lightbox.index}
+          onClose={() => setLightbox(null)}
+        />
+      )}
     </div>
   )
 
