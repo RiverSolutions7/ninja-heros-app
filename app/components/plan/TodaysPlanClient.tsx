@@ -45,13 +45,11 @@ function formatDisplayDate(isoDate: string): string {
 function SortablePlanItem({
   item,
   onRemove,
-  onDurationChange,
   onPhotoTap,
   onRowTap,
 }: {
   item: PlanItem
   onRemove: (localId: string) => void
-  onDurationChange: (localId: string, value: string) => void
   onPhotoTap: (photos: string[]) => void
   onRowTap: (item: PlanItem) => void
 }) {
@@ -73,13 +71,13 @@ function SortablePlanItem({
       ref={setNodeRef}
       style={style}
       className={[
-        'flex items-center gap-3 px-4 py-3 border-b border-bg-border/50 last:border-b-0 border-l-4',
+        'flex items-center gap-3 px-4 py-3.5 border-b border-bg-border/50 last:border-b-0 border-l-4',
         meta.border,
       ].join(' ')}
     >
       {/* Drag handle */}
       <span
-        className="text-text-dim/60 text-base leading-none select-none flex-shrink-0 cursor-grab active:cursor-grabbing p-1"
+        className="text-text-dim/40 text-base leading-none select-none flex-shrink-0 cursor-grab active:cursor-grabbing p-1"
         style={{ touchAction: 'none' }}
         aria-label="Drag to reorder"
         {...attributes}
@@ -120,67 +118,42 @@ function SortablePlanItem({
         onClick={() => onRowTap(item)}
         className="flex-1 min-w-0 text-left active:opacity-70 transition-opacity"
       >
-        <p className="font-heading text-[15px] text-text-primary leading-snug truncate">
-          {item.component.title}
-        </p>
-        {item.coachNote && (
-          <p className="text-[11px] text-accent-fire/70 mt-0.5 truncate">
-            {item.coachNote.split('\n')[0]}
-          </p>
-        )}
-        {!item.coachNote && subMeta && (
-          <p className="text-xs text-text-dim mt-0.5 truncate">{subMeta}</p>
-        )}
-      </button>
-
-      {/* Duration stepper chip */}
-      <div className="flex items-center flex-shrink-0">
-        {/* − button */}
-        <button
-          type="button"
-          onClick={() => {
-            const current = item.durationMinutes ?? 0
-            onDurationChange(item.localId, current <= 5 ? '' : String(Math.max(5, Math.round(current / 5) * 5 - 5)))
-          }}
-          disabled={!item.durationMinutes}
-          className="w-8 h-8 flex items-center justify-center rounded-l-lg border border-bg-border bg-bg-input text-text-muted active:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-          aria-label="Decrease duration"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" />
+        <div className="flex items-center gap-1.5">
+          <div className="flex-1 min-w-0">
+            <p className="font-heading text-[15px] text-text-primary leading-snug truncate">
+              {item.component.title}
+            </p>
+            {item.coachNote ? (
+              <p className="text-[11px] text-accent-fire/70 mt-0.5 truncate">
+                {item.coachNote.split('\n')[0]}
+              </p>
+            ) : subMeta ? (
+              <p className="text-xs text-text-dim mt-0.5 truncate">{subMeta}</p>
+            ) : null}
+          </div>
+          {/* Duration badge — shown only if set */}
+          {item.durationMinutes ? (
+            <span className="text-[11px] text-text-dim font-heading flex-shrink-0">
+              {item.durationMinutes}m
+            </span>
+          ) : null}
+          {/* Mic affordance icon */}
+          <svg
+            className={['w-3.5 h-3.5 flex-shrink-0', item.coachNote ? 'text-accent-fire' : 'text-text-dim/25'].join(' ')}
+            fill="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zM8 11a4 4 0 008 0h2a6 6 0 01-5 5.91V19h3v2H8v-2h3v-2.09A6 6 0 016 11h2z" />
           </svg>
-        </button>
-
-        {/* Value display */}
-        <div className="h-8 px-2 flex items-center justify-center border-t border-b border-bg-border bg-bg-input min-w-[52px]">
-          <span className="text-text-muted text-xs font-heading whitespace-nowrap">
-            {item.durationMinutes ? `${item.durationMinutes} min` : '— min'}
-          </span>
         </div>
-
-        {/* + button */}
-        <button
-          type="button"
-          onClick={() => {
-            const current = item.durationMinutes ?? 0
-            const next = current === 0 ? 5 : Math.min(120, Math.round(current / 5) * 5 + 5)
-            onDurationChange(item.localId, String(next))
-          }}
-          disabled={!!item.durationMinutes && item.durationMinutes >= 120}
-          className="w-8 h-8 flex items-center justify-center rounded-r-lg border border-bg-border bg-bg-input text-text-muted active:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-          aria-label="Increase duration"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-        </button>
-      </div>
+      </button>
 
       {/* Remove */}
       <button
         type="button"
         onClick={() => onRemove(item.localId)}
-        className="text-text-dim/40 hover:text-text-muted transition-colors flex-shrink-0 p-1 -mr-1"
+        className="text-text-dim/30 hover:text-text-muted transition-colors flex-shrink-0 p-1 -mr-1"
         aria-label="Remove"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -205,6 +178,26 @@ export default function TodaysPlanClient() {
   const [lightbox, setLightbox] = useState<{ photos: string[] } | null>(null)
   const [activeSheet, setActiveSheet] = useState<PlanItem | null>(null)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const [classLength, setClassLength] = useState<number | null>(null)
+  const [showLengthPicker, setShowLengthPicker] = useState(false)
+
+  // Load class length from localStorage after mount
+  useEffect(() => {
+    try {
+      const stored = parseInt(localStorage.getItem('ninja-class-length') || '', 10)
+      if (stored > 0) setClassLength(stored)
+    } catch { /* ignore */ }
+  }, [])
+
+  // Persist class length to localStorage
+  useEffect(() => {
+    try {
+      if (classLength) localStorage.setItem('ninja-class-length', String(classLength))
+      else localStorage.removeItem('ninja-class-length')
+    } catch { /* ignore */ }
+  }, [classLength])
+
+  const totalMinutes = items.reduce((s, i) => s + (i.durationMinutes ?? 0), 0)
 
   // @dnd-kit sensors
   const sensors = useSensors(
@@ -222,6 +215,7 @@ export default function TodaysPlanClient() {
   // Load plan for selected date
   useEffect(() => {
     setMounted(true)
+    setSaveStatus('idle')
     setLoading(true)
     setItems([])
     setPlanId(null)
@@ -252,13 +246,12 @@ export default function TodaysPlanClient() {
       try {
         const plan = await upsertPlanForDate(date, currentItems)
         setPlanId(plan.id)
-        // Refresh dot indicators after save
         const from = offsetDate(date, -14)
         const to = offsetDate(date, 14)
         const dates = await fetchDatesWithPlans(from, to)
         setDatesWithPlans(new Set(dates))
         setSaveStatus('saved')
-        setTimeout(() => setSaveStatus('idle'), 2500)
+        // No fade-out — stays visible until next save cycle
       } catch (err) {
         setSaveStatus('idle')
         console.error('Failed to save plan:', err)
@@ -267,8 +260,10 @@ export default function TodaysPlanClient() {
   }, [])
 
   // Save whenever items change (after mount + initial load)
+  // Skip when items is empty with no existing plan — nothing to write
   useEffect(() => {
     if (!mounted || loading) return
+    if (items.length === 0 && !planId) return
     debouncedSave(items, selectedDate)
   }, [items, mounted, loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -349,6 +344,7 @@ export default function TodaysPlanClient() {
   }
 
   const headerTitle = selectedDate === todayIso ? "Today's Plan" : formatDisplayDate(selectedDate)
+  const isOverBudget = !!(classLength && totalMinutes > classLength)
 
   if (!mounted) return null
 
@@ -365,7 +361,7 @@ export default function TodaysPlanClient() {
           </p>
           {saveStatus !== 'idle' && (
             <p className={['text-[11px] mt-1', saveStatus === 'saved' ? 'text-accent-green' : 'text-text-dim'].join(' ')}>
-              {saveStatus === 'saving' ? 'Saving…' : '✓ Saved'}
+              {saveStatus === 'saving' ? 'Saving…' : `✓ Saved · ${formatDisplayDate(selectedDate)}`}
             </p>
           )}
         </div>
@@ -403,6 +399,66 @@ export default function TodaysPlanClient() {
         datesWithPlans={datesWithPlans}
         onSelectDate={setSelectedDate}
       />
+
+      {/* Optional time budget row — only visible when at least one duration is set OR class length is configured */}
+      {(totalMinutes > 0 || classLength) && (
+        <div className="px-4 pt-3 pb-1">
+          <div className="flex items-center gap-2">
+            <svg
+              className="w-3.5 h-3.5 text-text-dim flex-shrink-0"
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className={['text-xs font-heading', isOverBudget ? 'text-accent-fire' : 'text-text-muted'].join(' ')}>
+              {classLength ? `${totalMinutes} / ${classLength} min` : `${totalMinutes} min`}
+            </span>
+            {classLength && (
+              <div className="flex-1 h-1 bg-bg-border rounded-full overflow-hidden">
+                <div
+                  className={['h-full rounded-full transition-all', isOverBudget ? 'bg-accent-fire' : 'bg-accent-green'].join(' ')}
+                  style={{ width: `${Math.min(100, (totalMinutes / classLength) * 100)}%` }}
+                />
+              </div>
+            )}
+            {classLength ? (
+              <button
+                type="button"
+                onClick={() => { setClassLength(null); setShowLengthPicker(false) }}
+                className="text-text-dim/40 hover:text-text-dim transition-colors flex-shrink-0"
+                aria-label="Clear class length"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowLengthPicker((v) => !v)}
+                className="text-[11px] text-text-dim/50 hover:text-text-dim transition-colors flex-shrink-0 underline underline-offset-2"
+              >
+                Set length
+              </button>
+            )}
+          </div>
+          {/* Inline length picker chips */}
+          {showLengthPicker && (
+            <div className="flex gap-2 mt-2">
+              {[30, 45, 60, 90].map((min) => (
+                <button
+                  key={min}
+                  type="button"
+                  onClick={() => { setClassLength(min); setShowLengthPicker(false) }}
+                  className="px-3 py-1.5 rounded-lg border border-bg-border text-xs font-heading text-text-muted hover:border-accent-fire/40 hover:text-accent-fire active:scale-95 transition-all"
+                >
+                  {min} min
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Send to Coaches — prominent share button */}
       {items.length > 0 && planId && (
@@ -451,9 +507,14 @@ export default function TodaysPlanClient() {
               : `No plan saved for ${formatDisplayDate(selectedDate)}`}
           </p>
           {selectedDate === todayIso && (
-            <Link href="/library" className="text-text-dim text-xs mt-3 inline-block underline underline-offset-2 hover:text-text-muted transition-colors">
-              Add components from the Library tab first
-            </Link>
+            <>
+              <Link href="/library" className="text-text-dim text-xs mt-3 inline-block underline underline-offset-2 hover:text-text-muted transition-colors">
+                Add components from the Library tab first
+              </Link>
+              <p className="text-text-dim/50 text-xs mt-3">
+                Swipe the dates above to view plans saved for other days
+              </p>
+            </>
           )}
         </div>
       )}
@@ -468,7 +529,6 @@ export default function TodaysPlanClient() {
                   key={item.localId}
                   item={item}
                   onRemove={handleRemove}
-                  onDurationChange={handleDurationChange}
                   onPhotoTap={(photos) => setLightbox({ photos })}
                   onRowTap={(i) => setActiveSheet(i)}
                 />
@@ -512,10 +572,15 @@ export default function TodaysPlanClient() {
       {activeSheet && (
         <PlanItemSheet
           item={activeSheet}
+          planDate={selectedDate}
           onSaveNote={(localId, note) => {
             handleNoteChange(localId, note)
-            // Keep activeSheet in sync with updated note preview
             setActiveSheet((prev) => prev ? { ...prev, coachNote: note || null } : null)
+          }}
+          onDurationChange={(localId, value) => {
+            handleDurationChange(localId, value)
+            const num = value === '' ? null : parseInt(value, 10)
+            setActiveSheet((prev) => prev ? { ...prev, durationMinutes: isNaN(num as number) ? null : num } : null)
           }}
           onClose={() => setActiveSheet(null)}
         />

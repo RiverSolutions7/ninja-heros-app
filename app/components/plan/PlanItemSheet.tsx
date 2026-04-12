@@ -12,16 +12,25 @@ const TYPE_META: Record<ComponentType, { label: string; accent: string; placehol
   game: { label: 'Game', accent: 'text-accent-green', placeholderBg: 'bg-accent-green/20' },
 }
 
+function formatDisplayDate(isoDate: string): string {
+  const d = new Date(isoDate + 'T00:00:00')
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
 interface PlanItemSheetProps {
   item: PlanItem
+  planDate: string
   onSaveNote: (localId: string, note: string) => void
+  onDurationChange: (localId: string, value: string) => void
   onClose: () => void
 }
 
-export function PlanItemSheet({ item, onSaveNote, onClose }: PlanItemSheetProps) {
+export function PlanItemSheet({ item, planDate, onSaveNote, onDurationChange, onClose }: PlanItemSheetProps) {
   const [visible, setVisible] = useState(false)
   const [noteText, setNoteText] = useState(item.coachNote ?? '')
   const [lightbox, setLightbox] = useState<{ photos: string[]; index: number } | null>(null)
+  // Local copy of duration so stepper updates feel instant
+  const [localDuration, setLocalDuration] = useState<number | null>(item.durationMinutes ?? null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const {
@@ -65,6 +74,18 @@ export function PlanItemSheet({ item, onSaveNote, onClose }: PlanItemSheetProps)
     handleClose()
   }
 
+  function handleDurationStep(delta: number) {
+    const current = localDuration ?? 0
+    let next: number | null
+    if (delta < 0) {
+      next = current <= 5 ? null : Math.max(5, Math.round(current / 5) * 5 + delta)
+    } else {
+      next = current === 0 ? 5 : Math.min(120, Math.round(current / 5) * 5 + delta)
+    }
+    setLocalDuration(next)
+    onDurationChange(item.localId, next === null ? '' : String(next))
+  }
+
   const micIcon = () => {
     if (voiceState === 'recording') {
       return (
@@ -90,7 +111,6 @@ export function PlanItemSheet({ item, onSaveNote, onClose }: PlanItemSheetProps)
         </svg>
       )
     }
-    // idle
     return (
       <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
         <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zM8 11a4 4 0 008 0h2a6 6 0 01-5 5.91V19h3v2H8v-2h3v-2.09A6 6 0 016 11h2z"/>
@@ -165,6 +185,13 @@ export function PlanItemSheet({ item, onSaveNote, onClose }: PlanItemSheetProps)
             {item.component.curriculum && (
               <p className="text-xs text-text-dim mt-0.5">{item.component.curriculum}</p>
             )}
+            {/* Date-specific reassurance */}
+            <p className="text-[11px] text-text-dim/40 mt-1.5 flex items-center gap-1">
+              <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              {formatDisplayDate(planDate)} only · won&apos;t change the library
+            </p>
           </div>
 
           {/* Description */}
@@ -181,6 +208,41 @@ export function PlanItemSheet({ item, onSaveNote, onClose }: PlanItemSheetProps)
               <span className="text-xs text-text-dim leading-relaxed">{item.component.equipment}</span>
             </div>
           )}
+
+          {/* Optional duration stepper */}
+          <div className="px-4 mt-4 flex items-center gap-3">
+            <span className="text-xs text-text-dim font-heading flex-shrink-0">Duration</span>
+            <div className="flex items-center">
+              <button
+                type="button"
+                onClick={() => handleDurationStep(-5)}
+                disabled={!localDuration}
+                className="w-8 h-8 flex items-center justify-center rounded-l-lg border border-bg-border bg-bg-input text-text-muted active:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                aria-label="Decrease duration"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" />
+                </svg>
+              </button>
+              <div className="h-8 px-3 flex items-center justify-center border-t border-b border-bg-border bg-bg-input min-w-[60px]">
+                <span className="text-text-muted text-xs font-heading whitespace-nowrap">
+                  {localDuration ? `${localDuration} min` : '— min'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleDurationStep(5)}
+                disabled={!!localDuration && localDuration >= 120}
+                className="w-8 h-8 flex items-center justify-center rounded-r-lg border border-bg-border bg-bg-input text-text-muted active:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                aria-label="Increase duration"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
+            </div>
+            <span className="text-[11px] text-text-dim/40">optional</span>
+          </div>
 
           {/* Coach Note section */}
           <div className="px-4 mt-5 pb-2">
@@ -211,9 +273,7 @@ export function PlanItemSheet({ item, onSaveNote, onClose }: PlanItemSheetProps)
               ) : null}
               <div className="flex-1 min-w-0">
                 {voiceState === 'recording' && (
-                  <p className="text-xs text-accent-fire animate-pulse">
-                    Listening… tap mic to stop
-                  </p>
+                  <p className="text-xs text-accent-fire animate-pulse">Listening… tap mic to stop</p>
                 )}
                 {voiceState === 'processing' && (
                   <p className="text-xs text-text-dim">Processing…</p>
@@ -224,7 +284,7 @@ export function PlanItemSheet({ item, onSaveNote, onClose }: PlanItemSheetProps)
                 {voiceState === 'error' && errorMessage && (
                   <p className="text-xs text-red-400">{errorMessage}</p>
                 )}
-                {(voiceState === 'idle') && isSupported && (
+                {voiceState === 'idle' && isSupported && (
                   <p className="text-xs text-text-dim">Tap mic to speak running instructions</p>
                 )}
                 {!isSupported && (
@@ -259,7 +319,7 @@ export function PlanItemSheet({ item, onSaveNote, onClose }: PlanItemSheetProps)
               Save Note
             </button>
 
-            {/* Skip / close */}
+            {/* Close */}
             <button
               type="button"
               onClick={handleClose}
