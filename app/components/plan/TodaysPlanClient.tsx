@@ -21,6 +21,7 @@ import { CSS } from '@dnd-kit/utilities'
 import type { ComponentRow, ComponentType, PlanItem } from '@/app/lib/database.types'
 import { createPlan, fetchLatestPlan, updatePlanItems } from '@/app/lib/planQueries'
 import ComponentPickerModal from './ComponentPickerModal'
+import { PhotoLightbox } from '@/app/components/ui/PhotoLightbox'
 
 const PREFILL_KEY = 'ninja-heros-plan-prefill'
 const HOURS_48 = 48 * 60 * 60 * 1000
@@ -41,10 +42,12 @@ function SortablePlanItem({
   item: PlanItem
   onRemove: (localId: string) => void
   onDurationChange: (localId: string, value: string) => void
-  onPhotoTap: (url: string) => void
+  onPhotoTap: (photos: string[]) => void
 }) {
   const meta = TYPE_META[item.component.type]
-  const firstPhoto = item.component.photos?.[0] ?? null
+  const photos = (item.component.photos ?? []).filter(Boolean)
+  const firstPhoto = photos[0] ?? null
+  const extraCount = photos.length - 1
   const subMeta = [meta.label, item.component.curriculum].filter(Boolean).join(' · ')
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.localId })
@@ -75,23 +78,30 @@ function SortablePlanItem({
       </span>
 
       {/* Thumbnail — tappable if photo exists */}
-      <button
-        type="button"
-        onClick={() => firstPhoto && onPhotoTap(firstPhoto)}
-        className={[
-          'flex-shrink-0 w-14 h-14 rounded-xl overflow-hidden',
-          firstPhoto ? 'cursor-pointer active:opacity-80 transition-opacity' : 'cursor-default',
-        ].join(' ')}
-        tabIndex={firstPhoto ? 0 : -1}
-        aria-label={firstPhoto ? `View photo of ${item.component.title}` : undefined}
-      >
-        {firstPhoto ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={firstPhoto} alt={item.component.title} className="w-full h-full object-cover" />
-        ) : (
-          <div className={['w-full h-full', meta.placeholderBg].join(' ')} />
+      <div className="relative flex-shrink-0">
+        <button
+          type="button"
+          onClick={() => photos.length > 0 && onPhotoTap(photos)}
+          className={[
+            'w-14 h-14 rounded-xl overflow-hidden block',
+            firstPhoto ? 'cursor-pointer active:opacity-80 transition-opacity' : 'cursor-default',
+          ].join(' ')}
+          tabIndex={firstPhoto ? 0 : -1}
+          aria-label={firstPhoto ? `View photos of ${item.component.title}` : undefined}
+        >
+          {firstPhoto ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={firstPhoto} alt={item.component.title} className="w-full h-full object-cover" />
+          ) : (
+            <div className={['w-full h-full', meta.placeholderBg].join(' ')} />
+          )}
+        </button>
+        {extraCount > 0 && (
+          <span className="absolute bottom-1 right-1 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">
+            +{extraCount}
+          </span>
         )}
-      </button>
+      </div>
 
       {/* Content */}
       <div className="flex-1 min-w-0">
@@ -170,7 +180,7 @@ export default function TodaysPlanClient() {
   const [copyFeedback, setCopyFeedback] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  const [lightbox, setLightbox] = useState<{ photos: string[] } | null>(null)
 
   // @dnd-kit sensors
   const sensors = useSensors(
@@ -183,13 +193,6 @@ export default function TodaysPlanClient() {
   const itemsRef = useRef(items)
   useEffect(() => { itemsRef.current = items }, [items])
 
-  // Close lightbox on Escape
-  useEffect(() => {
-    if (!lightboxUrl) return
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setLightboxUrl(null) }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [lightboxUrl])
 
   // Load latest plan from Supabase on mount
   useEffect(() => {
@@ -415,7 +418,7 @@ export default function TodaysPlanClient() {
                   item={item}
                   onRemove={handleRemove}
                   onDurationChange={handleDurationChange}
-                  onPhotoTap={setLightboxUrl}
+                  onPhotoTap={(photos) => setLightbox({ photos })}
                 />
               ))}
             </ul>
@@ -446,29 +449,11 @@ export default function TodaysPlanClient() {
       )}
 
       {/* Photo lightbox */}
-      {lightboxUrl && (
-        <div
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90"
-          onClick={() => setLightboxUrl(null)}
-        >
-          <button
-            type="button"
-            onClick={() => setLightboxUrl(null)}
-            className="absolute top-4 right-4 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
-            aria-label="Close"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={lightboxUrl}
-            alt="Full size photo"
-            className="max-w-[90vw] max-h-[85vh] rounded-2xl object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
+      {lightbox && (
+        <PhotoLightbox
+          photos={lightbox.photos}
+          onClose={() => setLightbox(null)}
+        />
       )}
     </div>
   )
