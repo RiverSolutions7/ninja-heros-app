@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import {
   DndContext,
   DragEndEvent,
@@ -24,8 +23,6 @@ import ComponentPickerModal from './ComponentPickerModal'
 import { PhotoLightbox } from '@/app/components/ui/PhotoLightbox'
 import { WeekStrip } from './WeekStrip'
 import { PlanItemSheet } from './PlanItemSheet'
-
-const PREFILL_KEY = 'ninja-heros-plan-prefill'
 
 const TYPE_META: Record<ComponentType, { label: string; border: string; placeholderBg: string }> = {
   warmup: { label: 'Warmup', border: 'border-l-accent-gold', placeholderBg: 'bg-accent-gold/20' },
@@ -196,7 +193,6 @@ function SortablePlanItem({
 
 /* ── Main component ── */
 export default function TodaysPlanClient() {
-  const router = useRouter()
   const todayIso = new Date().toLocaleDateString('en-CA')
   const [selectedDate, setSelectedDate] = useState<string>(todayIso)
   const [datesWithPlans, setDatesWithPlans] = useState<Set<string>>(new Set())
@@ -208,6 +204,7 @@ export default function TodaysPlanClient() {
   const [loading, setLoading] = useState(true)
   const [lightbox, setLightbox] = useState<{ photos: string[] } | null>(null)
   const [activeSheet, setActiveSheet] = useState<PlanItem | null>(null)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
 
   // @dnd-kit sensors
   const sensors = useSensors(
@@ -251,6 +248,7 @@ export default function TodaysPlanClient() {
   const debouncedSave = useCallback((currentItems: PlanItem[], date: string) => {
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(async () => {
+      setSaveStatus('saving')
       try {
         const plan = await upsertPlanForDate(date, currentItems)
         setPlanId(plan.id)
@@ -259,7 +257,10 @@ export default function TodaysPlanClient() {
         const to = offsetDate(date, 14)
         const dates = await fetchDatesWithPlans(from, to)
         setDatesWithPlans(new Set(dates))
+        setSaveStatus('saved')
+        setTimeout(() => setSaveStatus('idle'), 2500)
       } catch (err) {
+        setSaveStatus('idle')
         console.error('Failed to save plan:', err)
       }
     }, 500)
@@ -347,13 +348,6 @@ export default function TodaysPlanClient() {
     return lines.join('\n')
   }
 
-  function handleSaveToLibrary() {
-    try {
-      sessionStorage.setItem(PREFILL_KEY, JSON.stringify(items))
-    } catch { /* ignore */ }
-    router.push('/library/new')
-  }
-
   const headerTitle = selectedDate === todayIso ? "Today's Plan" : formatDisplayDate(selectedDate)
 
   if (!mounted) return null
@@ -369,6 +363,11 @@ export default function TodaysPlanClient() {
             <span className="w-1.5 h-1.5 rounded-full bg-accent-fire inline-block opacity-60" />
             Just Tumble · Ninja H.E.R.O.S.
           </p>
+          {saveStatus !== 'idle' && (
+            <p className={['text-[11px] mt-1', saveStatus === 'saved' ? 'text-accent-green' : 'text-text-dim'].join(' ')}>
+              {saveStatus === 'saving' ? 'Saving…' : '✓ Saved'}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {items.length > 0 && (
@@ -433,15 +432,6 @@ export default function TodaysPlanClient() {
           </svg>
           Add to Plan
         </button>
-        {items.length > 0 && (
-          <button
-            type="button"
-            onClick={handleSaveToLibrary}
-            className="inline-flex items-center gap-1.5 border border-bg-border text-text-muted font-heading text-sm px-4 py-3.5 rounded-xl active:scale-95 transition-all hover:bg-white/5 min-h-[52px]"
-          >
-            Save
-          </button>
-        )}
       </div>
 
       {/* Loading state */}
