@@ -5,11 +5,10 @@ import { createPortal } from 'react-dom'
 import { supabase } from '@/app/lib/supabase'
 import type { ComponentRow, ComponentType, CurriculumRow } from '@/app/lib/database.types'
 
-const TYPE_FILTERS: { label: string; value: ComponentType | 'all' }[] = [
-  { label: 'All', value: 'all' },
-  { label: 'Warmup', value: 'warmup' },
-  { label: 'Station', value: 'station' },
-  { label: 'Game', value: 'game' },
+const TYPE_FILTERS: { label: string; value: ComponentType }[] = [
+  { label: 'Warmups', value: 'warmup' },
+  { label: 'Stations', value: 'station' },
+  { label: 'Games', value: 'game' },
 ]
 
 const TYPE_PLACEHOLDER: Record<ComponentType, string> = {
@@ -33,12 +32,11 @@ interface ComponentPickerModalProps {
 export default function ComponentPickerModal({ onSelect, onClose, existingIds }: ComponentPickerModalProps) {
   const [components, setComponents] = useState<ComponentRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [typeFilter, setTypeFilter] = useState<ComponentType | 'all'>('all')
+  const [typeFilter, setTypeFilter] = useState<ComponentType>('warmup')
   const [curriculumFilter, setCurriculumFilter] = useState('')
   const [search, setSearch] = useState('')
   const [curriculums, setCurriculums] = useState<CurriculumRow[]>([])
   const [mounted, setMounted] = useState(false)
-  const [justAddedId, setJustAddedId] = useState<string | null>(null)
 
   useEffect(() => {
     setMounted(true)
@@ -59,7 +57,7 @@ export default function ComponentPickerModal({ onSelect, onClose, existingIds }:
   }, [])
 
   let filtered = components
-  if (typeFilter !== 'all') filtered = filtered.filter((c) => c.type === typeFilter)
+  filtered = filtered.filter((c) => c.type === typeFilter)
   if (curriculumFilter) filtered = filtered.filter((c) => c.curriculum === curriculumFilter)
   if (search) {
     const q = search.toLowerCase()
@@ -67,9 +65,8 @@ export default function ComponentPickerModal({ onSelect, onClose, existingIds }:
   }
 
   function handleItemSelect(component: ComponentRow) {
+    if (existingIds?.has(component.id)) return
     onSelect(component)
-    setJustAddedId(component.id)
-    setTimeout(() => setJustAddedId(null), 1200)
   }
 
   if (!mounted) return null
@@ -113,42 +110,41 @@ export default function ComponentPickerModal({ onSelect, onClose, existingIds }:
         />
       </div>
 
-      {/* Type filter tabs + Curriculum dropdown */}
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-bg-border flex-shrink-0">
-        <div className="flex gap-1 flex-1">
-          {TYPE_FILTERS.map((f) => (
-            <button
-              key={f.value}
-              type="button"
-              onClick={() => setTypeFilter(f.value)}
-              className={[
-                'px-3 py-1.5 rounded-lg text-sm font-heading transition-all',
-                typeFilter === f.value
-                  ? 'bg-accent-fire text-white shadow-glow-fire'
-                  : 'text-text-muted hover:text-text-primary hover:bg-white/5',
-              ].join(' ')}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-        <div className="relative flex-shrink-0">
+      {/* Type sub-tabs */}
+      <div className="flex border-b border-bg-border flex-shrink-0">
+        {TYPE_FILTERS.map((f) => (
+          <button
+            key={f.value}
+            type="button"
+            onClick={() => { setTypeFilter(f.value); setSearch('') }}
+            className={[
+              'flex-1 py-2.5 text-sm font-heading transition-colors',
+              typeFilter === f.value
+                ? 'text-text-primary border-b-2 border-accent-fire -mb-px'
+                : 'text-text-dim hover:text-text-muted',
+            ].join(' ')}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Curriculum filter */}
+      <div className="px-4 py-2 border-b border-bg-border flex-shrink-0">
+        <div className="relative">
           <select
             value={curriculumFilter}
             onChange={(e) => setCurriculumFilter(e.target.value)}
-            className="appearance-none cursor-pointer bg-bg-input border border-bg-border rounded-lg pl-2 pr-6 py-1.5 text-xs text-text-muted focus:outline-none focus:border-accent-fire/50 transition-colors"
+            className="w-full appearance-none cursor-pointer bg-bg-input border border-bg-border rounded-lg pl-3 pr-7 py-2 text-sm text-text-muted focus:outline-none focus:border-accent-fire/50 transition-colors"
           >
-            <option value="">Curriculum</option>
+            <option value="">All Curriculums</option>
             {curriculums.map((c) => (
               <option key={c.age_group} value={c.age_group}>{c.label}</option>
             ))}
           </select>
           <svg
-            className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-text-dim pointer-events-none"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-dim pointer-events-none"
+            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
           >
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
           </svg>
@@ -168,16 +164,18 @@ export default function ComponentPickerModal({ onSelect, onClose, existingIds }:
         ) : (
           <ul>
             {filtered.map((component) => {
-              const isJustAdded = justAddedId === component.id
-              const alreadyInPlan = existingIds?.has(component.id) ?? false
+              const inPlan = existingIds?.has(component.id) ?? false
               return (
                 <li key={component.id}>
                   <button
                     type="button"
                     onClick={() => handleItemSelect(component)}
+                    disabled={inPlan}
                     className={[
-                      'w-full flex items-center gap-3 px-4 py-3.5 border-b border-bg-border/50 hover:bg-white/5 active:bg-white/10 transition-colors text-left',
-                      isJustAdded ? 'bg-accent-green/10' : '',
+                      'w-full flex items-center gap-3 px-4 py-3.5 border-b border-bg-border/50 transition-colors text-left',
+                      inPlan
+                        ? 'bg-accent-green/5 cursor-default'
+                        : 'hover:bg-white/5 active:bg-white/10',
                     ].join(' ')}
                   >
                     <div className={['flex-shrink-0 w-14 h-14 rounded-xl overflow-hidden', TYPE_PLACEHOLDER[component.type]].join(' ')}>
@@ -187,18 +185,21 @@ export default function ComponentPickerModal({ onSelect, onClose, existingIds }:
                       ) : null}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-heading text-text-primary text-sm truncate">{component.title}</p>
+                      <p className={['font-heading text-sm truncate', inPlan ? 'text-text-dim' : 'text-text-primary'].join(' ')}>
+                        {component.title}
+                      </p>
                       {component.curriculum && (
                         <p className="text-text-dim text-xs mt-0.5 truncate">{component.curriculum}</p>
                       )}
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      {isJustAdded ? (
-                        <svg className="w-5 h-5 text-accent-green" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                        </svg>
-                      ) : alreadyInPlan ? (
-                        <span className="text-xs text-text-dim">Added</span>
+                      {inPlan ? (
+                        <div className="flex items-center gap-1.5">
+                          <svg className="w-4 h-4 text-accent-green" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span className="text-xs text-accent-green font-heading">In plan</span>
+                        </div>
                       ) : (
                         <>
                           {component.duration_minutes && (
