@@ -27,7 +27,9 @@ interface PlanItemSheetProps {
 
 export function PlanItemSheet({ item, planDate, onSaveNote, onDurationChange, onClose }: PlanItemSheetProps) {
   const [visible, setVisible] = useState(false)
-  const [noteText, setNoteText] = useState(item.coachNote ?? '')
+  // Pre-fill with existing coach note, or fall back to library description as a starting point
+  const [noteText, setNoteText] = useState(item.coachNote ?? item.component.description ?? '')
+  const [saved, setSaved] = useState(false)
   const [lightbox, setLightbox] = useState<{ photos: string[]; index: number } | null>(null)
   // Local copy of duration so stepper updates feel instant
   const [localDuration, setLocalDuration] = useState<number | null>(item.durationMinutes ?? null)
@@ -64,6 +66,9 @@ export function PlanItemSheet({ item, planDate, onSaveNote, onDurationChange, on
       startRecording()
     } else if (voiceState === 'recording') {
       stopRecording()
+      // Show raw transcript immediately so coach sees what was heard
+      if (transcript) setNoteText(transcript)
+      // Then replace with Claude-formatted bullets
       const structured = await parseNote()
       if (structured) setNoteText(structured)
     }
@@ -71,7 +76,11 @@ export function PlanItemSheet({ item, planDate, onSaveNote, onDurationChange, on
 
   function handleSave() {
     onSaveNote(item.localId, noteText)
-    handleClose()
+    setSaved(true)
+    setTimeout(() => {
+      setVisible(false)
+      setTimeout(onClose, 300)
+    }, 700)
   }
 
   function handleDurationStep(delta: number) {
@@ -194,13 +203,6 @@ export function PlanItemSheet({ item, planDate, onSaveNote, onDurationChange, on
             </p>
           </div>
 
-          {/* Description */}
-          {item.component.description && (
-            <div className="px-4 mt-3">
-              <p className="text-sm text-text-muted leading-relaxed">{item.component.description}</p>
-            </div>
-          )}
-
           {/* Equipment */}
           {item.component.equipment && (
             <div className="px-4 mt-2 flex items-start gap-2">
@@ -314,9 +316,15 @@ export function PlanItemSheet({ item, planDate, onSaveNote, onDurationChange, on
             <button
               type="button"
               onClick={handleSave}
-              className="mt-3 w-full bg-accent-fire text-white font-heading text-base py-3.5 rounded-xl active:scale-[0.98] transition-all shadow-glow-fire min-h-[52px]"
+              disabled={saved}
+              className={[
+                'mt-3 w-full font-heading text-base py-3.5 rounded-xl transition-all min-h-[52px]',
+                saved
+                  ? 'bg-accent-green/20 border border-accent-green/40 text-accent-green'
+                  : 'bg-accent-fire text-white shadow-glow-fire active:scale-[0.98]',
+              ].join(' ')}
             >
-              Save Note
+              {saved ? '✓ Note Saved!' : 'Save Note'}
             </button>
 
             {/* Close */}
