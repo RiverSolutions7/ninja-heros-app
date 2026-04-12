@@ -19,17 +19,29 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import type { ComponentRow, ComponentType, PlanItem } from '@/app/lib/database.types'
-import { createPlan, fetchLatestPlan, updatePlanItems } from '@/app/lib/planQueries'
+import { fetchPlanForDate, upsertPlanForDate, fetchDatesWithPlans } from '@/app/lib/planQueries'
 import ComponentPickerModal from './ComponentPickerModal'
 import { PhotoLightbox } from '@/app/components/ui/PhotoLightbox'
+import { WeekStrip } from './WeekStrip'
+import { PlanItemSheet } from './PlanItemSheet'
 
 const PREFILL_KEY = 'ninja-heros-plan-prefill'
-const HOURS_48 = 48 * 60 * 60 * 1000
 
 const TYPE_META: Record<ComponentType, { label: string; border: string; placeholderBg: string }> = {
   warmup: { label: 'Warmup', border: 'border-l-accent-gold', placeholderBg: 'bg-accent-gold/20' },
   station: { label: 'Station', border: 'border-l-accent-blue', placeholderBg: 'bg-accent-blue/20' },
   game: { label: 'Game', border: 'border-l-accent-green', placeholderBg: 'bg-accent-green/20' },
+}
+
+function offsetDate(isoDate: string, days: number): string {
+  const d = new Date(isoDate + 'T00:00:00')
+  d.setDate(d.getDate() + days)
+  return d.toLocaleDateString('en-CA')
+}
+
+function formatDisplayDate(isoDate: string): string {
+  const d = new Date(isoDate + 'T00:00:00')
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
 /* ── Sortable plan item ── */
@@ -38,11 +50,13 @@ function SortablePlanItem({
   onRemove,
   onDurationChange,
   onPhotoTap,
+  onRowTap,
 }: {
   item: PlanItem
   onRemove: (localId: string) => void
   onDurationChange: (localId: string, value: string) => void
   onPhotoTap: (photos: string[]) => void
+  onRowTap: (item: PlanItem) => void
 }) {
   const meta = TYPE_META[item.component.type]
   const photos = (item.component.photos ?? []).filter(Boolean)
@@ -103,15 +117,24 @@ function SortablePlanItem({
         )}
       </div>
 
-      {/* Content */}
-      <div className="flex-1 min-w-0">
+      {/* Content — tappable to open sheet */}
+      <button
+        type="button"
+        onClick={() => onRowTap(item)}
+        className="flex-1 min-w-0 text-left active:opacity-70 transition-opacity"
+      >
         <p className="font-heading text-[15px] text-text-primary leading-snug truncate">
           {item.component.title}
         </p>
-        {subMeta && (
+        {item.coachNote && (
+          <p className="text-[11px] text-accent-fire/70 mt-0.5 truncate">
+            {item.coachNote.split('\n')[0]}
+          </p>
+        )}
+        {!item.coachNote && subMeta && (
           <p className="text-xs text-text-dim mt-0.5 truncate">{subMeta}</p>
         )}
-      </div>
+      </button>
 
       {/* Duration stepper chip */}
       <div className="flex items-center flex-shrink-0">
@@ -174,6 +197,9 @@ function SortablePlanItem({
 /* ── Main component ── */
 export default function TodaysPlanClient() {
   const router = useRouter()
+  const todayIso = new Date().toLocaleDateString('en-CA')
+  const [selectedDate, setSelectedDate] = useState<string>(todayIso)
+  const [datesWithPlans, setDatesWithPlans] = useState<Set<string>>(new Set())
   const [planId, setPlanId] = useState<string | null>(null)
   const [items, setItems] = useState<PlanItem[]>([])
   const [showPicker, setShowPicker] = useState(false)
@@ -181,6 +207,7 @@ export default function TodaysPlanClient() {
   const [mounted, setMounted] = useState(false)
   const [loading, setLoading] = useState(true)
   const [lightbox, setLightbox] = useState<{ photos: string[] } | null>(null)
+  const [activeSheet, setActiveSheet] = useState<PlanItem | null>(null)
 
   // @dnd-kit sensors
   const sensors = useSensors(
@@ -192,36 +219,46 @@ export default function TodaysPlanClient() {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const itemsRef = useRef(items)
   useEffect(() => { itemsRef.current = items }, [items])
+  const selectedDateRef = useRef(selectedDate)
+  useEffect(() => { selectedDateRef.current = selectedDate }, [selectedDate])
 
-
-  // Load latest plan from Supabase on mount
+  // Load plan for selected date
   useEffect(() => {
     setMounted(true)
-    fetchLatestPlan()
-      .then((plan) => {
+    setLoading(true)
+    setItems([])
+    setPlanId(null)
+
+    const from = offsetDate(selectedDate, -14)
+    const to = offsetDate(selectedDate, 14)
+
+    Promise.all([
+      fetchPlanForDate(selectedDate),
+      fetchDatesWithPlans(from, to),
+    ])
+      .then(([plan, dates]) => {
         if (plan) {
-          const age = Date.now() - new Date(plan.updated_at).getTime()
-          if (age < HOURS_48) {
-            setPlanId(plan.id)
-            setItems(plan.items ?? [])
-          }
+          setPlanId(plan.id)
+          setItems(plan.items ?? [])
         }
+        setDatesWithPlans(new Set(dates))
       })
       .catch(() => { /* ignore */ })
       .finally(() => setLoading(false))
-  }, [])
+  }, [selectedDate]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Debounced save to Supabase
-  const debouncedSave = useCallback((currentItems: PlanItem[], currentPlanId: string | null) => {
+  const debouncedSave = useCallback((currentItems: PlanItem[], date: string) => {
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(async () => {
       try {
-        if (currentPlanId) {
-          await updatePlanItems(currentPlanId, currentItems)
-        } else if (currentItems.length > 0) {
-          const plan = await createPlan(currentItems)
-          setPlanId(plan.id)
-        }
+        const plan = await upsertPlanForDate(date, currentItems)
+        setPlanId(plan.id)
+        // Refresh dot indicators after save
+        const from = offsetDate(date, -14)
+        const to = offsetDate(date, 14)
+        const dates = await fetchDatesWithPlans(from, to)
+        setDatesWithPlans(new Set(dates))
       } catch (err) {
         console.error('Failed to save plan:', err)
       }
@@ -231,7 +268,7 @@ export default function TodaysPlanClient() {
   // Save whenever items change (after mount + initial load)
   useEffect(() => {
     if (!mounted || loading) return
-    debouncedSave(items, planId)
+    debouncedSave(items, selectedDate)
   }, [items, mounted, loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleSelect(component: ComponentRow) {
@@ -241,6 +278,7 @@ export default function TodaysPlanClient() {
         localId: crypto.randomUUID(),
         component,
         durationMinutes: component.duration_minutes ?? null,
+        coachNote: null,
       },
     ])
   }
@@ -253,6 +291,12 @@ export default function TodaysPlanClient() {
     const num = value === '' ? null : parseInt(value, 10)
     setItems((prev) =>
       prev.map((i) => (i.localId === localId ? { ...i, durationMinutes: isNaN(num as number) ? null : num } : i))
+    )
+  }
+
+  function handleNoteChange(localId: string, note: string) {
+    setItems((prev) =>
+      prev.map((i) => (i.localId === localId ? { ...i, coachNote: note || null } : i))
     )
   }
 
@@ -282,7 +326,7 @@ export default function TodaysPlanClient() {
     const text = buildShareText()
     if (navigator.share) {
       try {
-        await navigator.share({ title: 'Today\'s Plan', text, url })
+        await navigator.share({ title: "Today's Plan", text, url })
         return
       } catch { /* fall through to clipboard */ }
     }
@@ -294,7 +338,8 @@ export default function TodaysPlanClient() {
   }
 
   function buildShareText() {
-    const lines = ['Today\'s Plan']
+    const dateLabel = selectedDate === todayIso ? "Today's Plan" : formatDisplayDate(selectedDate)
+    const lines = [dateLabel]
     items.forEach((item, idx) => {
       const dur = item.durationMinutes ? ` — ${item.durationMinutes} min` : ''
       lines.push(`${idx + 1}. ${item.component.title}${dur}`)
@@ -309,6 +354,8 @@ export default function TodaysPlanClient() {
     router.push('/library/new')
   }
 
+  const headerTitle = selectedDate === todayIso ? "Today's Plan" : formatDisplayDate(selectedDate)
+
   if (!mounted) return null
 
   return (
@@ -317,7 +364,7 @@ export default function TodaysPlanClient() {
       <div className="relative flex items-center justify-between px-4 pt-4 pb-3">
         <div className="absolute inset-x-0 -top-4 h-24 bg-gradient-to-b from-accent-fire/[0.07] to-transparent pointer-events-none rounded-2xl -z-10" />
         <div>
-          <h1 className="font-heading text-2xl text-text-primary leading-none">Today&apos;s Plan</h1>
+          <h1 className="font-heading text-2xl text-text-primary leading-none">{headerTitle}</h1>
           <p className="flex items-center gap-1.5 text-text-dim text-xs mt-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-accent-fire inline-block opacity-60" />
             Just Tumble · Ninja H.E.R.O.S.
@@ -350,9 +397,17 @@ export default function TodaysPlanClient() {
         </div>
       </div>
 
+      {/* Week strip calendar */}
+      <WeekStrip
+        selectedDate={selectedDate}
+        todayIso={todayIso}
+        datesWithPlans={datesWithPlans}
+        onSelectDate={setSelectedDate}
+      />
+
       {/* Send to Coaches — prominent share button */}
       {items.length > 0 && planId && (
-        <div className="px-4 pb-2">
+        <div className="px-4 pt-3 pb-2">
           <button
             type="button"
             onClick={handleShare}
@@ -400,10 +455,16 @@ export default function TodaysPlanClient() {
       {!loading && items.length === 0 && (
         <div className="text-center py-16 px-4">
           <p className="font-heading text-text-muted text-lg">No plan yet</p>
-          <p className="text-text-dim text-sm mt-2">Tap + Add to Plan to start building your day</p>
-          <Link href="/library" className="text-text-dim text-xs mt-3 inline-block underline underline-offset-2 hover:text-text-muted transition-colors">
-            Add components from the Library tab first
-          </Link>
+          <p className="text-text-dim text-sm mt-2">
+            {selectedDate === todayIso
+              ? 'Tap + Add to Plan to start building your day'
+              : `No plan saved for ${formatDisplayDate(selectedDate)}`}
+          </p>
+          {selectedDate === todayIso && (
+            <Link href="/library" className="text-text-dim text-xs mt-3 inline-block underline underline-offset-2 hover:text-text-muted transition-colors">
+              Add components from the Library tab first
+            </Link>
+          )}
         </div>
       )}
 
@@ -419,6 +480,7 @@ export default function TodaysPlanClient() {
                   onRemove={handleRemove}
                   onDurationChange={handleDurationChange}
                   onPhotoTap={(photos) => setLightbox({ photos })}
+                  onRowTap={(i) => setActiveSheet(i)}
                 />
               ))}
             </ul>
@@ -453,6 +515,19 @@ export default function TodaysPlanClient() {
         <PhotoLightbox
           photos={lightbox.photos}
           onClose={() => setLightbox(null)}
+        />
+      )}
+
+      {/* Plan item detail / coach note sheet */}
+      {activeSheet && (
+        <PlanItemSheet
+          item={activeSheet}
+          onSaveNote={(localId, note) => {
+            handleNoteChange(localId, note)
+            // Keep activeSheet in sync with updated note preview
+            setActiveSheet((prev) => prev ? { ...prev, coachNote: note || null } : null)
+          }}
+          onClose={() => setActiveSheet(null)}
         />
       )}
     </div>

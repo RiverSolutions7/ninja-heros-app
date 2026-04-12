@@ -254,12 +254,14 @@ export interface PlanItem {
   localId: string
   component: ComponentRow
   durationMinutes: number | null
+  coachNote: string | null
 }
 
 export interface PlanRow {
   id: string
   title: string | null
   curriculum: string | null
+  plan_date: string | null
   items: PlanItem[]
   created_at: string
   updated_at: string

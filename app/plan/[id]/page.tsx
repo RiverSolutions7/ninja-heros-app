@@ -87,46 +87,56 @@ export default async function SharePlanPage({ params }: Props) {
                 const firstPhoto = item.component.photos?.[0] ?? null
 
                 return (
-                  <div key={item.localId} className="card overflow-hidden flex items-center gap-3 p-3">
-                    {/* Number badge */}
-                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-accent-fire/15 flex items-center justify-center">
-                      <span className="font-heading text-sm text-accent-fire">{idx + 1}</span>
-                    </div>
+                  <div key={item.localId} className="card overflow-hidden p-3">
+                    {/* Main row */}
+                    <div className="flex items-center gap-3">
+                      {/* Number badge */}
+                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-accent-fire/15 flex items-center justify-center">
+                        <span className="font-heading text-sm text-accent-fire">{idx + 1}</span>
+                      </div>
 
-                    {/* Photo */}
-                    <div className="flex-shrink-0 w-14 h-14 rounded-xl overflow-hidden">
-                      {firstPhoto ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={firstPhoto} alt={item.component.title} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className={['w-full h-full', meta.bg].join(' ')} />
+                      {/* Photo */}
+                      <div className="flex-shrink-0 w-14 h-14 rounded-xl overflow-hidden">
+                        {firstPhoto ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={firstPhoto} alt={item.component.title} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className={['w-full h-full', meta.bg].join(' ')} />
+                        )}
+                      </div>
+
+                      {/* Details */}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-heading text-[15px] text-text-primary leading-snug truncate">
+                          {item.component.title}
+                        </p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className={['text-xs font-semibold', meta.accent].join(' ')}>
+                            {meta.label}
+                          </span>
+                          {item.component.curriculum && (
+                            <>
+                              <span className="text-text-dim/30 text-xs">·</span>
+                              <span className="text-xs text-text-dim truncate">{item.component.curriculum}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Duration */}
+                      {item.durationMinutes && (
+                        <div className="flex-shrink-0 text-right">
+                          <span className="text-sm text-text-muted font-heading">{item.durationMinutes}</span>
+                          <span className="text-xs text-text-dim ml-0.5">m</span>
+                        </div>
                       )}
                     </div>
 
-                    {/* Details */}
-                    <div className="flex-1 min-w-0">
-                      <p className="font-heading text-[15px] text-text-primary leading-snug truncate">
-                        {item.component.title}
+                    {/* Coach note */}
+                    {item.coachNote && (
+                      <p className="text-xs text-text-dim mt-2 whitespace-pre-line leading-relaxed border-t border-bg-border/50 pt-2">
+                        {item.coachNote}
                       </p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className={['text-xs font-semibold', meta.accent].join(' ')}>
-                          {meta.label}
-                        </span>
-                        {item.component.curriculum && (
-                          <>
-                            <span className="text-text-dim/30 text-xs">·</span>
-                            <span className="text-xs text-text-dim truncate">{item.component.curriculum}</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Duration */}
-                    {item.durationMinutes && (
-                      <div className="flex-shrink-0 text-right">
-                        <span className="text-sm text-text-muted font-heading">{item.durationMinutes}</span>
-                        <span className="text-xs text-text-dim ml-0.5">m</span>
-                      </div>
                     )}
                   </div>
                 )

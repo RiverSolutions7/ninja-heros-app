@@ -6,10 +6,12 @@ export function PhotoLightbox({
   photos,
   initialIndex = 0,
   onClose,
+  zIndex = 10000,
 }: {
   photos: string[]
   initialIndex?: number
   onClose: () => void
+  zIndex?: number
 }) {
   const [index, setIndex] = useState(initialIndex)
   const touchStartX = useRef<number | null>(null)
@@ -38,7 +40,7 @@ export function PhotoLightbox({
 
   return (
     <div
-      style={{ zIndex: 10000 }}
+      style={{ zIndex }}
       className="fixed inset-0 flex items-center justify-center bg-black/95"
       onClick={onClose}
       onTouchStart={handleTouchStart}
