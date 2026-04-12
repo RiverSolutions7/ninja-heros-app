@@ -19,17 +19,34 @@ export async function upsertPlanForDate(
   date: string,
   items: PlanItem[]
 ): Promise<PlanRow> {
-  const { data, error } = await supabase
-    .from('plans')
-    .upsert(
-      { plan_date: date, items: JSON.parse(JSON.stringify(items)) },
-      { onConflict: 'plan_date' }
-    )
-    .select()
-    .single()
+  const serialized = JSON.parse(JSON.stringify(items))
 
-  if (error) throw error
-  return data as PlanRow
+  // Supabase upsert with onConflict requires a full unique constraint, not a
+  // partial index. Use fetch-then-insert-or-update to avoid that limitation.
+  const { data: existing } = await supabase
+    .from('plans')
+    .select('id')
+    .eq('plan_date', date)
+    .maybeSingle()
+
+  if (existing) {
+    const { data, error } = await supabase
+      .from('plans')
+      .update({ items: serialized })
+      .eq('id', existing.id)
+      .select()
+      .single()
+    if (error) throw error
+    return data as PlanRow
+  } else {
+    const { data, error } = await supabase
+      .from('plans')
+      .insert({ plan_date: date, items: serialized })
+      .select()
+      .single()
+    if (error) throw error
+    return data as PlanRow
+  }
 }
 
 export async function fetchDatesWithPlans(

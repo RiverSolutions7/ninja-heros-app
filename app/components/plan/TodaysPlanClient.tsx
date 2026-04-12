@@ -178,6 +178,7 @@ export default function TodaysPlanClient() {
   const [lightbox, setLightbox] = useState<{ photos: string[] } | null>(null)
   const [activeSheet, setActiveSheet] = useState<PlanItem | null>(null)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const [saveButtonState, setSaveButtonState] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [classLength, setClassLength] = useState<number | null>(null)
   const [showLengthPicker, setShowLengthPicker] = useState(false)
 
@@ -299,6 +300,31 @@ export default function TodaysPlanClient() {
   function handleClearPlan() {
     setItems([])
     setPlanId(null)
+    setSaveStatus('idle')
+    setSaveButtonState('idle')
+  }
+
+  async function handleExplicitSave() {
+    if (items.length === 0) return
+    // Cancel any pending auto-save — we're saving right now
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    setSaveButtonState('saving')
+    setSaveStatus('saving')
+    try {
+      const plan = await upsertPlanForDate(selectedDate, items)
+      setPlanId(plan.id)
+      const from = offsetDate(selectedDate, -14)
+      const to = offsetDate(selectedDate, 14)
+      const dates = await fetchDatesWithPlans(from, to)
+      setDatesWithPlans(new Set(dates))
+      setSaveButtonState('saved')
+      setSaveStatus('saved')
+      setTimeout(() => setSaveButtonState('idle'), 2500)
+    } catch (err) {
+      console.error('Failed to save plan:', err)
+      setSaveButtonState('idle')
+      setSaveStatus('idle')
+    }
   }
 
   // @dnd-kit reorder
@@ -460,21 +486,6 @@ export default function TodaysPlanClient() {
         </div>
       )}
 
-      {/* Send to Coaches — prominent share button */}
-      {items.length > 0 && planId && (
-        <div className="px-4 pt-3 pb-2">
-          <button
-            type="button"
-            onClick={handleShare}
-            className="w-full inline-flex items-center justify-center gap-2 border border-accent-fire/40 text-accent-fire font-heading text-sm px-4 py-3 rounded-xl active:scale-95 transition-all hover:bg-accent-fire/5 min-h-[48px]"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-            </svg>
-            Send to Coaches
-          </button>
-        </div>
-      )}
 
       {/* Action buttons row */}
       <div className="px-4 py-3 flex gap-2">
@@ -538,9 +549,49 @@ export default function TodaysPlanClient() {
         </DndContext>
       )}
 
+      {/* Save to Calendar — explicit save action */}
+      {!loading && items.length > 0 && (
+        <div className="px-4 pt-4 pb-2">
+          <button
+            type="button"
+            onClick={handleExplicitSave}
+            disabled={saveButtonState === 'saving'}
+            className={[
+              'w-full font-heading text-base py-4 rounded-xl transition-all min-h-[56px] flex items-center justify-center gap-2',
+              saveButtonState === 'saved'
+                ? 'bg-accent-green/20 border border-accent-green/40 text-accent-green'
+                : saveButtonState === 'saving'
+                ? 'bg-accent-fire/60 text-white cursor-not-allowed'
+                : 'bg-accent-fire text-white shadow-glow-fire active:scale-[0.98]',
+            ].join(' ')}
+          >
+            {saveButtonState === 'saving' ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white/50 border-t-white rounded-full animate-spin" />
+                Saving…
+              </>
+            ) : saveButtonState === 'saved' ? (
+              <>
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                Saved to {selectedDate === todayIso ? 'Today' : formatDisplayDate(selectedDate)}
+              </>
+            ) : (
+              <>
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                Save to {selectedDate === todayIso ? 'Today' : formatDisplayDate(selectedDate)}
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
       {/* Clear plan */}
       {!loading && items.length > 0 && (
-        <div className="px-4 pt-3 flex justify-center">
+        <div className="px-4 pb-3 flex justify-center gap-4">
           <button
             type="button"
             onClick={handleClearPlan}
@@ -548,6 +599,15 @@ export default function TodaysPlanClient() {
           >
             Clear plan
           </button>
+          {planId && (
+            <button
+              type="button"
+              onClick={handleShare}
+              className="text-sm text-text-dim/50 hover:text-text-dim transition-colors"
+            >
+              Share link
+            </button>
+          )}
         </div>
       )}
 
