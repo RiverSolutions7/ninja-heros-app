@@ -126,10 +126,10 @@ export default function EditComponentPage() {
       startRecording()
     } else if (voiceState === 'recording' && component) {
       stopRecording()
-      const result = await parseComponent(component.type, availableSkills)
+      const result = await parseComponent(component.type, component.type === 'station' ? availableSkills : [])
       if (result.title) { setTitle(result.title); setTitleError(null) }
       if (result.description) setDescription(result.description)
-      if (result.skills.length > 0) setSkills((prev) => {
+      if (component.type === 'station' && result.skills.length > 0) setSkills((prev) => {
         const merged = new Set([...prev, ...result.skills])
         return Array.from(merged)
       })
@@ -506,10 +506,11 @@ export default function EditComponentPage() {
         </>
       )}
 
-      {/* ── SKILLS ────────────────────────────────────────── */}
-      <SectionDivider label="Skills" />
-
-      <div className="flex flex-wrap gap-2">
+      {/* ── SKILLS (stations only) ────────────────────────── */}
+      {component.type === 'station' && (
+      <>
+        <SectionDivider label="Skills" />
+        <div className="flex flex-wrap gap-2">
         {availableSkills.map((skill) => (
           <SkillChip key={skill} skill={skill} selected={skills.includes(skill)} onToggle={toggleSkill} />
         ))}
@@ -557,7 +558,9 @@ export default function EditComponentPage() {
           </button>
         )}
       </div>
-      {addSkillError && <p className="text-xs text-red-400 mt-1">{addSkillError}</p>}
+        {addSkillError && <p className="text-xs text-red-400 mt-1">{addSkillError}</p>}
+      </>
+      )}
 
       {/* ── OPTIONAL: Video Link ───────────────────────────── */}
       {!showVideoLink && (

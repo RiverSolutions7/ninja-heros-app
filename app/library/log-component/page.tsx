@@ -234,10 +234,10 @@ export default function LogComponentPage() {
       startRecording()
     } else if (voiceState === 'recording') {
       stopRecording()
-      const result = await parseComponent(componentType!, availableSkills)
+      const result = await parseComponent(componentType!, componentType === 'station' ? availableSkills : [])
       if (result.title) { setTitle(result.title); setTitleError(null) }
       if (result.description) setDescription(result.description)
-      if (result.skills.length > 0) setSkills(result.skills)
+      if (componentType === 'station' && result.skills.length > 0) setSkills(result.skills)
     }
   }
 
@@ -663,8 +663,9 @@ export default function LogComponentPage() {
         className="field-textarea resize-none leading-relaxed"
       />
 
-      {/* ── SKILLS ────────────────────────────────────────── */}
-      <SectionDivider label="Skills" />
+      {/* ── SKILLS (stations only) ────────────────────────── */}
+      {ct === 'station' && (
+      <><SectionDivider label="Skills" />
 
       <div className="flex flex-wrap gap-2">
         {availableSkills.map((skill) => (
@@ -706,6 +707,7 @@ export default function LogComponentPage() {
         )}
       </div>
       {addSkillError && <p className="text-xs text-red-400 mt-1">{addSkillError}</p>}
+      </>)}
 
       {/* ── OPTIONAL: Video Link ───────────────────────────── */}
       {!showVideoLink && (
