@@ -23,6 +23,15 @@ export async function addPlanToCalendar(
   return data as PlanRow
 }
 
+/** Move an existing plan to a new calendar date. */
+export async function movePlanToDate(id: string, newDate: string): Promise<void> {
+  const { error } = await supabase
+    .from('plans')
+    .update({ plan_date: newDate })
+    .eq('id', id)
+  if (error) throw error
+}
+
 /** Permanently delete a plan by ID. Throws on error. */
 export async function deletePlanById(id: string): Promise<void> {
   const { error } = await supabase

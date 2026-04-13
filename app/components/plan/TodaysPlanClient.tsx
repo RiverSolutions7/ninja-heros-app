@@ -19,7 +19,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import type { ComponentRow, ComponentType, PlanItem, PlanRow } from '@/app/lib/database.types'
-import { addPlanToCalendar, updatePlanById, fetchDatesWithPlans, fetchPlansForDate, deletePlanById } from '@/app/lib/planQueries'
+import { addPlanToCalendar, updatePlanById, fetchDatesWithPlans, fetchPlansForDate, deletePlanById, movePlanToDate } from '@/app/lib/planQueries'
 import ComponentPickerModal from './ComponentPickerModal'
 import { PhotoLightbox } from '@/app/components/ui/PhotoLightbox'
 import { PlanItemSheet } from './PlanItemSheet'
@@ -280,6 +280,113 @@ function SortablePlanItem({
   )
 }
 
+// ── View-mode plan item (read-only, no drag handle or remove button) ──────────
+
+function ViewPlanItem({
+  item,
+  index,
+  onPhotoTap,
+  onRowTap,
+}: {
+  item: PlanItem
+  index: number
+  onPhotoTap: (photos: string[]) => void
+  onRowTap: (item: PlanItem) => void
+}) {
+  const meta = TYPE_META[item.component.type]
+  const photos = (item.component.photos ?? []).filter(Boolean)
+  const firstPhoto = photos[0] ?? null
+  const description = item.coachNote
+    ? { text: item.coachNote, isNote: true }
+    : item.component.description
+    ? { text: item.component.description, isNote: false }
+    : null
+
+  return (
+    <li
+      className={[
+        'flex items-start gap-3 px-4 py-3.5 border-b border-bg-border/50 last:border-b-0 border-l-4',
+        meta.border,
+      ].join(' ')}
+    >
+      <span className="text-[11px] font-heading text-text-dim/40 w-4 text-right flex-shrink-0 tabular-nums mt-1">
+        {index + 1}
+      </span>
+
+      {/* Thumbnail */}
+      <div className="relative flex-shrink-0">
+        <button
+          type="button"
+          onClick={() => photos.length > 0 && onPhotoTap(photos)}
+          className={[
+            'w-14 h-14 rounded-xl overflow-hidden block',
+            firstPhoto ? 'cursor-pointer active:opacity-80 transition-opacity' : 'cursor-default',
+          ].join(' ')}
+          tabIndex={firstPhoto ? 0 : -1}
+          aria-label={firstPhoto ? `View photos of ${item.component.title}` : undefined}
+        >
+          {firstPhoto ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={firstPhoto} alt={item.component.title} className="w-full h-full object-cover" />
+          ) : (
+            <TypePlaceholder type={item.component.type} className="w-full h-full rounded-xl" />
+          )}
+        </button>
+        {photos.length > 1 && (
+          <span className="absolute bottom-1 right-1 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">
+            +{photos.length - 1}
+          </span>
+        )}
+      </div>
+
+      {/* Content — tappable to open PlanItemSheet */}
+      <button
+        type="button"
+        onClick={() => onRowTap(item)}
+        className="flex-1 min-w-0 text-left active:opacity-70 transition-opacity"
+      >
+        <div className="flex items-start gap-1.5">
+          <div className="flex-1 min-w-0">
+            <p className="font-heading text-[15px] text-text-primary leading-snug">
+              {item.component.title}
+            </p>
+            <div className="flex items-center gap-1 mt-0.5">
+              <span className={['text-[10px] font-heading uppercase tracking-wide flex-shrink-0', meta.textColor].join(' ')}>
+                {meta.label}
+              </span>
+              {item.component.curriculum && (
+                <>
+                  <span className="text-text-dim/30 text-[10px] flex-shrink-0">·</span>
+                  <span className="text-[10px] text-text-dim truncate">{item.component.curriculum}</span>
+                </>
+              )}
+            </div>
+            {description && (
+              <p className={[
+                'text-[13px] mt-1.5 leading-relaxed line-clamp-3',
+                description.isNote ? 'text-accent-fire/80' : 'text-text-dim',
+              ].join(' ')}>
+                {description.text}
+              </p>
+            )}
+            {item.component.equipment && (
+              <p className="text-[11px] text-text-dim/60 mt-1">
+                <span className="font-heading uppercase tracking-wide text-[9px] text-text-dim/40 mr-1">Gear</span>
+                {item.component.equipment}
+              </p>
+            )}
+          </div>
+          {item.durationMinutes ? (
+            <span className="text-[11px] text-text-dim font-heading flex-shrink-0 mt-0.5">
+              {item.durationMinutes}m
+            </span>
+          ) : null}
+        </div>
+      </button>
+    </li>
+  )
+}
+
 // ── Draft card ────────────────────────────────────────────────────────────────
 
 function DraftCard({
@@ -400,6 +507,9 @@ export default function TodaysPlanClient() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving'>('idle')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const [planViewMode, setPlanViewMode] = useState<'view' | 'edit'>('view')
+  const [showPlanOptions, setShowPlanOptions] = useState(false)
+  const [showMoveCalendar, setShowMoveCalendar] = useState(false)
   const [classLength, setClassLength] = useState<number | null>(null)
   const [showLengthPicker, setShowLengthPicker] = useState(false)
 
@@ -447,6 +557,7 @@ export default function TodaysPlanClient() {
         if (recovered.length > 0) {
           setItems(recovered)
           setViewMode('editing') // restore editing view
+          setPlanViewMode('edit')
         }
       }
     } catch { /* ignore */ }
@@ -603,8 +714,11 @@ export default function TodaysPlanClient() {
   // ── View mode handlers ────────────────────────────────────────────────────────
 
   function handleBackToDashboard() {
-    setViewMode('dashboard')
-    // Items stay in state / session storage — not cleared
+    if (planViewMode === 'edit' && editingPlanId) {
+      setPlanViewMode('view') // editing a saved plan → back to view, not dashboard
+    } else {
+      setViewMode('dashboard') // view mode or new draft → back to dashboard
+    }
   }
 
   // ── Draft handlers ────────────────────────────────────────────────────────────
@@ -639,6 +753,17 @@ export default function TodaysPlanClient() {
     try {
       const plan = await addPlanToCalendar(date, items, title || undefined)
       setLastAddedPlanId(plan.id)
+      setEditingPlanId(plan.id)
+      setEditingPlanLabel(formatDisplayDate(date))
+      setPlanViewMode('view')
+      if (activeDraftIdRef.current) {
+        setDrafts(prev => {
+          const next = prev.filter(d => d.id !== activeDraftIdRef.current)
+          saveDraftsToStorage(next)
+          return next
+        })
+        activeDraftIdRef.current = null
+      }
       const from = offsetDate(todayIso, -180)
       const to = offsetDate(todayIso, 180)
       const dates = await fetchDatesWithPlans(from, to)
@@ -666,6 +791,7 @@ export default function TodaysPlanClient() {
     setLastAddedPlanId(null)
     setShowDraftNameInput(false)
     try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
+    setPlanViewMode('view')
     setViewMode('editing')
   }
 
@@ -678,6 +804,7 @@ export default function TodaysPlanClient() {
     setLastAddedPlanId(null)
     setSaveStatus('idle')
     setShowDraftNameInput(false)
+    setPlanViewMode('edit')
     setViewMode('editing')
   }
 
@@ -718,6 +845,7 @@ export default function TodaysPlanClient() {
     setDraftNameValue('')
     activeDraftIdRef.current = null
     try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
+    setPlanViewMode('view')
     setViewMode('dashboard')
   }
 
@@ -737,11 +865,31 @@ export default function TodaysPlanClient() {
       setEditingPlanLabel(null)
       setItems([])
       setSaveStatus('idle')
+      setPlanViewMode('view')
       setViewMode('dashboard')
     } catch (err) {
       console.error('Delete failed:', err)
     } finally {
       setDeleteLoading(false)
+    }
+  }
+
+  async function handleMovePlan(newDate: string) {
+    if (!editingPlanId) return
+    try {
+      await movePlanToDate(editingPlanId, newDate)
+      const from = offsetDate(todayIso, -180)
+      const to = offsetDate(todayIso, 180)
+      const dates = await fetchDatesWithPlans(from, to)
+      setDatesWithPlans(new Set(dates))
+      setSelectedDayPlans(prev => prev.filter(p => p.id !== editingPlanId))
+      setEditingPlanLabel(formatDisplayDate(newDate))
+      setSelectedDayIso(newDate)
+      setShowMoveCalendar(false)
+      setShowPlanOptions(false)
+      setPlanViewMode('view')
+    } catch (err) {
+      console.error('Move failed:', err)
     }
   }
 
@@ -806,7 +954,7 @@ export default function TodaysPlanClient() {
           <p className="flex items-center gap-1.5 text-text-dim text-xs mt-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-accent-fire inline-block opacity-60" />
             {viewMode === 'editing' && editingPlanLabel
-              ? `Editing: ${editingPlanLabel}`
+              ? planViewMode === 'view' ? editingPlanLabel : `Editing: ${editingPlanLabel}`
               : formatSelectedDayLabel(selectedDayIso, todayIso)}
           </p>
           {viewMode === 'editing' && saveStatus === 'saving' && (
@@ -827,6 +975,17 @@ export default function TodaysPlanClient() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           </button>
+          {/* Edit button — view sub-mode of a saved plan */}
+          {viewMode === 'editing' && planViewMode === 'view' && editingPlanId && (
+            <button
+              type="button"
+              onClick={() => setPlanViewMode('edit')}
+              className="inline-flex items-center border border-bg-border text-text-muted font-heading text-sm px-3 py-2 rounded-xl active:scale-95 transition-all hover:bg-white/5 min-h-[40px]"
+              aria-label="Edit plan"
+            >
+              Edit
+            </button>
+          )}
           {/* Share — editing mode only */}
           {viewMode === 'editing' && sharePlanId && items.length > 0 && (
             <button
@@ -1017,7 +1176,7 @@ export default function TodaysPlanClient() {
                   </p>
                   <button
                     type="button"
-                    onClick={() => setViewMode('editing')}
+                    onClick={() => { setPlanViewMode('edit'); setViewMode('editing') }}
                     className="inline-flex items-center gap-1.5 text-sm font-heading text-accent-fire border border-accent-fire/30 rounded-xl px-4 py-2.5 hover:bg-accent-fire/10 transition-colors active:scale-[0.97]"
                   >
                     + Plan {isToday ? 'today' : formatShortDay(selectedDayIso)}
@@ -1054,7 +1213,7 @@ export default function TodaysPlanClient() {
           <div className="px-4 mt-5 pb-2">
             <button
               type="button"
-              onClick={() => { setViewMode('editing'); setShowPicker(true) }}
+              onClick={() => { setPlanViewMode('edit'); setViewMode('editing'); setShowPicker(true) }}
               className="w-full inline-flex items-center justify-center gap-2 bg-accent-fire text-white font-heading text-base py-4 rounded-2xl shadow-glow-fire active:scale-[0.98] transition-all min-h-[56px]"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -1072,22 +1231,24 @@ export default function TodaysPlanClient() {
       {/* ════════════════════════════════════════════ */}
       {!loading && viewMode === 'editing' && (
         <>
-          {/* ── Add Component button ── */}
-          <div className="px-4 py-3">
-            <button
-              type="button"
-              onClick={() => setShowPicker(true)}
-              className="w-full inline-flex items-center justify-center gap-2 bg-accent-fire text-white font-heading text-base px-4 py-3.5 rounded-xl active:scale-95 transition-all shadow-glow-fire min-h-[52px]"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-              {items.length === 0 ? 'Add Component' : 'Add Component'}
-            </button>
-          </div>
+          {/* ── Add Component button (edit mode only) ── */}
+          {planViewMode === 'edit' && (
+            <div className="px-4 py-3">
+              <button
+                type="button"
+                onClick={() => setShowPicker(true)}
+                className="w-full inline-flex items-center justify-center gap-2 bg-accent-fire text-white font-heading text-base px-4 py-3.5 rounded-xl active:scale-95 transition-all shadow-glow-fire min-h-[52px]"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                Add Component
+              </button>
+            </div>
+          )}
 
-          {/* ── Empty state for new plan ── */}
-          {items.length === 0 && (
+          {/* ── Empty state for new plan (edit mode only) ── */}
+          {items.length === 0 && planViewMode === 'edit' && (
             <div className="text-center py-10 px-6">
               <p className="font-heading text-text-muted text-lg">Build today's class</p>
               <p className="text-text-dim text-sm mt-2 leading-relaxed">
@@ -1096,6 +1257,18 @@ export default function TodaysPlanClient() {
               <Link href="/library" className="text-text-dim text-xs mt-3 inline-block underline underline-offset-2 hover:text-text-muted transition-colors">
                 Build your component library first
               </Link>
+            </div>
+          )}
+
+          {/* ── Inline draft name (new drafts only, edit mode) ── */}
+          {planViewMode === 'edit' && !editingPlanId && (
+            <div className="px-4 pt-2 pb-3">
+              <input
+                value={draftNameValue}
+                onChange={e => setDraftNameValue(e.target.value)}
+                placeholder="Name this plan (optional)"
+                className="w-full bg-transparent text-text-primary text-sm font-heading border-b border-bg-border/40 pb-1.5 placeholder:text-text-dim/30 focus:outline-none focus:border-accent-fire/40 transition-colors"
+              />
             </div>
           )}
 
@@ -1155,24 +1328,38 @@ export default function TodaysPlanClient() {
             </div>
           )}
 
-          {/* ── Plan items (sortable) ── */}
+          {/* ── Plan items ── */}
           {items.length > 0 && (
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-              <SortableContext items={items.map(i => i.localId)} strategy={verticalListSortingStrategy}>
-                <ul className="mx-4 bg-bg-card rounded-2xl overflow-hidden border border-bg-border">
-                  {items.map((item, idx) => (
-                    <SortablePlanItem
-                      key={item.localId}
-                      item={item}
-                      index={idx}
-                      onRemove={handleRemove}
-                      onPhotoTap={photos => setLightbox({ photos })}
-                      onRowTap={i => setActiveSheet(i)}
-                    />
-                  ))}
-                </ul>
-              </SortableContext>
-            </DndContext>
+            planViewMode === 'view' ? (
+              <ul className="mx-4 bg-bg-card rounded-2xl overflow-hidden border border-bg-border">
+                {items.map((item, idx) => (
+                  <ViewPlanItem
+                    key={item.localId}
+                    item={item}
+                    index={idx}
+                    onPhotoTap={photos => setLightbox({ photos })}
+                    onRowTap={i => setActiveSheet(i)}
+                  />
+                ))}
+              </ul>
+            ) : (
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <SortableContext items={items.map(i => i.localId)} strategy={verticalListSortingStrategy}>
+                  <ul className="mx-4 bg-bg-card rounded-2xl overflow-hidden border border-bg-border">
+                    {items.map((item, idx) => (
+                      <SortablePlanItem
+                        key={item.localId}
+                        item={item}
+                        index={idx}
+                        onRemove={handleRemove}
+                        onPhotoTap={photos => setLightbox({ photos })}
+                        onRowTap={i => setActiveSheet(i)}
+                      />
+                    ))}
+                  </ul>
+                </SortableContext>
+              </DndContext>
+            )
           )}
 
           {/* ── Type summary ── */}
@@ -1182,54 +1369,49 @@ export default function TodaysPlanClient() {
             </p>
           )}
 
-          {/* ── Draft name input ── */}
-          {items.length > 0 && showDraftNameInput && (
-            <div className="px-4 pt-4 pb-1">
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={draftNameValue}
-                  onChange={e => setDraftNameValue(e.target.value)}
-                  placeholder="Name this draft (optional) — e.g. Coach Mike"
-                  maxLength={50}
-                  autoFocus
-                  onKeyDown={e => e.key === 'Enter' && confirmSaveDraft()}
-                  className="flex-1 bg-bg-input border border-bg-border rounded-xl px-3 py-2.5 text-sm text-text-primary placeholder:text-text-dim focus:outline-none focus:border-accent-fire/50 transition-colors"
-                />
-                <button
-                  type="button"
-                  onClick={() => { setShowDraftNameInput(false); setDraftNameValue('') }}
-                  className="text-text-dim/40 hover:text-text-muted transition-colors px-2"
-                  aria-label="Cancel"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* ── Two-button action row ── */}
-          {items.length > 0 && (
-            <div className="px-4 pt-3 pb-2 flex gap-2">
-              <button
-                type="button"
-                onClick={showDraftNameInput ? confirmSaveDraft : handleSaveDraftTap}
-                className="flex-1 py-3.5 rounded-xl border border-bg-border font-heading text-sm text-text-muted hover:border-accent-fire/30 active:scale-[0.98] transition-all min-h-[52px]"
-              >
-                {draftSavedFeedback ? '✓ Draft Saved' : showDraftNameInput ? 'Confirm Save' : 'Save Draft'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowDatePicker(true)}
-                className="flex-1 py-3.5 rounded-xl bg-accent-fire text-white font-heading text-sm shadow-glow-fire active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 min-h-[52px]"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                Add to Calendar
-              </button>
+          {/* ── Bottom action row (edit mode only) ── */}
+          {items.length > 0 && planViewMode === 'edit' && (
+            <div className="px-4 pt-3 pb-2">
+              {editingPlanId ? (
+                /* Saved plan: Options + Done Editing */
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowPlanOptions(true)}
+                    className="py-3.5 px-4 rounded-xl border border-bg-border font-heading text-sm text-text-muted hover:bg-white/5 active:scale-[0.98] transition-all min-h-[52px]"
+                  >
+                    ··· Options
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPlanViewMode('view')}
+                    className="flex-1 py-3.5 rounded-xl border border-bg-border font-heading text-sm text-text-muted hover:border-accent-fire/30 active:scale-[0.98] transition-all min-h-[52px]"
+                  >
+                    Done Editing
+                  </button>
+                </div>
+              ) : (
+                /* New draft: Save Draft + Add to Calendar */
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={showDraftNameInput ? confirmSaveDraft : handleSaveDraftTap}
+                    className="flex-1 py-3.5 rounded-xl border border-bg-border font-heading text-sm text-text-muted hover:border-accent-fire/30 active:scale-[0.98] transition-all min-h-[52px]"
+                  >
+                    {draftSavedFeedback ? '✓ Draft Saved' : showDraftNameInput ? 'Confirm Save' : 'Save Draft'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowDatePicker(true)}
+                    className="flex-1 py-3.5 rounded-xl bg-accent-fire text-white font-heading text-sm shadow-glow-fire active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 min-h-[52px]"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    Add to Calendar
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -1240,28 +1422,15 @@ export default function TodaysPlanClient() {
             </p>
           )}
 
-          {/* ── Editing indicator ── */}
-          {editingPlanId && (
+          {/* ── Editing indicator (edit mode only) ── */}
+          {editingPlanId && planViewMode === 'edit' && (
             <p className="text-center text-[11px] text-text-dim/50 px-4 pb-1">
               Editing saved plan · changes auto-save
             </p>
           )}
 
-          {/* ── Delete saved plan ── */}
-          {editingPlanId && (
-            <div className="px-4 pb-2 flex justify-center">
-              <button
-                type="button"
-                onClick={() => setShowDeleteConfirm(true)}
-                className="text-sm text-red-400/70 hover:text-red-400 transition-colors"
-              >
-                Delete Plan
-              </button>
-            </div>
-          )}
-
-          {/* ── Clear & back to dashboard ── */}
-          {items.length > 0 && (
+          {/* ── Clear & start over (edit mode, new drafts only) ── */}
+          {items.length > 0 && planViewMode === 'edit' && !editingPlanId && (
             <div className="px-4 pb-4 flex justify-center gap-4">
               <button
                 type="button"
@@ -1336,6 +1505,61 @@ export default function TodaysPlanClient() {
           }}
           onClose={() => setShowCalendar(false)}
         />
+      )}
+
+      {/* ── Move plan to a different date ── */}
+      {showMoveCalendar && (
+        <PlanCalendarSheet
+          mode="save"
+          todayIso={todayIso}
+          datesWithPlans={datesWithPlans}
+          onSaveToCal={async (date) => {
+            setShowMoveCalendar(false)
+            await handleMovePlan(date)
+          }}
+          onLoadPlan={() => {}}
+          onClose={() => setShowMoveCalendar(false)}
+        />
+      )}
+
+      {/* ── Plan Options sheet ── */}
+      {showPlanOptions && createPortal(
+        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+          <div className="fixed inset-0 bg-black/60" onClick={() => setShowPlanOptions(false)} />
+          <div className="relative bg-bg-card rounded-t-2xl p-6 pb-10 flex flex-col gap-3">
+            <div className="w-10 h-1 bg-bg-border rounded-full mx-auto mb-1" />
+            <p className="font-heading text-base text-text-primary text-center mb-1">Plan Options</p>
+            <button
+              type="button"
+              onClick={() => { setShowPlanOptions(false); setShowMoveCalendar(true) }}
+              className="w-full py-3.5 rounded-xl border border-bg-border font-heading text-sm text-text-muted hover:bg-white/5 active:scale-[0.98] transition-all text-left px-4 min-h-[52px]"
+            >
+              Move to a different date
+            </button>
+            <button
+              type="button"
+              onClick={() => { setShowPlanOptions(false); setShowDatePicker(true) }}
+              className="w-full py-3.5 rounded-xl border border-bg-border font-heading text-sm text-text-muted hover:bg-white/5 active:scale-[0.98] transition-all text-left px-4 min-h-[52px]"
+            >
+              Duplicate to another date
+            </button>
+            <button
+              type="button"
+              onClick={() => { setShowPlanOptions(false); setShowDeleteConfirm(true) }}
+              className="w-full py-3.5 rounded-xl border border-red-500/30 font-heading text-sm text-red-400 hover:bg-red-500/10 active:scale-[0.98] transition-all text-left px-4 min-h-[52px]"
+            >
+              Delete this plan
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowPlanOptions(false)}
+              className="w-full py-3.5 rounded-xl border border-bg-border font-heading text-sm text-text-dim hover:bg-white/5 active:scale-[0.98] transition-all min-h-[48px] mt-1"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* ── Delete confirmation sheet ── */}
