@@ -1161,30 +1161,15 @@ export default function TodaysPlanClient() {
               </div>
             )}
 
-            {!selectedDayLoading && selectedDayPlans.length === 0 && (() => {
-              const isPast = selectedDayIso < todayIso
-              const isToday = selectedDayIso === todayIso
-              if (isPast) return (
-                <p className="text-xs text-text-dim/50 text-center py-8">Nothing was logged for this day</p>
-              )
-              return (
-                <div className="text-center py-8">
-                  <p className="text-xs text-text-dim/50 mb-3">
-                    {isToday ? 'No class today' : 'Nothing scheduled yet'}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => { setPlanViewMode('edit'); setViewMode('editing') }}
-                    className="inline-flex items-center gap-1.5 text-sm font-heading text-accent-fire border border-accent-fire/30 rounded-xl px-4 py-2.5 hover:bg-accent-fire/10 transition-colors active:scale-[0.97]"
-                  >
-                    + Plan {isToday ? 'today' : formatShortDay(selectedDayIso)}
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                    </svg>
-                  </button>
-                </div>
-              )
-            })()}
+            {!selectedDayLoading && selectedDayPlans.length === 0 && (
+              <p className="text-xs text-text-dim/50 text-center py-8">
+                {selectedDayIso < todayIso
+                  ? 'Nothing was logged for this day'
+                  : selectedDayIso === todayIso
+                    ? 'No class today'
+                    : 'Nothing scheduled yet'}
+              </p>
+            )}
           </div>
 
           {/* ── Drafts ── */}
@@ -1217,7 +1202,9 @@ export default function TodaysPlanClient() {
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
               </svg>
-              Start New Plan
+              {selectedDayIso === todayIso
+                ? 'Start New Plan'
+                : `Plan for ${formatShortDay(selectedDayIso)}`}
             </button>
           </div>
 
