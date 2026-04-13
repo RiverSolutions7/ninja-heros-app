@@ -5,12 +5,14 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/app/lib/supabase'
 import { uploadStationPhoto } from '@/app/lib/uploadPhoto'
+import { uploadComponentVideo } from '@/app/lib/uploadVideo'
 import type { ComponentType, CurriculumRow } from '@/app/lib/database.types'
 import SkillChip from '@/app/components/skills/SkillChip'
 import Toast from '@/app/components/ui/Toast'
 import VideoCapture from '@/app/components/ui/VideoCapture'
-import { uploadComponentVideo } from '@/app/lib/uploadVideo'
 import { useVoiceNote } from '@/app/hooks/useVoiceNote'
+
+// ── Shared helpers ────────────────────────────────────────────────────────────
 
 interface PhotoDraft {
   localId: string
@@ -36,24 +38,87 @@ function SectionDivider({ label }: { label: string }) {
   )
 }
 
-const TYPE_LABELS: Record<ComponentType, string> = {
-  game: 'Game',
-  warmup: 'Warmup',
-  station: 'Station',
+// ── Type config ────────────────────────────────────────────────────────────────
+
+const TYPE_GATE_CONFIG: Record<ComponentType, {
+  label: string
+  sublabel: string
+  cardBorder: string
+  cardBg: string
+  textColor: string
+  icon: React.ReactNode
+}> = {
+  game: {
+    label: 'Game',
+    sublabel: 'Group activity or competition',
+    cardBorder: 'border-accent-green/30 hover:border-accent-green/60',
+    cardBg: 'hover:bg-accent-green/5',
+    textColor: 'text-accent-green',
+    icon: (
+      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+      </svg>
+    ),
+  },
+  warmup: {
+    label: 'Warmup',
+    sublabel: 'Movement prep or exercise sequence',
+    cardBorder: 'border-accent-gold/30 hover:border-accent-gold/60',
+    cardBg: 'hover:bg-accent-gold/5',
+    textColor: 'text-accent-gold',
+    icon: (
+      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+      </svg>
+    ),
+  },
+  station: {
+    label: 'Station / Drill',
+    sublabel: 'Skill-specific obstacle or drill',
+    cardBorder: 'border-accent-blue/30 hover:border-accent-blue/60',
+    cardBg: 'hover:bg-accent-blue/5',
+    textColor: 'text-accent-blue',
+    icon: (
+      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+      </svg>
+    ),
+  },
 }
 
-const MIC_IDLE_LABEL = 'Tap to name and describe this component'
-const MIC_RECORDING_LABEL = 'Listening… tap again to stop'
+const TYPE_BADGE: Record<ComponentType, string> = {
+  game:    'bg-accent-green/10 text-accent-green border-accent-green/25',
+  warmup:  'bg-accent-gold/10 text-accent-gold border-accent-gold/25',
+  station: 'bg-accent-blue/10 text-accent-blue border-accent-blue/25',
+}
+
+// ── Voice labels ───────────────────────────────────────────────────────────────
+
+const MIC_IDLE_LABEL       = 'Tap to name and describe this component'
+const MIC_RECORDING_LABEL  = 'Listening… tap again to stop'
 const MIC_PROCESSING_LABEL = 'Processing…'
-const MIC_DONE_LABEL = 'Name, description & skills filled ✓'
+const MIC_DONE_LABEL       = 'Name, description & skills filled ✓'
+
+// ── Gate step type ─────────────────────────────────────────────────────────────
+
+type GateStep = 'loading' | 'curriculum' | 'type' | 'form'
+
+// ── Page component ─────────────────────────────────────────────────────────────
 
 export default function LogComponentPage() {
   const router = useRouter()
 
-  const [componentType, setComponentType] = useState<ComponentType>('game')
+  // Gate
+  const [gateStep, setGateStep] = useState<GateStep>('loading')
+  const [curriculums, setCurriculums] = useState<CurriculumRow[]>([])
+
+  // Core metadata (set by gates)
+  const [curriculum, setCurriculum] = useState('')
+  const [componentType, setComponentType] = useState<ComponentType | null>(null)
+
+  // Form fields
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  const [curriculum, setCurriculum] = useState('')
   const [skills, setSkills] = useState<string[]>([])
   const [photos, setPhotos] = useState<PhotoDraft[]>([])
 
@@ -62,16 +127,18 @@ export default function LogComponentPage() {
   const [videoFile, setVideoFile] = useState<File | null>(null)
   const [videoPreview, setVideoPreview] = useState<string | null>(null)
 
-  // Optional extras
+  // Optional video link
   const [showVideoLink, setShowVideoLink] = useState(false)
   const [videoLink, setVideoLink] = useState('')
 
-  const [curriculums, setCurriculums] = useState<CurriculumRow[]>([])
+  // Skills
   const [availableSkills, setAvailableSkills] = useState<string[]>([])
   const [addingSkill, setAddingSkill] = useState(false)
   const [newSkillName, setNewSkillName] = useState('')
   const [addSkillSaving, setAddSkillSaving] = useState(false)
   const [addSkillError, setAddSkillError] = useState<string | null>(null)
+
+  // Submit
   const [submitting, setSubmitting] = useState(false)
   const [titleError, setTitleError] = useState<string | null>(null)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
@@ -91,26 +158,7 @@ export default function LogComponentPage() {
     reset: resetVoice,
   } = useVoiceNote()
 
-  async function handleMicToggle() {
-    if (voiceState === 'idle' || voiceState === 'error' || voiceState === 'done') {
-      resetVoice()
-      startRecording()
-    } else if (voiceState === 'recording') {
-      stopRecording()
-      const result = await parseComponent(componentType, availableSkills)
-      if (result.title) { setTitle(result.title); setTitleError(null) }
-      if (result.description) setDescription(result.description)
-      if (result.skills.length > 0) setSkills(result.skills)
-    }
-  }
-
-  const micColors: Record<string, string> = {
-    idle: 'bg-bg-card border-2 border-bg-border text-text-muted hover:border-accent-fire/40 hover:text-accent-fire',
-    recording: 'bg-accent-fire text-white shadow-glow-fire',
-    processing: 'bg-bg-card border-2 border-bg-border text-text-dim',
-    done: 'bg-accent-green/15 border-2 border-accent-green/50 text-accent-green',
-    error: 'bg-red-900/20 border-2 border-red-500/40 text-red-400',
-  }
+  // ── Load curricula ───────────────────────────────────────────────────────────
 
   useEffect(() => {
     supabase
@@ -121,9 +169,20 @@ export default function LogComponentPage() {
       .then(({ data }) => {
         const rows = (data as CurriculumRow[]) ?? []
         setCurriculums(rows)
-        if (rows.length > 0) setCurriculum(rows[0].age_group)
+        if (rows.length === 1) {
+          // Auto-select single curriculum, skip to type gate
+          setCurriculum(rows[0].age_group)
+          setGateStep('type')
+        } else if (rows.length === 0) {
+          // No curricula configured — skip to type gate
+          setGateStep('type')
+        } else {
+          setGateStep('curriculum')
+        }
       })
   }, [])
+
+  // ── Load skills when curriculum is set ──────────────────────────────────────
 
   useEffect(() => {
     if (!curriculum) return
@@ -135,10 +194,65 @@ export default function LogComponentPage() {
       .then(({ data }) => setAvailableSkills(data?.map((r) => r.name) ?? []))
   }, [curriculum])
 
+  // ── Gate handlers ────────────────────────────────────────────────────────────
+
+  function selectCurriculum(ageGroup: string) {
+    setCurriculum(ageGroup)
+    setSkills([])
+    setGateStep('type')
+  }
+
+  function selectType(type: ComponentType) {
+    setComponentType(type)
+    setGateStep('form')
+  }
+
+  function backFromTypeGate() {
+    if (curriculums.length > 1) {
+      setGateStep('curriculum')
+    } else {
+      router.push('/library?view=components')
+    }
+  }
+
+  function changeCurriculum() {
+    if (curriculums.length > 1) {
+      setSkills([])
+      setGateStep('curriculum')
+    }
+  }
+
+  function changeType() {
+    setGateStep('type')
+  }
+
+  // ── Voice ────────────────────────────────────────────────────────────────────
+
+  async function handleMicToggle() {
+    if (voiceState === 'idle' || voiceState === 'error' || voiceState === 'done') {
+      resetVoice()
+      startRecording()
+    } else if (voiceState === 'recording') {
+      stopRecording()
+      const result = await parseComponent(componentType!, availableSkills)
+      if (result.title) { setTitle(result.title); setTitleError(null) }
+      if (result.description) setDescription(result.description)
+      if (result.skills.length > 0) setSkills(result.skills)
+    }
+  }
+
+  const micColors: Record<string, string> = {
+    idle:       'bg-bg-card border-2 border-bg-border text-text-muted hover:border-accent-fire/40 hover:text-accent-fire',
+    recording:  'bg-accent-fire text-white shadow-glow-fire',
+    processing: 'bg-bg-card border-2 border-bg-border text-text-dim',
+    done:       'bg-accent-green/15 border-2 border-accent-green/50 text-accent-green',
+    error:      'bg-red-900/20 border-2 border-red-500/40 text-red-400',
+  }
+
+  // ── Skills ───────────────────────────────────────────────────────────────────
+
   function toggleSkill(skill: string) {
-    setSkills((prev) =>
-      prev.includes(skill) ? prev.filter((s) => s !== skill) : [...prev, skill]
-    )
+    setSkills((prev) => prev.includes(skill) ? prev.filter((s) => s !== skill) : [...prev, skill])
   }
 
   async function handleAddSkill() {
@@ -146,9 +260,7 @@ export default function LogComponentPage() {
     if (!trimmed) return
     setAddSkillSaving(true)
     setAddSkillError(null)
-    const { error: err } = await supabase
-      .from('skills')
-      .insert({ name: trimmed, age_group: curriculum })
+    const { error: err } = await supabase.from('skills').insert({ name: trimmed, age_group: curriculum })
     if (err && err.code !== '23505') {
       setAddSkillError(err.message)
       setAddSkillSaving(false)
@@ -161,12 +273,16 @@ export default function LogComponentPage() {
     setAddSkillSaving(false)
   }
 
+  // ── Photos ───────────────────────────────────────────────────────────────────
+
   function handleFileAdded(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     setPhotos((prev) => [...prev, { localId: crypto.randomUUID(), file, preview: URL.createObjectURL(file) }])
     e.target.value = ''
   }
+
+  // ── Submit ───────────────────────────────────────────────────────────────────
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -185,7 +301,7 @@ export default function LogComponentPage() {
       }
 
       const { error: insertErr } = await supabase.from('components').insert({
-        type: componentType,
+        type: componentType!,
         title: title.trim(),
         curriculum: curriculum || null,
         description: description.trim() || null,
@@ -204,20 +320,173 @@ export default function LogComponentPage() {
     }
   }
 
+  // ── Derived display values ────────────────────────────────────────────────────
+
+  const curriculumLabel = curriculums.find((c) => c.age_group === curriculum)?.label ?? curriculum
+  const typeConfig = componentType ? TYPE_GATE_CONFIG[componentType] : null
+
+  // ── Render: Loading ───────────────────────────────────────────────────────────
+
+  if (gateStep === 'loading') {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="w-8 h-8 border-2 border-accent-fire border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  // ── Render: Curriculum gate ───────────────────────────────────────────────────
+
+  if (gateStep === 'curriculum') {
+    return (
+      <div className="pb-6">
+        <div className="flex items-center gap-3 mb-10 pt-2">
+          <Link
+            href="/library?view=components"
+            className="flex items-center justify-center w-8 h-8 rounded-lg text-text-dim hover:text-text-primary hover:bg-white/5 transition-colors -ml-1"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </Link>
+        </div>
+
+        <div className="mb-8">
+          <h1 className="font-heading text-2xl text-text-primary leading-tight mb-1">
+            Who is this for?
+          </h1>
+          <p className="text-sm text-text-dim">Choose a curriculum to continue</p>
+        </div>
+
+        <div className="space-y-3">
+          {curriculums.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => selectCurriculum(c.age_group)}
+              className="w-full flex items-center gap-4 px-5 py-4 bg-bg-card border border-bg-border rounded-2xl hover:border-accent-fire/40 hover:bg-accent-fire/5 active:scale-[0.98] transition-all text-left"
+            >
+              <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-accent-fire/10 flex items-center justify-center">
+                <svg className="w-5 h-5 text-accent-fire" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-heading text-base text-text-primary">{c.label}</p>
+                {c.age_group && (
+                  <p className="text-xs text-text-dim mt-0.5">{c.age_group}</p>
+                )}
+              </div>
+              <svg className="w-5 h-5 text-text-dim/40 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // ── Render: Type gate ─────────────────────────────────────────────────────────
+
+  if (gateStep === 'type') {
+    return (
+      <div className="pb-6">
+        <div className="flex items-center gap-3 mb-10 pt-2">
+          <button
+            type="button"
+            onClick={backFromTypeGate}
+            className="flex items-center justify-center w-8 h-8 rounded-lg text-text-dim hover:text-text-primary hover:bg-white/5 transition-colors -ml-1"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          {curriculum && curriculumLabel && (
+            <span className="text-xs font-heading text-text-dim uppercase tracking-wide">
+              {curriculumLabel}
+            </span>
+          )}
+        </div>
+
+        <div className="mb-8">
+          <h1 className="font-heading text-2xl text-text-primary leading-tight mb-1">
+            What are you logging?
+          </h1>
+          <p className="text-sm text-text-dim">Choose a type to continue</p>
+        </div>
+
+        <div className="space-y-3">
+          {(Object.entries(TYPE_GATE_CONFIG) as [ComponentType, typeof TYPE_GATE_CONFIG[ComponentType]][]).map(([type, cfg]) => (
+            <button
+              key={type}
+              type="button"
+              onClick={() => selectType(type)}
+              className={[
+                'w-full flex items-center gap-4 px-5 py-4 bg-bg-card border rounded-2xl active:scale-[0.98] transition-all text-left',
+                cfg.cardBorder,
+                cfg.cardBg,
+              ].join(' ')}
+            >
+              <div className={['flex-shrink-0 w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center', cfg.textColor].join(' ')}>
+                {cfg.icon}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className={['font-heading text-base', cfg.textColor].join(' ')}>{cfg.label}</p>
+                <p className="text-xs text-text-dim mt-0.5">{cfg.sublabel}</p>
+              </div>
+              <svg className="w-5 h-5 text-text-dim/40 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // ── Render: Full form ─────────────────────────────────────────────────────────
+
+  // At this point componentType is guaranteed non-null (gateStep === 'form')
+  const ct = componentType!
+
   return (
     <form onSubmit={handleSubmit} className="pb-6">
 
       {/* Header */}
-      <div className="flex items-center gap-3 mb-6 pt-2">
+      <div className="flex items-center gap-2 mb-6 pt-2">
         <Link
           href="/library?view=components"
-          className="flex items-center justify-center w-8 h-8 rounded-lg text-text-dim hover:text-text-primary hover:bg-white/5 transition-colors -ml-1"
+          className="flex items-center justify-center w-8 h-8 rounded-lg text-text-dim hover:text-text-primary hover:bg-white/5 transition-colors -ml-1 flex-shrink-0"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
         </Link>
-        <h1 className="font-heading text-xl text-text-primary leading-none">Log Component</h1>
+        <h1 className="font-heading text-xl text-text-primary leading-none flex-shrink-0">Log Component</h1>
+
+        {/* Curriculum badge — tappable if multiple curricula */}
+        {curriculumLabel && (
+          <button
+            type="button"
+            onClick={changeCurriculum}
+            className="text-[10px] font-heading uppercase tracking-wide px-2 py-1 rounded-full bg-accent-fire/10 border border-accent-fire/25 text-accent-fire transition-colors hover:bg-accent-fire/20 flex-shrink-0"
+          >
+            {curriculumLabel}
+          </button>
+        )}
+
+        {/* Type badge — always tappable */}
+        <button
+          type="button"
+          onClick={changeType}
+          className={[
+            'text-[10px] font-heading uppercase tracking-wide px-2 py-1 rounded-full border transition-colors flex-shrink-0',
+            TYPE_BADGE[ct],
+          ].join(' ')}
+        >
+          {TYPE_GATE_CONFIG[ct].label}
+        </button>
       </div>
 
       {/* ── MIC HERO ──────────────────────────────────────── */}
@@ -252,16 +521,16 @@ export default function LogComponentPage() {
         </button>
 
         <p className={`text-sm font-semibold text-center leading-snug ${
-          voiceState === 'recording' ? 'text-accent-fire animate-pulse' :
-          voiceState === 'done' ? 'text-accent-green' :
-          voiceState === 'error' ? 'text-red-400' :
+          voiceState === 'recording'  ? 'text-accent-fire animate-pulse' :
+          voiceState === 'done'       ? 'text-accent-green' :
+          voiceState === 'error'      ? 'text-red-400' :
           'text-text-muted'
         }`}>
-          {voiceState === 'recording' && MIC_RECORDING_LABEL}
+          {voiceState === 'recording'  && MIC_RECORDING_LABEL}
           {voiceState === 'processing' && MIC_PROCESSING_LABEL}
-          {voiceState === 'done' && MIC_DONE_LABEL}
-          {voiceState === 'error' && (errorMessage ?? 'Could not process. Try again.')}
-          {voiceState === 'idle' && (voiceSupported ? MIC_IDLE_LABEL : 'Fill in the details below')}
+          {voiceState === 'done'       && MIC_DONE_LABEL}
+          {voiceState === 'error'      && (errorMessage ?? 'Could not process. Try again.')}
+          {voiceState === 'idle'       && (voiceSupported ? MIC_IDLE_LABEL : 'Fill in the details below')}
         </p>
 
         {voiceState === 'recording' && transcript && (
@@ -324,7 +593,7 @@ export default function LogComponentPage() {
 
       {/* ── VIDEO ─────────────────────────────────────────── */}
       {!showVideo ? (
-        <div className="mt-1 mb-1">
+        <div className="mt-3">
           <button
             type="button"
             onClick={() => setShowVideo(true)}
@@ -343,52 +612,25 @@ export default function LogComponentPage() {
             preview={videoPreview}
             onFileSelected={(file, preview) => { setVideoFile(file); setVideoPreview(preview) }}
           />
-          {videoPreview && (
+          {videoPreview ? (
             <button
               type="button"
               onClick={() => { setVideoFile(null); setVideoPreview(null) }}
               className="flex items-center gap-1 text-xs text-red-400/70 hover:text-red-400 mt-2 transition-colors"
             >
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-              Remove video
+              <XIcon /> Remove video
             </button>
-          )}
-          {!videoPreview && (
+          ) : (
             <button
               type="button"
               onClick={() => setShowVideo(false)}
               className="flex items-center gap-1 text-xs text-text-dim/50 hover:text-text-dim mt-2 transition-colors"
             >
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-              Cancel
+              <XIcon /> Cancel
             </button>
           )}
         </>
       )}
-
-      {/* ── TYPE ──────────────────────────────────────────── */}
-      <SectionDivider label="Type" />
-
-      <div className="flex bg-bg-input rounded-xl p-1 border border-bg-border">
-        {(['game', 'warmup', 'station'] as ComponentType[]).map((type) => (
-          <button
-            key={type}
-            type="button"
-            onClick={() => setComponentType(type)}
-            className={`flex-1 py-2 text-sm font-heading rounded-lg transition-all ${
-              componentType === type
-                ? 'bg-accent-fire text-white shadow-md'
-                : 'text-text-dim hover:text-text-muted'
-            }`}
-          >
-            {TYPE_LABELS[type]}
-          </button>
-        ))}
-      </div>
 
       {/* ── NAME ──────────────────────────────────────────── */}
       <SectionDivider label="Name" />
@@ -398,9 +640,9 @@ export default function LogComponentPage() {
         value={title}
         onChange={(e) => { setTitle(e.target.value); setTitleError(null) }}
         placeholder={
-          componentType === 'game' ? 'e.g. Cube Game, Ninja Tag…' :
-          componentType === 'warmup' ? 'e.g. Bear Crawl Circuit…' :
-          'e.g. Box Jump Progression…'
+          ct === 'game'    ? 'e.g. Cube Game, Ninja Tag…' :
+          ct === 'warmup'  ? 'e.g. Bear Crawl Circuit…' :
+                             'e.g. Box Jump Progression…'
         }
         className="field-input text-base"
       />
@@ -413,36 +655,13 @@ export default function LogComponentPage() {
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         placeholder={
-          componentType === 'game' ? 'Rules, setup, how to play…' :
-          componentType === 'warmup' ? 'Exercise sequence, timing, cues…' :
-          'What does the kid do? Any coaching tips?'
+          ct === 'game'    ? 'Rules, setup, how to play…' :
+          ct === 'warmup'  ? 'Exercise sequence, timing, cues…' :
+                             'What does the kid do? Any coaching tips?'
         }
         rows={4}
         className="field-textarea resize-none leading-relaxed"
       />
-
-      {/* ── CURRICULUM ────────────────────────────────────── */}
-      {curriculums.length > 0 && (
-        <>
-          <SectionDivider label="Curriculum" />
-          <div className="flex gap-2">
-            {curriculums.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => { setCurriculum(c.age_group); setSkills([]) }}
-                className={`flex-1 py-2 rounded-full text-xs font-heading transition-all border ${
-                  curriculum === c.age_group
-                    ? 'bg-accent-fire/10 border-accent-fire/40 text-accent-fire'
-                    : 'bg-bg-card border-bg-border text-text-dim hover:border-accent-fire/30 hover:text-text-muted'
-                }`}
-              >
-                {c.label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
 
       {/* ── SKILLS ────────────────────────────────────────── */}
       <SectionDivider label="Skills" />
