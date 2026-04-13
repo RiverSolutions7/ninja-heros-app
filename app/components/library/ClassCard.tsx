@@ -65,6 +65,7 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
               src={photoUrls[0]}
               alt=""
               className="w-full h-full object-cover"
+              onError={(e) => { (e.currentTarget.parentElement as HTMLElement).style.display = 'none' }}
             />
           </div>
         )}
@@ -146,7 +147,7 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
                     <img
                       src={url}
                       alt={`Class photo ${i + 1}`}
-                      className="w-14 h-14 rounded-xl object-cover border border-bg-border shadow-card hover:scale-105 transition-transform duration-200 cursor-pointer"
+                      className="w-24 h-24 rounded-xl object-cover border border-bg-border shadow-card hover:scale-105 transition-transform duration-200 cursor-pointer"
                     />
                   </button>
                 ))}
@@ -241,7 +242,7 @@ export default function ClassCard({ cls, showActions = true, showHandoffRemove =
                                         <img
                                           src={url}
                                           alt={`Station ${stIdx + 1} photo ${photoIdx + 1}`}
-                                          className="w-14 h-14 rounded-xl object-cover border border-bg-border shadow-card hover:scale-105 transition-transform duration-200 cursor-pointer"
+                                          className="w-24 h-24 rounded-xl object-cover border border-bg-border shadow-card hover:scale-105 transition-transform duration-200 cursor-pointer"
                                         />
                                       </button>
                                     ))}
