@@ -55,14 +55,33 @@ interface ComponentCardProps {
   onClick?: () => void
 }
 
+function CameraIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+  )
+}
+
+function VideoIcon() {
+  return (
+    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9A2.25 2.25 0 004.5 18.75z" />
+    </svg>
+  )
+}
+
 export default function ComponentCard({ component, showMenu = false, onClick }: ComponentCardProps) {
   const meta = TYPE_META[component.type]
   const photos = component.photos ?? []
   const firstPhoto = photos[0] ?? null
+  const hasVideo = !!(component.video_link || component.video_url)
 
   // Stations: show photo thumbnail when one exists
-  // Games / Warmups: title + metadata only — no photo, no description body
+  // Games / Warmups: title + metadata only, with subtle media icons if content exists
   const showPhoto = component.type === 'station' && firstPhoto !== null
+  const showMediaBadges = component.type !== 'station' && (photos.length > 0 || hasVideo)
 
   return (
     <div
@@ -110,6 +129,14 @@ export default function ComponentCard({ component, showMenu = false, onClick }: 
             )}
           </div>
         </div>
+
+        {/* Media presence indicators (games & warmups only) */}
+        {showMediaBadges && (
+          <div className="flex items-center gap-1.5 flex-shrink-0 text-text-dim/40">
+            {photos.length > 0 && <CameraIcon />}
+            {hasVideo && <VideoIcon />}
+          </div>
+        )}
 
         {showMenu && (
           <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
