@@ -43,7 +43,7 @@ const TYPE_LABELS: Record<ComponentType, string> = {
 const MIC_IDLE_LABEL = 'Tap to name and describe this component'
 const MIC_RECORDING_LABEL = 'Listening… tap again to stop'
 const MIC_PROCESSING_LABEL = 'Processing…'
-const MIC_DONE_LABEL = 'Name and description filled ✓'
+const MIC_DONE_LABEL = 'Name, description & skills filled ✓'
 
 export default function LogComponentPage() {
   const router = useRouter()
@@ -91,10 +91,10 @@ export default function LogComponentPage() {
       startRecording()
     } else if (voiceState === 'recording') {
       stopRecording()
-      const result = await parseComponent(componentType)
-      if (result.title) setTitle(result.title)
+      const result = await parseComponent(componentType, availableSkills)
+      if (result.title) { setTitle(result.title); setTitleError(null) }
       if (result.description) setDescription(result.description)
-      if (result.title) setTitleError(null)
+      if (result.skills.length > 0) setSkills(result.skills)
     }
   }
 

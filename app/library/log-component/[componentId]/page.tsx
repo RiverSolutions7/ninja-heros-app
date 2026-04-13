@@ -58,7 +58,7 @@ const TYPE_PLACEHOLDERS: Record<ComponentType, { name: string; desc: string }> =
 const MIC_IDLE_LABEL      = 'Tap to re-name and describe this component'
 const MIC_RECORDING_LABEL = 'Listening… tap again to stop'
 const MIC_PROCESSING_LABEL = 'Processing…'
-const MIC_DONE_LABEL      = 'Name and description updated ✓'
+const MIC_DONE_LABEL      = 'Name, description & skills updated ✓'
 
 export default function EditComponentPage() {
   const router = useRouter()
@@ -119,9 +119,13 @@ export default function EditComponentPage() {
       startRecording()
     } else if (voiceState === 'recording' && component) {
       stopRecording()
-      const result = await parseComponent(component.type)
+      const result = await parseComponent(component.type, availableSkills)
       if (result.title) { setTitle(result.title); setTitleError(null) }
       if (result.description) setDescription(result.description)
+      if (result.skills.length > 0) setSkills((prev) => {
+        const merged = new Set([...prev, ...result.skills])
+        return Array.from(merged)
+      })
     }
   }
 

@@ -6,6 +6,7 @@ export const runtime = 'nodejs'
 interface ParseComponentRequest {
   transcript: string
   componentType: string
+  availableSkills?: string[]
 }
 
 export async function POST(request: NextRequest) {
@@ -16,7 +17,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 
-  const { transcript, componentType } = body
+  const { transcript, componentType, availableSkills } = body
   if (!transcript || typeof transcript !== 'string' || !transcript.trim()) {
     return NextResponse.json({ error: 'transcript is required' }, { status: 400 })
   }
@@ -31,13 +32,24 @@ export async function POST(request: NextRequest) {
     : componentType === 'warmup' ? 'warmup'
     : 'station or drill'
 
+  const skillsSection =
+    availableSkills && availableSkills.length > 0
+      ? `3. Skills practiced in this activity — choose ONLY from this exact list: ${availableSkills.map((s) => `"${s}"`).join(', ')}. Return an empty array if none clearly match.`
+      : ''
+
+  const jsonExample =
+    availableSkills && availableSkills.length > 0
+      ? '{"title": "Activity Name", "description": "• Cue one\\n• Cue two\\n• Cue three", "skills": ["Skill A"]}'
+      : '{"title": "Activity Name", "description": "• Cue one\\n• Cue two\\n• Cue three", "skills": []}'
+
   const prompt = `A ninja gym coach just described a ${typeLabel} out loud. Extract:
 
 1. A short, clear name for this ${typeLabel} (2–5 words). If the coach says a specific name, use it exactly. Otherwise infer the most natural title from what they described.
 2. 2–3 concise coaching cues a substitute coach could follow. Each starts with "•". Action-oriented. No invented details.
+${skillsSection}
 
 Return ONLY valid JSON — no explanation, no markdown:
-{"title": "Activity Name", "description": "• Cue one\\n• Cue two\\n• Cue three"}
+${jsonExample}
 
 Coach said: "${transcript.trim()}"`
 
@@ -54,11 +66,18 @@ Coach said: "${transcript.trim()}"`
     // Extract JSON from response (handle any surrounding text)
     const jsonMatch = raw.match(/\{[\s\S]*\}/)
     if (!jsonMatch) throw new Error('No JSON in response')
-    const parsed = JSON.parse(jsonMatch[0]) as { title?: string; description?: string }
+    const parsed = JSON.parse(jsonMatch[0]) as { title?: string; description?: string; skills?: string[] }
+
+    // Only return skills that actually exist in the available list
+    const allowedSet = new Set(availableSkills ?? [])
+    const matchedSkills = (parsed.skills ?? []).filter(
+      (s) => typeof s === 'string' && allowedSet.has(s)
+    )
 
     return NextResponse.json({
       title: parsed.title?.trim() ?? '',
       description: parsed.description?.trim() ?? '',
+      skills: matchedSkills,
     })
   } catch {
     return NextResponse.json({ error: 'parse_failed' }, { status: 500 })
