@@ -23,6 +23,15 @@ export async function addPlanToCalendar(
   return data as PlanRow
 }
 
+/** Permanently delete a plan by ID. Throws on error. */
+export async function deletePlanById(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('plans')
+    .delete()
+    .eq('id', id)
+  if (error) throw error
+}
+
 /** Update an existing plan by Supabase ID (used for auto-save when editing a loaded plan). */
 export async function updatePlanById(
   id: string,

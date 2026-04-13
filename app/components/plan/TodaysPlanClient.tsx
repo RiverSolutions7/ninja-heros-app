@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import {
   DndContext,
@@ -18,7 +19,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import type { ComponentRow, ComponentType, PlanItem, PlanRow } from '@/app/lib/database.types'
-import { addPlanToCalendar, updatePlanById, fetchDatesWithPlans, fetchPlansForDate } from '@/app/lib/planQueries'
+import { addPlanToCalendar, updatePlanById, fetchDatesWithPlans, fetchPlansForDate, deletePlanById } from '@/app/lib/planQueries'
 import ComponentPickerModal from './ComponentPickerModal'
 import { PhotoLightbox } from '@/app/components/ui/PhotoLightbox'
 import { PlanItemSheet } from './PlanItemSheet'
@@ -94,6 +95,14 @@ function formatShortDay(iso: string): string {
 
 function formatSavedAt(ts: string): string {
   return new Date(ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+}
+
+function formatSelectedDayLabel(selectedIso: string, todayIso: string): string {
+  const d = new Date(selectedIso + 'T00:00:00')
+  const weekday = d.toLocaleDateString('en-US', { weekday: 'short' })
+  const monthDay = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  if (selectedIso === todayIso) return `Today · ${weekday}, ${monthDay}`
+  return `${weekday} · ${monthDay}`
 }
 
 /** Auto-label a plan from component types when no title is set */
@@ -353,11 +362,6 @@ function DraftCard({
 export default function TodaysPlanClient() {
   const [todayIso] = useState(() => new Date().toLocaleDateString('en-CA'))
 
-  const todayLabel = (() => {
-    const d = new Date(todayIso + 'T00:00:00')
-    return `${d.toLocaleDateString('en-US', { weekday: 'short' })} · ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-  })()
-
   // ── View mode ────────────────────────────────────────────────────────────────
   const [viewMode, setViewMode] = useState<'dashboard' | 'editing'>('dashboard')
 
@@ -394,6 +398,8 @@ export default function TodaysPlanClient() {
   const [lightbox, setLightbox] = useState<{ photos: string[] } | null>(null)
   const [activeSheet, setActiveSheet] = useState<PlanItem | null>(null)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving'>('idle')
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleteLoading, setDeleteLoading] = useState(false)
   const [classLength, setClassLength] = useState<number | null>(null)
   const [showLengthPicker, setShowLengthPicker] = useState(false)
 
@@ -408,6 +414,11 @@ export default function TodaysPlanClient() {
     stationCount > 0 && `${stationCount} station${stationCount > 1 ? 's' : ''}`,
     gameCount > 0 && `${gameCount} game${gameCount > 1 ? 's' : ''}`,
   ].filter(Boolean).join(' · ')
+
+  const siblingIndex = editingPlanId
+    ? selectedDayPlans.findIndex(p => p.id === editingPlanId)
+    : -1
+  const hasSiblings = viewMode === 'editing' && selectedDayPlans.length > 1 && siblingIndex !== -1
 
   const weekDays = Array.from({ length: 7 }, (_, i) => {
     const d = addDays(weekStart, i)
@@ -710,6 +721,30 @@ export default function TodaysPlanClient() {
     setViewMode('dashboard')
   }
 
+  async function handleDeletePlan() {
+    if (!editingPlanId) return
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    setDeleteLoading(true)
+    try {
+      await deletePlanById(editingPlanId)
+      const from = offsetDate(todayIso, -180)
+      const to = offsetDate(todayIso, 180)
+      const dates = await fetchDatesWithPlans(from, to)
+      setDatesWithPlans(new Set(dates))
+      setSelectedDayPlans(prev => prev.filter(p => p.id !== editingPlanId))
+      setShowDeleteConfirm(false)
+      setEditingPlanId(null)
+      setEditingPlanLabel(null)
+      setItems([])
+      setSaveStatus('idle')
+      setViewMode('dashboard')
+    } catch (err) {
+      console.error('Delete failed:', err)
+    } finally {
+      setDeleteLoading(false)
+    }
+  }
+
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
     if (!over || active.id === over.id) return
@@ -770,7 +805,9 @@ export default function TodaysPlanClient() {
           <h1 className="font-heading text-2xl text-text-primary leading-none">{"Today's Plan"}</h1>
           <p className="flex items-center gap-1.5 text-text-dim text-xs mt-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-accent-fire inline-block opacity-60" />
-            {viewMode === 'editing' && editingPlanLabel ? `Editing: ${editingPlanLabel}` : todayLabel}
+            {viewMode === 'editing' && editingPlanLabel
+              ? `Editing: ${editingPlanLabel}`
+              : formatSelectedDayLabel(selectedDayIso, todayIso)}
           </p>
           {viewMode === 'editing' && saveStatus === 'saving' && (
             <p className="text-[11px] mt-1 text-text-dim">Saving…</p>
@@ -816,6 +853,37 @@ export default function TodaysPlanClient() {
           )}
         </div>
       </div>
+
+      {/* ── Sibling plan navigator ── */}
+      {hasSiblings && (
+        <div className="flex items-center justify-center gap-3 px-4 pb-2 pt-0">
+          <button
+            type="button"
+            onClick={() => handleLoadPlan(selectedDayPlans[siblingIndex - 1])}
+            disabled={siblingIndex === 0}
+            className="w-8 h-8 flex items-center justify-center rounded-full border border-bg-border text-text-muted disabled:opacity-30 disabled:cursor-default hover:bg-white/5 active:scale-95 transition-all"
+            aria-label="Previous plan"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <span className="text-xs font-heading text-text-dim tabular-nums">
+            Plan {siblingIndex + 1} of {selectedDayPlans.length}
+          </span>
+          <button
+            type="button"
+            onClick={() => handleLoadPlan(selectedDayPlans[siblingIndex + 1])}
+            disabled={siblingIndex === selectedDayPlans.length - 1}
+            className="w-8 h-8 flex items-center justify-center rounded-full border border-bg-border text-text-muted disabled:opacity-30 disabled:cursor-default hover:bg-white/5 active:scale-95 transition-all"
+            aria-label="Next plan"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* ── Loading spinner ── */}
       {loading && (
@@ -1179,6 +1247,19 @@ export default function TodaysPlanClient() {
             </p>
           )}
 
+          {/* ── Delete saved plan ── */}
+          {editingPlanId && (
+            <div className="px-4 pb-2 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(true)}
+                className="text-sm text-red-400/70 hover:text-red-400 transition-colors"
+              >
+                Delete Plan
+              </button>
+            </div>
+          )}
+
           {/* ── Clear & back to dashboard ── */}
           {items.length > 0 && (
             <div className="px-4 pb-4 flex justify-center gap-4">
@@ -1255,6 +1336,40 @@ export default function TodaysPlanClient() {
           }}
           onClose={() => setShowCalendar(false)}
         />
+      )}
+
+      {/* ── Delete confirmation sheet ── */}
+      {showDeleteConfirm && createPortal(
+        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+          <div
+            className="fixed inset-0 bg-black/60"
+            onClick={() => !deleteLoading && setShowDeleteConfirm(false)}
+          />
+          <div className="relative bg-bg-card rounded-t-2xl p-6 pb-10 flex flex-col gap-4">
+            <div className="w-10 h-1 bg-bg-border rounded-full mx-auto mb-1" />
+            <p className="font-heading text-lg text-text-primary text-center">Delete this plan?</p>
+            <p className="text-sm text-text-dim text-center leading-relaxed">
+              This can&apos;t be undone. All components and coach notes will be removed.
+            </p>
+            <button
+              type="button"
+              onClick={handleDeletePlan}
+              disabled={deleteLoading}
+              className="w-full py-3.5 rounded-xl bg-red-500 text-white font-heading text-base active:scale-[0.98] transition-all disabled:opacity-60 min-h-[52px]"
+            >
+              {deleteLoading ? 'Deleting…' : 'Delete Plan'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowDeleteConfirm(false)}
+              disabled={deleteLoading}
+              className="w-full py-3.5 rounded-xl border border-bg-border font-heading text-sm text-text-muted hover:bg-white/5 active:scale-[0.98] transition-all min-h-[48px]"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>,
+        document.body
       )}
 
     </div>
