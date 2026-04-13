@@ -14,34 +14,13 @@ export default function SkillRemoveManager({ items }: SkillRemoveManagerProps) {
   const router = useRouter()
   const [removing, setRemoving] = useState(false)
   const [confirming, setConfirming] = useState<string | null>(null)
-  const [usageCount, setUsageCount] = useState(0)
-  const [checking, setChecking] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
 
-  async function handleMinusTap(skill: string) {
-    // Tap again to dismiss confirmation
+  function handleMinusTap(skill: string) {
     if (confirming === skill) {
       setConfirming(null)
       return
     }
-
-    setChecking(skill)
-
-    // Count how many distinct classes use this skill
-    const { data } = await supabase
-      .from('lane_blocks')
-      .select('class_blocks!inner(class_id)')
-      .contains('core_skills', [skill])
-
-    const classIds = new Set(
-      ((data ?? []) as Array<{ class_blocks: { class_id: string }[] }>)
-        .flatMap((row) => row.class_blocks ?? [])
-        .map((cb) => cb.class_id)
-        .filter(Boolean)
-    )
-
-    setUsageCount(classIds.size)
-    setChecking(null)
     setConfirming(skill)
   }
 
@@ -64,7 +43,7 @@ export default function SkillRemoveManager({ items }: SkillRemoveManagerProps) {
     return (
       <div className="card px-4 py-4 mb-6">
         <p className="text-text-dim text-sm text-center">
-          No skills yet — add one above or log a class with lane skills.
+          No skills yet — add one above or log a component with skills.
         </p>
       </div>
     )
@@ -74,7 +53,6 @@ export default function SkillRemoveManager({ items }: SkillRemoveManagerProps) {
     <div className="card px-4 py-2 mb-6">
       {/* Column header row */}
       <div className="flex items-center py-2 border-b border-bg-border mb-1">
-        {/* Spacer to align with minus buttons when in remove mode */}
         <div
           className="overflow-hidden flex-shrink-0"
           style={{
@@ -93,7 +71,6 @@ export default function SkillRemoveManager({ items }: SkillRemoveManagerProps) {
             Last Used
           </span>
 
-          {/* Remove Skills / Done toggle */}
           <button
             onClick={handleToggleRemoving}
             className={[
@@ -107,13 +84,7 @@ export default function SkillRemoveManager({ items }: SkillRemoveManagerProps) {
               'Done'
             ) : (
               <>
-                <svg
-                  className="w-3 h-3"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={3}
-                >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" />
                 </svg>
                 Remove Skills
@@ -126,7 +97,6 @@ export default function SkillRemoveManager({ items }: SkillRemoveManagerProps) {
       {/* Skill rows */}
       {items.map((item) => (
         <div key={item.skill}>
-          {/* Row: minus button (animated) + recency bar */}
           <div className="flex items-center">
             {/* Minus button — slides in from the left */}
             <div
@@ -145,19 +115,9 @@ export default function SkillRemoveManager({ items }: SkillRemoveManagerProps) {
                 className="w-6 h-6 rounded-full bg-accent-fire flex items-center justify-center active:scale-90 transition-transform disabled:opacity-50 flex-shrink-0"
                 aria-label={`Remove ${item.skill}`}
               >
-                {checking === item.skill ? (
-                  <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <svg
-                    className="w-3 h-3 text-white"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={3}
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" />
-                  </svg>
-                )}
+                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" />
+                </svg>
               </button>
             </div>
 
@@ -166,7 +126,7 @@ export default function SkillRemoveManager({ items }: SkillRemoveManagerProps) {
             </div>
           </div>
 
-          {/* Confirmation banner — CSS Grid slide-down */}
+          {/* Confirmation banner */}
           <div
             className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${
               confirming === item.skill ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
@@ -175,9 +135,7 @@ export default function SkillRemoveManager({ items }: SkillRemoveManagerProps) {
             <div className="overflow-hidden">
               <div className="flex items-center gap-3 ml-8 mb-2 px-3 py-2.5 rounded-xl bg-accent-fire/10 border border-accent-fire/20">
                 <p className="text-sm text-text-primary flex-1 leading-snug">
-                  {usageCount > 0
-                    ? `Used in ${usageCount} class${usageCount !== 1 ? 'es' : ''}. Remove anyway?`
-                    : `Remove "${item.skill}"?`}
+                  Remove &ldquo;{item.skill}&rdquo;?
                 </p>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <button

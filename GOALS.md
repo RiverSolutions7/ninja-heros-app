@@ -22,9 +22,9 @@ a person.
 
 The Ninja H.E.R.O.S. Coach Hub is a visual architecture of
 your unique program — organized, searchable, and growing in
-value over time. Every class logged makes the system smarter.
-Every skill tracked builds a record. Every lesson plan shared
-proves the program can run without you.
+value over time. Every component logged makes the library
+richer. Every skill tracked builds a record. Every plan saved
+becomes the history.
 
 ---
 
@@ -39,65 +39,65 @@ a class confidently on day one.
 
 ---
 
-## WHAT THE APP MAKES EASY
+## THE TWO-TOOL ARCHITECTURE
 
-- **Log new material** — quick, mobile-first, done in minutes
-  after class
-- **Log partial information** — had a great game but no time
-  to document the full class? Log just the game. The system
-  organizes it cleanly so nothing looks scattered
-- **Visualize program standards** — any coach can see how
-  classes are structured, what skills are prioritized, and
-  what good looks like
-- **Onboard new coaches** — no more weeks of shadowing. Open
-  the app, read the history, run the class
-- **Track skills over time** — know what's been worked, what
-  hasn't, and what needs attention
-- **Plan with confidence** — build classes by pulling from a
-  real library of proven components that already worked in
-  your gym
-- **Add new curriculums** — Mini Ninjas, Junior Ninjas, Girls
-  Gymnastics, whatever comes next — each with their own skill
-  sets and class history
-- **Share lesson plans instantly** — text a link to any sub
-  coach and they have everything they need
-- **Understand program context** — the app tells the story of
-  your program over time, not just what happened today
+### Library — The Knowledge Base
+
+Individual components (games, warmups, stations/drills) are
+logged here. Each component has:
+- Description and coaching cues (logged by voice or typed)
+- Photos showing real equipment setup
+- Video of the activity in action
+- Tagged skills, curriculum, and equipment
+
+The library is searchable and organized by type (Games /
+Warmups / Stations). The more components are logged, the more
+valuable the library becomes. Every coach who logs a great
+game is contributing to a shared system that outlasts them.
+
+### Today's Plan — The Class Record
+
+Coaches assemble plans by pulling from the library. When a
+plan is saved to a date, that saved plan **is** the class
+history. No separate logging step. No duplicate data entry.
+
+Plan → Save → Done. The calendar becomes the class history
+automatically.
 
 ---
 
-## THE COMPONENT LIBRARY — THE HEART OF THE SYSTEM
+## WHAT THE APP MAKES EASY
 
-The library has two modes, toggled at the top:
+- **Log new material** — quick, mobile-first, done in minutes.
+  Speak your description with the mic button; the app formats
+  it into coaching cues automatically
+- **Log partial information** — had a great game but no time
+  to document more? Log just the game. The system accepts it
+  cleanly
+- **Plan with confidence** — build classes by pulling from a
+  real library of proven components that already worked in
+  your gym
+- **Track skills over time** — the Skills tab shows what's
+  been worked recently and what needs attention, sourced
+  directly from saved plan history
+- **Onboard new coaches** — no more weeks of shadowing. Open
+  the app, read the library, use the plan history, run the
+  class
+- **Add new curriculums** — Mini Ninjas, Junior Ninjas, Girls
+  Gymnastics, whatever comes next — each with their own skill
+  sets
 
-**[ Full Classes ] [ Components ]**
+---
 
-**Full Classes** — complete logged sessions with warmup,
-lanes, and game. The full picture of what happened that day.
+## THE HEAD COACH'S VOICE LAYER
 
-**Components** — individual building blocks of any class:
-- Games & Activities
-- Warmups
-- Stations & Drills
+Every component description can be captured by speaking.
+Every plan item gets a coach note captured by speaking.
 
-**How they connect:**
-- Log a full class → its components automatically save to
-  the component library
-- Log a standalone component → goes straight to the
-  component library
-- Build a new class → pull from existing components OR
-  build new from scratch
-
-**Why this matters:**
-The first time you log "Cube Game" it takes 2 minutes.
-Every class after that, you just tap "Choose from Library"
-and it's already there — fully documented, photos included,
-skills tagged. The library compounds. The more you log, the
-faster class planning gets. The more coaches who use it, the
-richer the library becomes.
-
-This is the McDonald's principle in action — the system gets
-smarter every time someone uses it.
+This means the system captures the institutional knowledge
+that normally exists only in a coach's head — the real cues,
+the real modifications, the real context — in the same time
+it takes to say them out loud.
 
 ---
 
@@ -107,14 +107,14 @@ This is not a scheduling tool. This is not a billing tool.
 
 **This is a program intelligence system.**
 
-The data compounds. The more classes logged, the more valuable
-the library becomes. The more skills tracked, the clearer the
-program picture. The more coaches who use it, the stronger the
-institutional knowledge.
+The data compounds. The more components are logged, the more
+valuable the library becomes. The more plans are saved, the
+richer the class history. The more coaches who use it, the
+stronger the institutional knowledge.
 
-A gym that builds this system owns something no competitor can
-copy — a living, growing record of everything that makes their
-program work.
+A gym that builds this system owns something no competitor
+can copy — a living, growing record of everything that makes
+their program work.
 
 ---
 
@@ -124,18 +124,15 @@ program work.
 
 A coach should be able to log just a game, just a warmup, or
 just one station without being forced to fill out an entire
-class. Partial logs are valid logs. The system should accept
-incomplete information gracefully and display it cleanly.
+class structure. A single great component documented is more
+valuable than a complex template left blank.
 
-A single great game documented is more valuable than a perfect
-class template left blank.
+**Voice first.**
 
-When logging, the coach chooses:
-What are you logging?
-[ Full Class ]  [ Just a Component ]
-If logging a component:
-What type?
-[ Game ]  [ Warmup ]  [ Station / Drill ]
+If a coach has to type a detailed description at the end of
+a long day, it won't get done. If they can tap a mic button
+and speak for 30 seconds, it will. Voice is the primary input
+method for descriptions and coach notes.
 
 ---
 
@@ -152,15 +149,13 @@ facility that has the same problem — great coaches, no system.
 
 ## SHORT-TERM GOALS (Now)
 
-1. Build the component library system — toggle between Full
-   Classes and Components in the Library tab
-2. Make logging a component as easy as logging a full class
-3. Allow class building by pulling from existing components
-4. Log 15-20 classes and components consistently to build a
-   real library
-5. Use the share feature actively — text lesson plans to sub
-   coaches before every class they cover
-6. Keep the app simple — every feature must pass the test:
+1. Build the component library consistently — 20+ components
+   logged with photos and voice descriptions
+2. Use Today's Plan for every class — save each plan to a
+   date so it becomes the class history automatically
+3. Use the Skills tab weekly — let plan history drive the
+   skill rotation
+4. Keep the app simple — every feature must pass the test:
    would a tired coach use this at 8pm after teaching 3 classes?
 
 ---
@@ -189,20 +184,15 @@ facility that has the same problem — great coaches, no system.
 ## DESIGN PRINCIPLES
 
 - **Build for the busiest coach** — if it takes more than 5
-  minutes to log a class, it won't get used
-- **Minimize clutter** — the library must stay clean and
-  scannable no matter how much data is logged. Toggles,
-  filters, and smart organization prevent overwhelm
+  minutes to log a component, it won't get used
+- **Voice first** — speaking is faster than typing. Mic
+  buttons appear wherever descriptions or notes are captured
 - **Log what you have** — partial logs are valid. Never force
   a coach to complete more than they have time for
 - **Visual first** — photos and videos are not optional. A
   sub coach needs to see the setup, not just read about it
 - **The library is the product** — the more that gets logged,
-  the more valuable the system becomes. Logging consistently
-  is the prerequisite to everything
-- **Components compound** — every logged game, warmup, and
-  station makes future class planning faster. The system
-  grows in value with every entry
+  the more valuable the system becomes
 - **Simple over feature-rich** — every addition should make
   the app easier to use, not harder
 - **Grow beyond any one coach** — the whole point is that the

@@ -1,15 +1,9 @@
-import { fetchCurriculums, fetchSkillRecency, fetchRecentClassesWithSkills } from '@/app/lib/queries'
+import { fetchCurriculums, fetchSkillRecency } from '@/app/lib/queries'
 import SkillRemoveManager from '@/app/components/skills/SkillRemoveManager'
 import AddSkillButton from '@/app/components/skills/AddSkillButton'
 import CurriculumSelector from '@/app/components/skills/CurriculumSelector'
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Suspense } from 'react'
-
-function formatDate(dateStr: string) {
-  const d = new Date(dateStr + 'T12:00:00')
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-}
 
 export default async function SkillsPage({
   searchParams,
@@ -19,7 +13,7 @@ export default async function SkillsPage({
   const { curriculum: curriculumId } = await searchParams
   const curriculums = await fetchCurriculums().catch(() => [])
 
-  // Auto-select first curriculum if none chosen (so TabNav always lands on data)
+  // Auto-select first curriculum if none chosen
   if (!curriculumId && curriculums.length > 0) {
     redirect(`/skills?curriculum=${curriculums[0].id}`)
   }
@@ -30,15 +24,11 @@ export default async function SkillsPage({
     : null
 
   let skillRecency = null
-  let recentClasses = null
   let error = null
 
   if (curriculum) {
     try {
-      ;[skillRecency, recentClasses] = await Promise.all([
-        fetchSkillRecency(curriculum.ageGroup),
-        fetchRecentClassesWithSkills(15, curriculum.ageGroup),
-      ])
+      skillRecency = await fetchSkillRecency(curriculum.ageGroup)
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to load data'
     }
@@ -67,7 +57,7 @@ export default async function SkillsPage({
           <h1 className="font-heading text-2xl text-text-primary leading-none">
             Skill Tracker
           </h1>
-          <p className="text-text-dim text-xs mt-1">Auto-tracked from logged classes</p>
+          <p className="text-text-dim text-xs mt-1">Tracked from Today&apos;s Plan history</p>
         </div>
         {curriculum && <AddSkillButton ageGroup={curriculum.ageGroup} />}
       </div>
@@ -117,59 +107,6 @@ export default async function SkillsPage({
               <span className="w-2 h-2 rounded-full bg-accent-fire inline-block" />
               22+ days / Never
             </span>
-          </div>
-
-          {/* Recent classes with skills */}
-          <div>
-            <h2 className="font-heading text-sm text-text-muted uppercase tracking-wider mb-3">
-              Recent Classes
-            </h2>
-
-            {!recentClasses || recentClasses.length === 0 ? (
-              <div className="text-center py-10">
-                <p className="text-text-dim text-sm">No classes with skills logged yet.</p>
-                <Link
-                  href="/library/new"
-                  className="inline-block mt-3 text-accent-fire text-sm font-semibold"
-                >
-                  Log your first class →
-                </Link>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {recentClasses.map((cls) => (
-                  <div key={cls.classId} className="card px-4 py-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <Link
-                        href={`/library/${cls.classId}`}
-                        className="font-heading text-sm text-text-primary hover:text-accent-fire transition-colors"
-                      >
-                        {cls.title || formatDate(cls.classDate)}
-                      </Link>
-                      {cls.title && (
-                        <span className="text-xs text-text-dim">{formatDate(cls.classDate)}</span>
-                      )}
-                    </div>
-                    {cls.lanes.map((lane) => (
-                      <div key={`${cls.classId}-${lane.laneNumber}`} className="mb-2 last:mb-0">
-                        <p className="text-xs text-accent-fire font-heading mb-1.5">
-                          {lane.instructorName
-                            ? `Station ${lane.laneNumber} — ${lane.instructorName}`
-                            : `Station ${lane.laneNumber}`}
-                        </p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {lane.skills.map((skill) => (
-                            <span key={skill} className="badge badge-skill">
-                              {skill}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </>
       )}

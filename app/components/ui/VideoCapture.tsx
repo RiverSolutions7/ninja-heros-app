@@ -22,7 +22,6 @@ export default function VideoCapture({ preview, onFileSelected }: VideoCapturePr
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-3 flex-wrap">
-        {/* Record Video — triggers camera directly */}
         <button
           type="button"
           onClick={() => cameraRef.current?.click()}
@@ -34,7 +33,6 @@ export default function VideoCapture({ preview, onFileSelected }: VideoCapturePr
           {preview ? 'Re-record Video' : 'Record Video'}
         </button>
 
-        {/* Choose from Library */}
         <button
           type="button"
           onClick={() => libraryRef.current?.click()}
@@ -47,38 +45,14 @@ export default function VideoCapture({ preview, onFileSelected }: VideoCapturePr
         </button>
       </div>
 
-      {/* Video preview player */}
       {preview && (
         <div className="rounded-xl overflow-hidden border border-bg-border bg-black">
-          <video
-            src={preview}
-            controls
-            playsInline
-            className="w-full"
-            style={{ maxHeight: '220px' }}
-          />
+          <video src={preview} controls playsInline className="w-full" style={{ maxHeight: '220px' }} />
         </div>
       )}
 
-      {/* Camera/library input */}
-      <input
-        ref={cameraRef}
-        type="file"
-        accept="video/*"
-        onChange={handleChange}
-        className="hidden"
-        aria-label="Record video"
-      />
-
-      {/* Library input — opens video library */}
-      <input
-        ref={libraryRef}
-        type="file"
-        accept="video/*"
-        onChange={handleChange}
-        className="hidden"
-        aria-label="Choose video from library"
-      />
+      <input ref={cameraRef} type="file" accept="video/*" onChange={handleChange} className="hidden" aria-label="Record video" />
+      <input ref={libraryRef} type="file" accept="video/*" onChange={handleChange} className="hidden" aria-label="Choose video from library" />
     </div>
   )
 }

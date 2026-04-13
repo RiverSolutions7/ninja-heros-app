@@ -8,8 +8,9 @@ import { uploadStationPhoto } from '@/app/lib/uploadPhoto'
 import { uploadComponentVideo } from '@/app/lib/uploadVideo'
 import type { ComponentType, CurriculumRow } from '@/app/lib/database.types'
 import SkillChip from '@/app/components/skills/SkillChip'
-import VideoCapture from '@/app/components/block-builder/VideoCapture'
+import VideoCapture from '@/app/components/ui/VideoCapture'
 import Toast from '@/app/components/ui/Toast'
+import { useVoiceNote } from '@/app/hooks/useVoiceNote'
 
 interface PhotoDraft {
   localId: string
@@ -91,6 +92,37 @@ export default function LogComponentPage() {
   const newSkillInputRef = useRef<HTMLInputElement>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
   const libraryRef = useRef<HTMLInputElement>(null)
+
+  const {
+    voiceState,
+    transcript,
+    errorMessage,
+    isSupported: voiceSupported,
+    startRecording,
+    stopRecording,
+    parseNote,
+    reset: resetVoice,
+  } = useVoiceNote()
+
+  async function handleMicToggle() {
+    if (voiceState === 'idle' || voiceState === 'error' || voiceState === 'done') {
+      resetVoice()
+      startRecording()
+    } else if (voiceState === 'recording') {
+      stopRecording()
+      if (transcript) setDraft((d) => ({ ...d, description: transcript }))
+      const structured = await parseNote()
+      if (structured) setDraft((d) => ({ ...d, description: structured }))
+    }
+  }
+
+  const micColors: Record<string, string> = {
+    idle: 'bg-bg-input border border-bg-border text-text-muted hover:bg-white/5',
+    recording: 'bg-accent-fire text-white shadow-glow-fire',
+    processing: 'bg-bg-input border border-bg-border text-text-dim',
+    done: 'bg-accent-green/20 border border-accent-green/40 text-accent-green',
+    error: 'bg-red-900/30 border border-red-500/40 text-red-400',
+  }
 
   useEffect(() => {
     supabase
@@ -501,6 +533,49 @@ export default function LogComponentPage() {
             if (key === 'description') return (
               <div key="description">
                 <SectionHeader label="Description" sectionKey="description" />
+                {/* Voice mic row */}
+                <div className="flex items-center gap-3 mb-2">
+                  {voiceSupported && (
+                    <button
+                      type="button"
+                      onClick={handleMicToggle}
+                      disabled={voiceState === 'processing'}
+                      className={[
+                        'w-10 h-10 flex items-center justify-center rounded-full transition-all flex-shrink-0',
+                        micColors[voiceState],
+                        voiceState === 'processing' ? 'cursor-not-allowed' : '',
+                      ].join(' ')}
+                      aria-label={voiceState === 'recording' ? 'Stop recording' : 'Start voice recording'}
+                    >
+                      {voiceState === 'recording' ? (
+                        <svg className="w-5 h-5 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zM8 11a4 4 0 008 0h2a6 6 0 01-5 5.91V19h3v2H8v-2h3v-2.09A6 6 0 016 11h2z" />
+                        </svg>
+                      ) : voiceState === 'processing' ? (
+                        <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      ) : voiceState === 'done' ? (
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      ) : (
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zM8 11a4 4 0 008 0h2a6 6 0 01-5 5.91V19h3v2H8v-2h3v-2.09A6 6 0 016 11h2z" />
+                        </svg>
+                      )}
+                    </button>
+                  )}
+                  <p className="text-xs text-text-dim">
+                    {voiceState === 'recording' && <span className="text-accent-fire animate-pulse">Listening… tap mic to stop</span>}
+                    {voiceState === 'processing' && 'Processing…'}
+                    {voiceState === 'done' && <span className="text-accent-green">Description formatted ✓</span>}
+                    {voiceState === 'error' && <span className="text-red-400">{errorMessage}</span>}
+                    {voiceState === 'idle' && voiceSupported && 'Tap mic to speak the description'}
+                    {!voiceSupported && 'Type a description below'}
+                  </p>
+                </div>
+                {voiceState === 'recording' && transcript && (
+                  <p className="text-xs text-text-dim italic mb-2 px-1 leading-relaxed">&ldquo;{transcript}&rdquo;</p>
+                )}
                 <textarea
                   value={draft.description}
                   onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}

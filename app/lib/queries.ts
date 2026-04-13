@@ -1,19 +1,11 @@
 import { supabase } from './supabase'
 import type {
-  ClassRow,
   ComponentRow,
   CurriculumRow,
-  FullClass,
-  FullBlock,
-  ClassBlockRow,
-  WarmupBlockRow,
-  LaneBlockRow,
-  StationRow,
-  GameBlockRow,
   SkillRow,
   FolderRow,
-  HandoffNoteRow,
   SkillRecency,
+  PlanItem,
 } from './database.types'
 
 // ============================================================
@@ -39,7 +31,6 @@ export async function fetchSkills(ageGroup?: string): Promise<SkillRow[]> {
     .order('name')
   if (error) throw error
   const rows = data ?? []
-  // When ageGroup is provided, show only skills belonging strictly to that curriculum
   if (ageGroup) {
     return rows.filter((r) => r.age_group === ageGroup)
   }
@@ -60,140 +51,8 @@ export async function fetchFolders(): Promise<FolderRow[]> {
 }
 
 // ============================================================
-// Fetch all classes (summary list)
+// Components
 // ============================================================
-export async function fetchClasses(opts?: {
-  q?: string
-  age?: string
-  inHandoff?: boolean
-}): Promise<ClassRow[]> {
-  let query = supabase
-    .from('classes')
-    .select('*')
-    .order('class_date', { ascending: false })
-    .order('created_at', { ascending: false })
-
-  if (opts?.age) {
-    query = query.eq('age_group', opts.age)
-  }
-  if (opts?.q) {
-    query = query.or(`title.ilike.%${opts.q}%,notes.ilike.%${opts.q}%`)
-  }
-  if (opts?.inHandoff !== undefined) {
-    query = query.eq('in_handoff', opts.inHandoff)
-  }
-
-  const { data, error } = await query
-  if (error) throw error
-  return data ?? []
-}
-
-// ============================================================
-// Fetch a single class with all blocks fully hydrated
-// ============================================================
-export async function fetchFullClass(classId: string): Promise<FullClass | null> {
-  const { data: classRow, error: classErr } = await supabase
-    .from('classes')
-    .select('*')
-    .eq('id', classId)
-    .single()
-
-  if (classErr || !classRow) return null
-
-  const { data: blockRows, error: blocksErr } = await supabase
-    .from('class_blocks')
-    .select('*')
-    .eq('class_id', classId)
-    .order('sort_order')
-
-  if (blocksErr || !blockRows) return { ...classRow, blocks: [] }
-
-  const blocks: FullBlock[] = []
-
-  for (const block of blockRows as ClassBlockRow[]) {
-    if (block.block_type === 'warmup') {
-      const { data: warmup } = await supabase
-        .from('warmup_blocks')
-        .select('*')
-        .eq('block_id', block.id)
-        .single()
-      if (warmup) {
-        blocks.push({ type: 'warmup', block, data: warmup as WarmupBlockRow })
-      }
-    } else if (block.block_type === 'lane') {
-      const { data: lane } = await supabase
-        .from('lane_blocks')
-        .select('*')
-        .eq('block_id', block.id)
-        .single()
-      if (lane) {
-        const { data: stationRows } = await supabase
-          .from('stations')
-          .select('*')
-          .eq('lane_block_id', (lane as LaneBlockRow).id)
-          .order('sort_order')
-        blocks.push({
-          type: 'lane',
-          block,
-          data: lane as LaneBlockRow,
-          stations: (stationRows ?? []) as StationRow[],
-        })
-      }
-    } else if (block.block_type === 'game') {
-      const { data: game } = await supabase
-        .from('game_blocks')
-        .select('*')
-        .eq('block_id', block.id)
-        .single()
-      if (game) {
-        blocks.push({ type: 'game', block, data: game as GameBlockRow })
-      }
-    }
-  }
-
-  return { ...classRow, blocks }
-}
-
-// ============================================================
-// Fetch all classes with full block data (for handoff view)
-// ============================================================
-export async function fetchAllFullClasses(): Promise<FullClass[]> {
-  const classes = await fetchClasses()
-  const full = await Promise.all(classes.map((c) => fetchFullClass(c.id)))
-  return full.filter(Boolean) as FullClass[]
-}
-
-// ============================================================
-// Fetch handoff classes (in_handoff = true)
-// ============================================================
-export async function fetchHandoffClasses(): Promise<FullClass[]> {
-  const classes = await fetchClasses({ inHandoff: true })
-  const full = await Promise.all(classes.map((c) => fetchFullClass(c.id)))
-  return full.filter(Boolean) as FullClass[]
-}
-
-// ============================================================
-// Fetch handoff notes (newest first)
-// ============================================================
-export async function fetchHandoffNotes(): Promise<HandoffNoteRow[]> {
-  const { data, error } = await supabase
-    .from('handoff_notes')
-    .select('*')
-    .order('created_at', { ascending: false })
-  if (error) throw error
-  return (data ?? []) as HandoffNoteRow[]
-}
-
-// ============================================================
-// Fetch components (standalone games, warmups, stations)
-// ============================================================
-export async function countClasses(): Promise<number> {
-  const { count, error } = await supabase
-    .from('classes')
-    .select('*', { count: 'exact', head: true })
-  if (error) throw error
-  return count ?? 0
-}
 
 export async function countComponents(): Promise<number> {
   const { count, error } = await supabase
@@ -220,48 +79,39 @@ export async function fetchComponents(type?: string, curriculum?: string): Promi
 }
 
 // ============================================================
-// Skill Tracker: compute recency for all skills (from DB)
+// Skill Tracker: compute recency from saved plan history
 // ============================================================
 export async function fetchSkillRecency(ageGroup?: string): Promise<SkillRecency[]> {
-  // Fetch skills and lane block data in parallel
-  const [skillRows, { data, error }] = await Promise.all([
+  // Fetch skills and all saved plans in parallel
+  const [skillRows, { data: plans, error: plansError }] = await Promise.all([
     fetchSkills(ageGroup),
     supabase
-      .from('lane_blocks')
-      .select(`
-        id,
-        core_skills,
-        class_blocks!inner (
-          class_id,
-          classes!inner (
-            class_date,
-            age_group
-          )
-        )
-      `),
+      .from('plans')
+      .select('plan_date, items')
+      .not('plan_date', 'is', null)
+      .order('plan_date', { ascending: false }),
   ])
 
-  if (error) throw error
+  if (plansError) throw plansError
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
-  // Build a map: skill name → most recent class_date
+  // Build a map: skill name → most recent plan_date it appeared in
   const skillLatest: Record<string, string> = {}
 
-  for (const row of data ?? []) {
-    const classBlocks = row.class_blocks as unknown as {
-      classes: { class_date: string; age_group: string }
-    }
-    const classDate = classBlocks?.classes?.class_date
-    if (!classDate) continue
+  for (const plan of plans ?? []) {
+    const planDate = plan.plan_date as string
+    const items = (plan.items ?? []) as PlanItem[]
 
-    // Filter by age group when provided
-    if (ageGroup && classBlocks?.classes?.age_group !== ageGroup) continue
-
-    for (const skill of row.core_skills as string[]) {
-      if (!skillLatest[skill] || classDate > skillLatest[skill]) {
-        skillLatest[skill] = classDate
+    for (const item of items) {
+      const skills = item.component?.skills ?? []
+      // Filter by curriculum/age group if provided
+      if (ageGroup && item.component?.curriculum !== ageGroup) continue
+      for (const skill of skills) {
+        if (!skillLatest[skill] || planDate > skillLatest[skill]) {
+          skillLatest[skill] = planDate
+        }
       }
     }
   }
@@ -290,77 +140,4 @@ export async function fetchSkillRecency(ageGroup?: string): Promise<SkillRecency
       if (b.daysSince === null) return 1
       return b.daysSince - a.daysSince
     })
-}
-
-// ============================================================
-// Fetch recent classes with lane/skill data (for skill tracker list)
-// ============================================================
-export interface RecentClassWithSkills {
-  classId: string
-  classDate: string
-  title: string | null
-  lanes: { laneNumber: number; instructorName: string | null; skills: string[] }[]
-}
-
-export async function fetchRecentClassesWithSkills(
-  limit = 15,
-  ageGroup?: string
-): Promise<RecentClassWithSkills[]> {
-  let query = supabase
-    .from('classes')
-    .select('id, title, class_date')
-    .order('class_date', { ascending: false })
-    .limit(limit)
-
-  if (ageGroup) {
-    query = query.eq('age_group', ageGroup)
-  }
-
-  const { data: classes } = await query
-
-  if (!classes) return []
-
-  const results: RecentClassWithSkills[] = []
-
-  for (const cls of classes) {
-    const { data: blockRows } = await supabase
-      .from('class_blocks')
-      .select('id, sort_order, block_type')
-      .eq('class_id', cls.id)
-      .eq('block_type', 'lane')
-      .order('sort_order')
-
-    if (!blockRows?.length) continue
-
-    const lanes: RecentClassWithSkills['lanes'] = []
-    let laneNum = 1
-
-    for (const block of blockRows) {
-      const { data: lane } = await supabase
-        .from('lane_blocks')
-        .select('instructor_name, core_skills')
-        .eq('block_id', block.id)
-        .single()
-
-      if (lane && (lane.core_skills as string[]).length > 0) {
-        lanes.push({
-          laneNumber: laneNum,
-          instructorName: lane.instructor_name,
-          skills: lane.core_skills as string[],
-        })
-        laneNum++
-      }
-    }
-
-    if (lanes.length > 0) {
-      results.push({
-        classId: cls.id,
-        classDate: cls.class_date,
-        title: cls.title,
-        lanes,
-      })
-    }
-  }
-
-  return results
 }
