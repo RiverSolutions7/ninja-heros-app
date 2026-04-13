@@ -293,7 +293,6 @@ function ViewPlanItem({
 }) {
   const meta = TYPE_META[item.component.type]
   const photos = (item.component.photos ?? []).filter(Boolean)
-  const firstPhoto = photos[0] ?? null
   const hasCoachNote = !!item.coachNote
   const descriptionText = item.coachNote ?? item.component.description ?? null
 
@@ -332,61 +331,59 @@ function ViewPlanItem({
         ) : null}
       </div>
 
-      {/* Photo + content row */}
-      <div className="flex gap-3 pl-6">
-        {/* Thumbnail — tap opens lightbox */}
-        <div className="relative flex-shrink-0">
-          <button
-            type="button"
-            onClick={() => photos.length > 0 && onPhotoTap(photos)}
-            className={[
-              'w-[84px] h-[84px] rounded-xl overflow-hidden block',
-              firstPhoto ? 'cursor-pointer active:opacity-80 transition-opacity' : 'cursor-default',
-            ].join(' ')}
-            tabIndex={firstPhoto ? 0 : -1}
-            aria-label={firstPhoto ? `View photos of ${item.component.title}` : undefined}
-          >
-            {firstPhoto ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={firstPhoto} alt={item.component.title} className="w-full h-full object-cover" />
-            ) : (
-              <TypePlaceholder type={item.component.type} className="w-full h-full rounded-xl" />
-            )}
-          </button>
-          {photos.length > 1 && (
-            <span className="absolute bottom-1 right-1 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">
-              +{photos.length - 1}
-            </span>
-          )}
-        </div>
+      {/* Stacked body — full width below header */}
+      <div className="pl-6 space-y-2.5">
+        {/* Photo strip — horizontal scroll, all photos visible */}
+        {photos.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+            {photos.map((url, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => onPhotoTap(photos)}
+                className="flex-shrink-0 rounded-xl overflow-hidden active:opacity-80 transition-opacity"
+                aria-label={`View photo ${i + 1} of ${item.component.title}`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={url}
+                  alt={`${item.component.title} photo ${i + 1}`}
+                  className="w-[90px] h-[90px] object-cover"
+                />
+              </button>
+            ))}
+          </div>
+        )}
 
-        {/* Text content */}
-        <div className="flex-1 min-w-0">
-          {/* Coach note — distinct highlighted block */}
-          {hasCoachNote && descriptionText && (
-            <div className="bg-accent-fire/8 border border-accent-fire/20 rounded-xl px-3 py-2.5 mb-2">
-              <p className="text-[11px] font-heading uppercase tracking-wide text-accent-fire/60 mb-1">Coach Note</p>
-              <p className="text-[13px] text-text-primary leading-relaxed whitespace-pre-wrap">
-                {descriptionText}
-              </p>
-            </div>
-          )}
+        {/* No-photo placeholder */}
+        {photos.length === 0 && (
+          <TypePlaceholder type={item.component.type} className="w-[90px] h-[90px] rounded-xl" />
+        )}
 
-          {/* Library description (no coach note) */}
-          {!hasCoachNote && descriptionText && (
-            <p className="text-[13px] text-text-dim leading-relaxed mb-1.5">
+        {/* Coach note — distinct highlighted block */}
+        {hasCoachNote && descriptionText && (
+          <div className="bg-accent-fire/8 border border-accent-fire/20 rounded-xl px-3 py-2.5">
+            <p className="text-[11px] font-heading uppercase tracking-wide text-accent-fire/60 mb-1">Coach Note</p>
+            <p className="text-[13px] text-text-primary leading-relaxed whitespace-pre-wrap">
               {descriptionText}
             </p>
-          )}
+          </div>
+        )}
 
-          {/* Equipment */}
-          {item.component.equipment && (
-            <p className="text-[12px] text-text-dim">
-              <span className="font-heading uppercase text-[9px] text-text-dim/50 tracking-wide mr-1">Gear</span>
-              {item.component.equipment}
+        {/* Library description (no coach note) */}
+        {!hasCoachNote && descriptionText && (
+          <p className="text-[13px] text-text-dim leading-relaxed">
+            {descriptionText}
             </p>
           )}
-        </div>
+
+        {/* Equipment */}
+        {item.component.equipment && (
+          <p className="text-[12px] text-text-dim">
+            <span className="font-heading uppercase text-[9px] text-text-dim/50 tracking-wide mr-1">Gear</span>
+            {item.component.equipment}
+          </p>
+        )}
       </div>
     </li>
   )
