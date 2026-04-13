@@ -59,7 +59,10 @@ export default function ComponentCard({ component, showMenu = false, onClick }: 
   const meta = TYPE_META[component.type]
   const photos = component.photos ?? []
   const firstPhoto = photos[0] ?? null
-  const hasDetail = !!(component.description || component.equipment || (component.skills?.length ?? 0) > 0)
+
+  // Stations: show photo thumbnail when one exists
+  // Games / Warmups: title + metadata only — no photo, no description body
+  const showPhoto = component.type === 'station' && firstPhoto !== null
 
   return (
     <div
@@ -69,13 +72,32 @@ export default function ComponentCard({ component, showMenu = false, onClick }: 
         meta.border,
       ].join(' ')}
     >
-      {/* Title row */}
-      <div className="flex items-start gap-2">
+      <div className="flex items-center gap-3">
+        {/* Station photo thumbnail */}
+        {showPhoto && (
+          <div className="relative flex-shrink-0">
+            <div className="w-14 h-14 rounded-xl overflow-hidden border border-bg-border/50">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={firstPhoto}
+                alt={component.title}
+                className="w-full h-full object-cover"
+                onError={(e) => { (e.currentTarget.parentElement as HTMLElement).style.display = 'none' }}
+              />
+            </div>
+            {photos.length > 1 && (
+              <span className="absolute bottom-0.5 right-0.5 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">
+                +{photos.length - 1}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Title + metadata */}
         <div className="flex-1 min-w-0">
-          <p className="font-heading text-[15px] text-text-primary leading-snug">
+          <p className="font-heading text-[15px] text-text-primary leading-snug truncate">
             {component.title}
           </p>
-          {/* Type label + curriculum in one line */}
           <div className="flex items-center gap-1.5 mt-0.5">
             <span className={['text-[10px] font-heading uppercase tracking-wide flex-shrink-0', meta.textColor].join(' ')}>
               {meta.label}
@@ -88,71 +110,13 @@ export default function ComponentCard({ component, showMenu = false, onClick }: 
             )}
           </div>
         </div>
+
         {showMenu && (
           <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
             <ComponentCardMenu component={component} />
           </div>
         )}
       </div>
-
-      {/* Photo/icon + description body */}
-      {(firstPhoto || hasDetail) && (
-        <div className="flex gap-3 mt-2.5">
-          {/* Thumbnail — photo if available, icon placeholder otherwise */}
-          <div className="relative flex-shrink-0">
-            <div className="w-[84px] h-[84px] rounded-xl overflow-hidden border border-bg-border/50">
-              {firstPhoto ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={firstPhoto}
-                  alt={component.title}
-                  className="w-full h-full object-cover"
-                  onError={(e) => { (e.currentTarget.parentElement as HTMLElement).style.display = 'none' }}
-                />
-              ) : (
-                <div className={['w-full h-full flex items-center justify-center', meta.placeholderBg].join(' ')}>
-                  <span className={meta.textColor}>{TYPE_ICONS[component.type]}</span>
-                </div>
-              )}
-            </div>
-            {photos.length > 1 && (
-              <span className="absolute bottom-1 right-1 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">
-                +{photos.length - 1}
-              </span>
-            )}
-          </div>
-
-          {/* Text detail */}
-          <div className="flex-1 min-w-0 space-y-1.5">
-            {component.description && (
-              <p className="text-[13px] text-text-primary leading-relaxed">
-                {component.description}
-              </p>
-            )}
-            {component.equipment && (
-              <p className="text-[12px] text-text-dim">
-                <span className="font-heading uppercase text-[9px] text-text-dim/50 mr-1 tracking-wide">Gear</span>
-                {component.equipment}
-              </p>
-            )}
-            {(component.skills?.length ?? 0) > 0 && (
-              <div className="flex flex-wrap gap-1 pt-0.5">
-                {component.skills!.slice(0, 4).map((skill) => (
-                  <span
-                    key={skill}
-                    className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/5 text-text-dim border border-bg-border leading-none"
-                  >
-                    {skill}
-                  </span>
-                ))}
-                {component.skills!.length > 4 && (
-                  <span className="text-[10px] text-text-dim/50">+{component.skills!.length - 4}</span>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
