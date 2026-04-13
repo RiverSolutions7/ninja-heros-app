@@ -455,14 +455,16 @@ export default function LogComponentPage() {
 
       {/* Header */}
       <div className="flex items-center gap-2 mb-6 pt-2">
-        <Link
-          href="/library?view=components"
+        <button
+          type="button"
+          onClick={changeType}
           className="flex items-center justify-center w-8 h-8 rounded-lg text-text-dim hover:text-text-primary hover:bg-white/5 transition-colors -ml-1 flex-shrink-0"
+          aria-label="Back to type selection"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
-        </Link>
+        </button>
         <h1 className="font-heading text-xl text-text-primary leading-none flex-shrink-0">Log Component</h1>
 
         {/* Curriculum badge — tappable if multiple curricula */}
