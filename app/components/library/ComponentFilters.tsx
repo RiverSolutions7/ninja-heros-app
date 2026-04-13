@@ -21,11 +21,10 @@ const Chevron = () => (
 )
 
 interface ComponentFiltersProps {
-  activeType: string
   activeCurriculum: string
 }
 
-export default function ComponentFilters({ activeType, activeCurriculum }: ComponentFiltersProps) {
+export default function ComponentFilters({ activeCurriculum }: ComponentFiltersProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [curriculums, setCurriculums] = useState<CurriculumRow[]>([])
@@ -52,33 +51,18 @@ export default function ComponentFilters({ activeType, activeCurriculum }: Compo
   return (
     <div className="flex items-center gap-2">
       {/* Curriculum */}
-      <div className="relative flex-1 min-w-0">
+      <div className="relative min-w-0" style={{ maxWidth: 220 }}>
         <select
           value={activeCurriculum}
           onChange={(e) => update('ccurriculum', e.target.value)}
           className={SELECT_CLS}
         >
-          <option value="">Curriculum</option>
+          <option value="">All Curricula</option>
           {curriculums.map((c) => (
             <option key={c.age_group} value={c.age_group}>
               {c.label}
             </option>
           ))}
-        </select>
-        <Chevron />
-      </div>
-
-      {/* Type */}
-      <div className="relative flex-1 min-w-0">
-        <select
-          value={activeType}
-          onChange={(e) => update('ctype', e.target.value)}
-          className={SELECT_CLS}
-        >
-          <option value="">Type</option>
-          <option value="game">Games</option>
-          <option value="warmup">Warmups</option>
-          <option value="station">Stations</option>
         </select>
         <Chevron />
       </div>

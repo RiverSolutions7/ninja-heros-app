@@ -157,7 +157,7 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
       {/* Filter dropdowns */}
       <div className="mb-5">
         <Suspense fallback={null}>
-          <ComponentFilters activeType={activeType} activeCurriculum={activeCurriculum} />
+          <ComponentFilters activeCurriculum={activeCurriculum} />
         </Suspense>
       </div>
 
