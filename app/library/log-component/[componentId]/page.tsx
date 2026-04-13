@@ -17,43 +17,40 @@ interface PhotoDraft {
   preview: string
 }
 
-type SectionKey = 'lanename' | 'photo' | 'video' | 'videolink' | 'description' | 'duration' | 'skills'
-
-const ALL_SECTIONS: { key: SectionKey; label: string }[] = [
-  { key: 'lanename', label: 'Station Name' },
-  { key: 'photo', label: 'Photo' },
-  { key: 'video', label: 'Video' },
-  { key: 'videolink', label: 'Video Link' },
-  { key: 'description', label: 'Description' },
-  { key: 'duration', label: 'Duration' },
-  { key: 'skills', label: 'Skills' },
-]
-
-function sectionsForType(type: ComponentType): SectionKey[] {
-  if (type === 'station') return ['lanename', 'photo', 'video', 'videolink', 'description', 'duration', 'skills']
-  return ['photo', 'video', 'videolink', 'description', 'duration', 'skills']
-}
-
-function getInitialSections(component: ComponentRow): SectionKey[] {
-  const s: SectionKey[] = []
-  if (component.type === 'station' && component.equipment) s.push('lanename')
-  if ((component.photos?.length ?? 0) > 0) s.push('photo')
-  if (component.video_url) s.push('video')
-  if (component.video_link) s.push('videolink')
-  if (component.description) s.push('description')
-  if (component.duration_minutes != null) s.push('duration')
-  if ((component.skills?.length ?? 0) > 0) s.push('skills')
-  return s
-}
-
-const DURATIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30]
-
 function XIcon() {
   return (
     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
     </svg>
   )
+}
+
+function SectionDivider({ label }: { label: string }) {
+  return (
+    <div className="relative flex items-center gap-3 my-5">
+      <div className="flex-1 h-px bg-bg-border" />
+      <span className="text-[11px] font-heading uppercase tracking-wider text-text-dim">{label}</span>
+      <div className="flex-1 h-px bg-bg-border" />
+    </div>
+  )
+}
+
+const TYPE_ACCENT: Record<ComponentType, { border: string; text: string; badge: string }> = {
+  game: { border: 'border-l-accent-green', text: 'text-accent-green', badge: 'bg-accent-green/10 text-accent-green border-accent-green/20' },
+  warmup: { border: 'border-l-accent-gold', text: 'text-accent-gold', badge: 'bg-accent-gold/10 text-accent-gold border-accent-gold/20' },
+  station: { border: 'border-l-accent-fire', text: 'text-accent-fire', badge: 'bg-accent-fire/10 text-accent-fire border-accent-fire/20' },
+}
+
+const TYPE_LABELS: Record<ComponentType, string> = {
+  game: 'Game',
+  warmup: 'Warmup',
+  station: 'Station / Drill',
+}
+
+const TYPE_PLACEHOLDERS: Record<ComponentType, string> = {
+  game: 'Rules, setup, how to play…',
+  warmup: 'Exercise sequence, timing, cues…',
+  station: 'What does the kid do? Coaching tips?',
 }
 
 export default function EditComponentPage() {
@@ -71,14 +68,17 @@ export default function EditComponentPage() {
   const [skills, setSkills] = useState<string[]>([])
   const [newPhotos, setNewPhotos] = useState<PhotoDraft[]>([])
   const [existingPhotos, setExistingPhotos] = useState<string[]>([])
-  const [duration_minutes, setDurationMinutes] = useState<number | null>(null)
-  const [lane_name, setLaneName] = useState('')
-  const [video_link, setVideoLink] = useState('')
+  const [equipmentName, setEquipmentName] = useState('')
+
+  // Optional fields — shown if data exists OR user enables
+  const [showDuration, setShowDuration] = useState(false)
+  const [showVideo, setShowVideo] = useState(false)
+  const [showVideoLink, setShowVideoLink] = useState(false)
+  const [durationMinutes, setDurationMinutes] = useState<number | null>(null)
   const [videoFile, setVideoFile] = useState<File | null>(null)
   const [videoPreview, setVideoPreview] = useState<string | null>(null)
+  const [videoLink, setVideoLink] = useState('')
 
-  const [activeSections, setActiveSections] = useState<SectionKey[]>([])
-  const [menuOpen, setMenuOpen] = useState(false)
   const [curriculums, setCurriculums] = useState<CurriculumRow[]>([])
   const [availableSkills, setAvailableSkills] = useState<string[]>([])
   const [addingSkill, setAddingSkill] = useState(false)
@@ -86,8 +86,12 @@ export default function EditComponentPage() {
   const [addSkillSaving, setAddSkillSaving] = useState(false)
   const [addSkillError, setAddSkillError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [titleError, setTitleError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const newSkillInputRef = useRef<HTMLInputElement>(null)
+  const cameraRef = useRef<HTMLInputElement>(null)
+  const libraryRef = useRef<HTMLInputElement>(null)
 
   const {
     voiceState,
@@ -119,9 +123,6 @@ export default function EditComponentPage() {
     done: 'bg-accent-green/20 border border-accent-green/40 text-accent-green',
     error: 'bg-red-900/30 border border-red-500/40 text-red-400',
   }
-  const newSkillInputRef = useRef<HTMLInputElement>(null)
-  const cameraRef = useRef<HTMLInputElement>(null)
-  const libraryRef = useRef<HTMLInputElement>(null)
 
   // Load component
   useEffect(() => {
@@ -134,11 +135,13 @@ export default function EditComponentPage() {
       setDescription(c.description ?? '')
       setSkills(c.skills ?? [])
       setExistingPhotos(c.photos ?? [])
+      setEquipmentName(c.equipment ?? '')
       setDurationMinutes(c.duration_minutes)
-      setLaneName(c.equipment ?? '')
+      setShowDuration(c.duration_minutes != null)
       setVideoLink(c.video_link ?? '')
+      setShowVideoLink(!!c.video_link)
       setVideoPreview(c.video_url ?? null)
-      setActiveSections(getInitialSections(c))
+      setShowVideo(!!c.video_url)
       setLoading(false)
     })
   }, [componentId])
@@ -158,24 +161,6 @@ export default function EditComponentPage() {
     })
   }, [curriculum])
 
-  function addSection(key: SectionKey) {
-    setActiveSections((prev) => [...prev, key])
-    setMenuOpen(false)
-  }
-
-  function removeSection(key: SectionKey) {
-    setActiveSections((prev) => prev.filter((k) => k !== key))
-    switch (key) {
-      case 'description': setDescription(''); break
-      case 'videolink': setVideoLink(''); break
-      case 'video': setVideoFile(null); setVideoPreview(null); break
-      case 'photo': setNewPhotos([]); setExistingPhotos([]); break
-      case 'duration': setDurationMinutes(null); break
-      case 'skills': setSkills([]); break
-      case 'lanename': setLaneName(''); break
-    }
-  }
-
   function toggleSkill(skill: string) {
     setSkills((prev) =>
       prev.includes(skill) ? prev.filter((s) => s !== skill) : [...prev, skill]
@@ -193,7 +178,7 @@ export default function EditComponentPage() {
       setAddSkillSaving(false)
       return
     }
-    setAvailableSkills((prev) => prev.includes(trimmed) ? prev : [...prev, trimmed].sort())
+    setAvailableSkills((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed].sort()))
     if (!skills.includes(trimmed)) setSkills((prev) => [...prev, trimmed])
     setNewSkillName('')
     setAddingSkill(false)
@@ -203,72 +188,46 @@ export default function EditComponentPage() {
   function handleFileAdded(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    const preview = URL.createObjectURL(file)
-    setNewPhotos((prev) => [...prev, { localId: crypto.randomUUID(), file, preview }])
+    setNewPhotos((prev) => [...prev, { localId: crypto.randomUUID(), file, preview: URL.createObjectURL(file) }])
     e.target.value = ''
-  }
-
-  function removeExistingPhoto(url: string) {
-    setExistingPhotos((prev) => prev.filter((u) => u !== url))
-  }
-
-  function removeNewPhoto(localId: string) {
-    setNewPhotos((prev) => prev.filter((p) => p.localId !== localId))
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
     setTitleError(null)
-
-    if (!title.trim()) {
-      setTitleError('Title is required')
-      return
-    }
-
+    if (!title.trim()) { setTitleError('Title is required'); return }
     setSubmitting(true)
-
     try {
-      const uploadedPhotoUrls: string[] = []
+      const uploadedUrls: string[] = []
       for (const photo of newPhotos) {
-        try {
-          const url = await uploadStationPhoto(photo.file)
-          uploadedPhotoUrls.push(url)
-        } catch (err) {
-          console.error('Photo upload failed:', err)
-        }
+        try { uploadedUrls.push(await uploadStationPhoto(photo.file)) } catch { /* skip */ }
       }
 
       let videoUrl: string | null = component?.video_url ?? null
       if (videoFile) {
-        try {
-          videoUrl = await uploadComponentVideo(videoFile)
-        } catch (err) {
-          console.error('Video upload failed:', err)
-        }
-      } else if (!activeSections.includes('video')) {
+        try { videoUrl = await uploadComponentVideo(videoFile) } catch { /* skip */ }
+      } else if (!showVideo) {
         videoUrl = null
       }
 
-      const allPhotos = [...existingPhotos, ...uploadedPhotoUrls]
+      const allPhotos = [...existingPhotos, ...uploadedUrls].filter((u) => !u.startsWith('blob:'))
 
       const { error: updateErr } = await supabase.from('components').update({
         title: title.trim(),
         curriculum: curriculum || null,
         description: description.trim() || null,
-        equipment: component?.type === 'station' ? (lane_name.trim() || null) : null,
+        equipment: component?.type === 'station' ? (equipmentName.trim() || null) : null,
         skills: skills.length > 0 ? skills : null,
-        photos: allPhotos.filter((u) => !u.startsWith('blob:')),
-        duration_minutes,
-        video_link: video_link.trim() || null,
+        photos: allPhotos,
+        duration_minutes: showDuration ? durationMinutes : null,
+        video_link: showVideoLink ? (videoLink.trim() || null) : null,
         video_url: videoUrl,
       }).eq('id', componentId)
 
       if (updateErr) throw updateErr
-
       router.push('/library?view=components')
     } catch (err) {
-      console.error('Save failed:', err)
       setError(err instanceof Error ? err.message : 'Failed to save. Please try again.')
       setSubmitting(false)
     }
@@ -293,357 +252,356 @@ export default function EditComponentPage() {
     )
   }
 
-  const accentBorder =
-    component.type === 'game' ? 'border-accent-green' :
-    component.type === 'warmup' ? 'border-accent-gold' : 'border-accent-blue'
+  const accent = TYPE_ACCENT[component.type]
+  const typeLabel = TYPE_LABELS[component.type]
+  const descPlaceholder = TYPE_PLACEHOLDERS[component.type]
 
-  const accentText =
-    component.type === 'game' ? 'text-accent-green' :
-    component.type === 'warmup' ? 'text-accent-gold' : 'text-accent-blue'
+  type PhotoEntry =
+    | { key: string; url: string; isNew: false }
+    | { key: string; url: string; isNew: true; localId: string }
 
-  const accentGradient =
-    component.type === 'game' ? 'from-accent-green/[0.12]' :
-    component.type === 'warmup' ? 'from-accent-gold/[0.12]' : 'from-accent-blue/[0.12]'
-
-  const typeLabel =
-    component.type === 'game' ? 'Game' :
-    component.type === 'warmup' ? 'Warmup' : 'Station / Drill'
-
-  const availableSectionKeys = sectionsForType(component.type)
-  const availableOptions = ALL_SECTIONS.filter(
-    (o) => availableSectionKeys.includes(o.key) && !activeSections.includes(o.key)
-  )
-
-  function SectionHeader({ label, sectionKey }: { label: string; sectionKey: SectionKey }) {
-    return (
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-xs font-semibold text-text-dim uppercase tracking-wider">{label}</span>
-        <button type="button" onClick={() => removeSection(sectionKey)} className="text-text-dim hover:text-red-400 transition-colors p-1 rounded">
-          <XIcon />
-        </button>
-      </div>
-    )
-  }
-
-  const allPhotos = [
-    ...existingPhotos.map((url) => ({ type: 'existing' as const, url })),
-    ...newPhotos.map((p) => ({ type: 'new' as const, localId: p.localId, url: p.preview })),
+  const allPhotos: PhotoEntry[] = [
+    ...existingPhotos.map((url): PhotoEntry => ({ key: url, url, isNew: false })),
+    ...newPhotos.map((p): PhotoEntry => ({ key: p.localId, url: p.preview, isNew: true, localId: p.localId })),
   ]
 
   return (
-    <form onSubmit={handleSubmit}>
-      {/* Page header */}
+    <form onSubmit={handleSubmit} className="pb-6">
+
+      {/* Header */}
       <div className="flex items-center gap-3 mb-6 pt-2">
         <Link
           href="/library?view=components"
-          className="text-text-dim hover:text-text-primary transition-colors p-1.5 rounded-lg hover:bg-white/5 -ml-1.5"
+          className="flex items-center justify-center w-8 h-8 rounded-lg text-text-dim hover:text-text-primary hover:bg-white/5 transition-colors -ml-1"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
         </Link>
-        <div>
-          <h1 className="font-heading text-xl text-text-primary leading-none">Edit {typeLabel}</h1>
-          <p className="text-text-dim text-xs mt-0.5">Just Tumble Ninja H.E.R.O.S.</p>
+        <div className="flex-1 min-w-0">
+          <h1 className="font-heading text-2xl text-text-primary leading-none truncate">{title || typeLabel}</h1>
+          <p className="flex items-center gap-2 mt-1">
+            <span className={`text-[10px] font-heading uppercase tracking-wide border rounded-full px-2 py-0.5 ${accent.badge}`}>
+              {typeLabel}
+            </span>
+          </p>
         </div>
       </div>
 
-      {/* Main card */}
-      <div className={`card border-l-4 ${accentBorder} mb-5`}>
-        <div className={`flex items-center px-4 py-3 bg-gradient-to-r ${accentGradient} to-transparent border-b border-bg-border rounded-t-2xl`}>
-          <span className={`font-heading ${accentText} text-sm tracking-wide uppercase`}>{typeLabel}</span>
+      {/* Title */}
+      <div className="mb-4">
+        <input
+          type="text"
+          value={title}
+          onChange={(e) => { setTitle(e.target.value); setTitleError(null) }}
+          placeholder="Title"
+          className={`field-input text-base border-l-4 ${accent.border}`}
+        />
+        {titleError && <p className="text-accent-fire text-xs mt-1">{titleError}</p>}
+      </div>
+
+      {/* Curriculum */}
+      {curriculums.length > 1 && (
+        <div className="flex gap-2 mb-1">
+          {curriculums.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => { setCurriculum(c.age_group); setSkills([]) }}
+              className={`flex-1 py-1.5 rounded-full text-xs font-heading transition-all border ${
+                curriculum === c.age_group
+                  ? 'bg-accent-fire/10 border-accent-fire/40 text-accent-fire'
+                  : 'bg-bg-card border-bg-border text-text-dim hover:border-accent-fire/30 hover:text-text-muted'
+              }`}
+            >
+              {c.label}
+            </button>
+          ))}
         </div>
+      )}
 
-        <div className="px-4 py-4 space-y-4">
-          {/* Title */}
-          <div>
-            <label className="field-label" htmlFor="title">
-              {component.type === 'game' ? 'Game Name' : 'Title'}
-              <span className="text-accent-fire ml-0.5">*</span>
-            </label>
-            <input
-              id="title"
-              type="text"
-              value={title}
-              onChange={(e) => { setTitle(e.target.value); setTitleError(null) }}
-              className="field-input"
-            />
-            {titleError && <p className="text-accent-fire text-xs mt-1">{titleError}</p>}
-          </div>
+      {/* ── DESCRIPTION ───────────────────────────────────── */}
+      <SectionDivider label="Description" />
 
-          {/* Curriculum */}
-          <div>
-            <label className="field-label" htmlFor="curriculum">Curriculum</label>
-            <div className="relative">
-              <select
-                id="curriculum"
-                value={curriculum}
-                onChange={(e) => { setCurriculum(e.target.value); setSkills([]) }}
-                className="field-select pr-8"
+      {/* Mic row */}
+      <div className="flex items-center gap-3 mb-3">
+        {voiceSupported && (
+          <button
+            type="button"
+            onClick={handleMicToggle}
+            disabled={voiceState === 'processing'}
+            className={[
+              'w-11 h-11 flex items-center justify-center rounded-full transition-all flex-shrink-0',
+              micColors[voiceState],
+              voiceState === 'processing' ? 'cursor-not-allowed' : '',
+            ].join(' ')}
+            aria-label={voiceState === 'recording' ? 'Stop recording' : 'Start voice recording'}
+          >
+            {voiceState === 'recording' ? (
+              <svg className="w-5 h-5 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zM8 11a4 4 0 008 0h2a6 6 0 01-5 5.91V19h3v2H8v-2h3v-2.09A6 6 0 016 11h2z" />
+              </svg>
+            ) : voiceState === 'processing' ? (
+              <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            ) : voiceState === 'done' ? (
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zM8 11a4 4 0 008 0h2a6 6 0 01-5 5.91V19h3v2H8v-2h3v-2.09A6 6 0 016 11h2z" />
+              </svg>
+            )}
+          </button>
+        )}
+        <p className="text-sm text-text-dim leading-snug">
+          {voiceState === 'recording' && <span className="text-accent-fire font-semibold animate-pulse">Listening… tap to stop</span>}
+          {voiceState === 'processing' && <span>Processing…</span>}
+          {voiceState === 'done' && <span className="text-accent-green font-semibold">Description formatted ✓</span>}
+          {voiceState === 'error' && <span className="text-red-400">{voiceError}</span>}
+          {voiceState === 'idle' && voiceSupported && <span>Tap mic to speak the description</span>}
+          {!voiceSupported && <span>Type a description below</span>}
+        </p>
+      </div>
+
+      {voiceState === 'recording' && transcript && (
+        <p className="text-xs text-text-dim italic mb-3 px-1 leading-relaxed">&ldquo;{transcript}&rdquo;</p>
+      )}
+
+      <textarea
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        placeholder={descPlaceholder}
+        rows={4}
+        className="field-textarea resize-none leading-relaxed"
+      />
+
+      {/* ── PHOTOS ────────────────────────────────────────── */}
+      <SectionDivider label="Photos" />
+
+      {allPhotos.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto pb-2 mb-3" style={{ scrollSnapType: 'x mandatory' }}>
+          {allPhotos.map((photo) => (
+            <div
+              key={photo.key}
+              className="relative flex-shrink-0 rounded-xl overflow-hidden"
+              style={{ scrollSnapAlign: 'start', width: 112, height: 84 }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={photo.url} alt="" className="w-full h-full object-cover" />
+              <button
+                type="button"
+                onClick={() => {
+                  if (photo.isNew && photo.localId) {
+                    setNewPhotos((prev) => prev.filter((p) => p.localId !== photo.localId))
+                  } else {
+                    setExistingPhotos((prev) => prev.filter((u) => u !== photo.url))
+                  }
+                }}
+                className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 flex items-center justify-center text-white"
               >
-                {curriculums.map((c) => (
-                  <option key={c.id} value={c.age_group}>{c.label}</option>
+                <XIcon />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => cameraRef.current?.click()}
+          className="flex items-center gap-2 text-sm font-semibold text-accent-fire hover:text-accent-fire/80 transition-colors py-2 px-3 rounded-xl border border-accent-fire/30 hover:bg-accent-fire/5"
+        >
+          <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          Take Photo
+        </button>
+        <button
+          type="button"
+          onClick={() => libraryRef.current?.click()}
+          className="flex items-center gap-2 text-sm font-semibold text-text-muted hover:text-text-primary transition-colors py-2 px-3 rounded-xl border border-bg-border hover:bg-white/5"
+        >
+          <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          From Library
+        </button>
+      </div>
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={handleFileAdded} className="hidden" />
+      <input ref={libraryRef} type="file" accept="image/*" onChange={handleFileAdded} className="hidden" />
+
+      {/* ── SKILLS ────────────────────────────────────────── */}
+      <SectionDivider label="Skills" />
+
+      <div className="flex flex-wrap gap-2">
+        {availableSkills.map((skill) => (
+          <SkillChip key={skill} skill={skill} selected={skills.includes(skill)} onToggle={toggleSkill} />
+        ))}
+        {addingSkill ? (
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <input
+              ref={newSkillInputRef}
+              type="text"
+              value={newSkillName}
+              onChange={(e) => setNewSkillName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); handleAddSkill() }
+                if (e.key === 'Escape') { setAddingSkill(false); setNewSkillName('') }
+              }}
+              placeholder="Skill name…"
+              className="px-2.5 py-1 bg-bg-card border border-bg-border rounded-full text-sm text-text-primary placeholder:text-text-dim focus:outline-none focus:border-accent-green w-32"
+              autoFocus
+            />
+            <button type="button" onClick={handleAddSkill} disabled={!newSkillName.trim() || addSkillSaving} className="px-2.5 py-1 bg-accent-green text-white text-xs font-heading rounded-full disabled:opacity-50">
+              {addSkillSaving ? '…' : 'Add'}
+            </button>
+            <button type="button" onClick={() => { setAddingSkill(false); setNewSkillName(''); setAddSkillError(null) }} className="text-text-dim hover:text-text-primary p-1">
+              <XIcon />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => { setAddingSkill(true); setTimeout(() => newSkillInputRef.current?.focus(), 50) }}
+            className="flex items-center gap-1 px-2.5 py-1 border border-dashed border-accent-green/40 rounded-full text-xs text-accent-green hover:bg-accent-green/10 transition-colors"
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            New Skill
+          </button>
+        )}
+      </div>
+      {addSkillError && <p className="text-xs text-red-400 mt-1">{addSkillError}</p>}
+
+      {/* ── EQUIPMENT NAME (stations only) ────────────────── */}
+      {component.type === 'station' && (
+        <>
+          <SectionDivider label="Equipment / Station" />
+          <input
+            type="text"
+            value={equipmentName}
+            onChange={(e) => setEquipmentName(e.target.value)}
+            placeholder="e.g. Station 1, Blue Lane, Vault Box…"
+            className="field-input"
+          />
+        </>
+      )}
+
+      {/* ── OPTIONAL additions ─────────────────────────────── */}
+      {(!showDuration || !showVideo || !showVideoLink) && (
+        <div className="flex flex-wrap gap-2 mt-6">
+          {!showDuration && (
+            <button type="button" onClick={() => setShowDuration(true)} className="flex items-center gap-1.5 text-xs text-text-dim border border-dashed border-bg-border rounded-full px-3 py-1.5 hover:border-text-dim/40 hover:text-text-muted transition-colors">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              Duration
+            </button>
+          )}
+          {!showVideo && (
+            <button type="button" onClick={() => setShowVideo(true)} className="flex items-center gap-1.5 text-xs text-text-dim border border-dashed border-bg-border rounded-full px-3 py-1.5 hover:border-text-dim/40 hover:text-text-muted transition-colors">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              Video
+            </button>
+          )}
+          {!showVideoLink && (
+            <button type="button" onClick={() => setShowVideoLink(true)} className="flex items-center gap-1.5 text-xs text-text-dim border border-dashed border-bg-border rounded-full px-3 py-1.5 hover:border-text-dim/40 hover:text-text-muted transition-colors">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              Video Link
+            </button>
+          )}
+        </div>
+      )}
+
+      {showDuration && (
+        <>
+          <SectionDivider label="Duration" />
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1">
+              <select
+                value={durationMinutes ?? ''}
+                onChange={(e) => setDurationMinutes(e.target.value ? Number(e.target.value) : null)}
+                className="field-select pr-8 w-full"
+              >
+                <option value="">Select duration</option>
+                {[1,2,3,4,5,6,7,8,9,10,15,20,30].map((n) => (
+                  <option key={n} value={n}>{n} min</option>
                 ))}
               </select>
               <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-dim pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
               </svg>
             </div>
+            <button type="button" onClick={() => { setShowDuration(false); setDurationMinutes(null) }} className="text-text-dim hover:text-red-400 transition-colors p-1.5">
+              <XIcon />
+            </button>
           </div>
-
-          {/* Dynamic sections */}
-          {activeSections.map((key) => {
-            if (key === 'lanename') return (
-              <div key="lanename">
-                <SectionHeader label="Station Name" sectionKey="lanename" />
-                <input type="text" value={lane_name} onChange={(e) => setLaneName(e.target.value)} placeholder="e.g. Station 1, Blue Station..." className="field-input" />
-              </div>
-            )
-
-            if (key === 'photo') return (
-              <div key="photo">
-                <SectionHeader label="Photo" sectionKey="photo" />
-                {allPhotos.length > 0 && (
-                  <div className="flex overflow-x-auto gap-2 pb-1 mb-2" style={{ scrollSnapType: 'x mandatory' }}>
-                    {allPhotos.map((p) => (
-                      <div key={p.type === 'existing' ? p.url : p.localId} className="relative flex-shrink-0 rounded-xl overflow-hidden" style={{ scrollSnapAlign: 'start', width: '100%' }}>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={p.url} alt="photo" className="w-full object-cover rounded-xl" style={{ maxHeight: '200px' }} />
-                        <button
-                          type="button"
-                          onClick={() => p.type === 'existing' ? removeExistingPhoto(p.url) : removeNewPhoto(p.localId!)}
-                          className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 flex items-center justify-center text-white hover:bg-black/80 transition-colors"
-                        >
-                          <XIcon />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div className="flex items-center gap-4">
-                  <button type="button" onClick={() => cameraRef.current?.click()} className="flex items-center gap-1.5 text-sm font-semibold text-accent-blue hover:text-accent-blue/80 transition-colors py-1.5">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    Take Photo
-                  </button>
-                  <button type="button" onClick={() => libraryRef.current?.click()} className="flex items-center gap-1.5 text-sm font-semibold text-text-muted hover:text-text-primary transition-colors py-1.5">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    Library
-                  </button>
-                </div>
-                <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={handleFileAdded} className="hidden" />
-                <input ref={libraryRef} type="file" accept="image/*" onChange={handleFileAdded} className="hidden" />
-              </div>
-            )
-
-            if (key === 'video') return (
-              <div key="video">
-                <SectionHeader label="Video" sectionKey="video" />
-                <VideoCapture
-                  preview={videoPreview}
-                  onFileSelected={(file, preview) => { setVideoFile(file); setVideoPreview(preview) }}
-                />
-              </div>
-            )
-
-            if (key === 'videolink') return (
-              <div key="videolink">
-                <SectionHeader label="Video Link" sectionKey="videolink" />
-                <input type="url" value={video_link} onChange={(e) => setVideoLink(e.target.value)} placeholder="https://..." className="field-input" inputMode="url" />
-              </div>
-            )
-
-            if (key === 'description') return (
-              <div key="description">
-                <SectionHeader label="Description" sectionKey="description" />
-                {/* Voice mic row */}
-                <div className="flex items-center gap-3 mb-2">
-                  {voiceSupported && (
-                    <button
-                      type="button"
-                      onClick={handleMicToggle}
-                      disabled={voiceState === 'processing'}
-                      className={[
-                        'w-10 h-10 flex items-center justify-center rounded-full transition-all flex-shrink-0',
-                        micColors[voiceState],
-                        voiceState === 'processing' ? 'cursor-not-allowed' : '',
-                      ].join(' ')}
-                      aria-label={voiceState === 'recording' ? 'Stop recording' : 'Start voice recording'}
-                    >
-                      {voiceState === 'recording' ? (
-                        <svg className="w-5 h-5 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zM8 11a4 4 0 008 0h2a6 6 0 01-5 5.91V19h3v2H8v-2h3v-2.09A6 6 0 016 11h2z" />
-                        </svg>
-                      ) : voiceState === 'processing' ? (
-                        <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                      ) : voiceState === 'done' ? (
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                        </svg>
-                      ) : (
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zM8 11a4 4 0 008 0h2a6 6 0 01-5 5.91V19h3v2H8v-2h3v-2.09A6 6 0 016 11h2z" />
-                        </svg>
-                      )}
-                    </button>
-                  )}
-                  <p className="text-xs text-text-dim">
-                    {voiceState === 'recording' && <span className="text-accent-fire animate-pulse">Listening… tap mic to stop</span>}
-                    {voiceState === 'processing' && 'Processing…'}
-                    {voiceState === 'done' && <span className="text-accent-green">Description formatted ✓</span>}
-                    {voiceState === 'error' && <span className="text-red-400">{voiceError}</span>}
-                    {voiceState === 'idle' && voiceSupported && 'Tap mic to speak the description'}
-                    {!voiceSupported && 'Type a description below'}
-                  </p>
-                </div>
-                {voiceState === 'recording' && transcript && (
-                  <p className="text-xs text-text-dim italic mb-2 px-1 leading-relaxed">&ldquo;{transcript}&rdquo;</p>
-                )}
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder={
-                    component.type === 'game' ? 'Rules, setup, how to play...' :
-                    component.type === 'warmup' ? 'Exercise sequence, timing, cues...' :
-                    'What does the kid do? Any coaching tips?'
-                  }
-                  rows={3}
-                  className="field-textarea"
-                />
-              </div>
-            )
-
-            if (key === 'duration') return (
-              <div key="duration">
-                <SectionHeader label="Duration" sectionKey="duration" />
-                <div className="relative">
-                  <select
-                    value={duration_minutes ?? ''}
-                    onChange={(e) => setDurationMinutes(e.target.value ? Number(e.target.value) : null)}
-                    className="field-select pr-8"
-                  >
-                    <option value="">Select duration</option>
-                    {DURATIONS.map((n) => <option key={n} value={n}>{n} min</option>)}
-                  </select>
-                  <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-dim pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </div>
-            )
-
-            if (key === 'skills') return (
-              <div key="skills">
-                <SectionHeader label="Skills" sectionKey="skills" />
-                <div className="flex flex-wrap gap-2">
-                  {availableSkills.map((skill) => (
-                    <SkillChip key={skill} skill={skill} selected={skills.includes(skill)} onToggle={toggleSkill} />
-                  ))}
-                  {addingSkill ? (
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <input
-                        ref={newSkillInputRef}
-                        type="text"
-                        value={newSkillName}
-                        onChange={(e) => setNewSkillName(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') { e.preventDefault(); handleAddSkill() }
-                          if (e.key === 'Escape') { setAddingSkill(false); setNewSkillName('') }
-                        }}
-                        placeholder="Skill name..."
-                        className="px-2.5 py-1 bg-bg-card border border-bg-border rounded-full text-sm text-text-primary placeholder:text-text-dim focus:outline-none focus:border-accent-green w-32"
-                      />
-                      <button type="button" onClick={handleAddSkill} disabled={!newSkillName.trim() || addSkillSaving} className="px-2.5 py-1 bg-accent-green text-white text-xs font-heading rounded-full disabled:opacity-50">
-                        {addSkillSaving ? '…' : 'Add'}
-                      </button>
-                      <button type="button" onClick={() => { setAddingSkill(false); setNewSkillName(''); setAddSkillError(null) }} className="text-text-dim hover:text-text-primary transition-colors p-1">
-                        <XIcon />
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => { setAddingSkill(true); setTimeout(() => newSkillInputRef.current?.focus(), 50) }}
-                      className="flex items-center gap-1 px-2.5 py-1 border border-dashed border-accent-green/40 rounded-full text-xs text-accent-green hover:bg-accent-green/10 transition-colors"
-                    >
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                      </svg>
-                      New Skill
-                    </button>
-                  )}
-                </div>
-                {addSkillError && <p className="text-xs text-red-400 mt-1">{addSkillError}</p>}
-              </div>
-            )
-
-            return null
-          })}
-
-          {/* + Add button */}
-          {availableOptions.length > 0 && (
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setMenuOpen((v) => !v)}
-                className="flex items-center gap-1.5 w-full justify-center text-sm text-text-dim hover:text-text-primary py-2 px-3 border border-dashed border-bg-border hover:border-text-dim/30 rounded-xl transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                </svg>
-                Add
-              </button>
-              {menuOpen && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
-                  <div className="absolute bottom-full left-0 right-0 mb-1 bg-bg-card border border-bg-border rounded-xl shadow-lg z-50 py-1 overflow-hidden">
-                    {availableOptions.map((o) => (
-                      <button
-                        key={o.key}
-                        type="button"
-                        onClick={() => addSection(o.key)}
-                        className="w-full flex items-center px-4 py-2.5 text-sm text-text-muted hover:text-text-primary hover:bg-white/5 transition-colors text-left"
-                      >
-                        {o.label}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {error && (
-        <div className="mb-4 p-3 bg-red-900/30 border border-red-800 rounded-xl text-red-400 text-sm">{error}</div>
+        </>
       )}
 
-      <button
-        type="submit"
-        disabled={submitting}
-        className="w-full py-4 bg-accent-fire text-white font-heading text-base rounded-xl active:scale-95 transition-all shadow-lg shadow-accent-fire/25 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 min-h-[56px]"
-      >
-        {submitting ? (
-          <>
-            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            Saving...
-          </>
-        ) : (
-          <>
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-            Save Changes
-          </>
-        )}
-      </button>
+      {showVideo && (
+        <>
+          <SectionDivider label="Video" />
+          <div className="flex items-start gap-2">
+            <div className="flex-1">
+              <VideoCapture
+                preview={videoPreview}
+                onFileSelected={(file, preview) => { setVideoFile(file); setVideoPreview(preview) }}
+              />
+            </div>
+            <button type="button" onClick={() => { setShowVideo(false); setVideoFile(null); setVideoPreview(null) }} className="text-text-dim hover:text-red-400 transition-colors p-1.5 mt-1">
+              <XIcon />
+            </button>
+          </div>
+        </>
+      )}
 
-      <div className="h-4" />
+      {showVideoLink && (
+        <>
+          <SectionDivider label="Video Link" />
+          <div className="flex items-center gap-2">
+            <input
+              type="url"
+              value={videoLink}
+              onChange={(e) => setVideoLink(e.target.value)}
+              placeholder="https://…"
+              className="field-input flex-1"
+              inputMode="url"
+            />
+            <button type="button" onClick={() => { setShowVideoLink(false); setVideoLink('') }} className="text-text-dim hover:text-red-400 transition-colors p-1.5">
+              <XIcon />
+            </button>
+          </div>
+        </>
+      )}
+
+      {error && (
+        <div className="mt-4 p-3 bg-red-900/30 border border-red-800 rounded-xl text-red-400 text-sm">{error}</div>
+      )}
+
+      {/* Save button */}
+      <div className="mt-8">
+        <button
+          type="submit"
+          disabled={submitting}
+          className="w-full inline-flex items-center justify-center gap-2 bg-accent-fire text-white font-heading text-base py-4 rounded-2xl shadow-glow-fire active:scale-[0.98] transition-all min-h-[56px] disabled:opacity-50"
+        >
+          {submitting ? (
+            <>
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              Saving…
+            </>
+          ) : 'Save Changes'}
+        </button>
+      </div>
     </form>
   )
 }
