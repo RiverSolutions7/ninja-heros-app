@@ -54,10 +54,10 @@ export async function fetchFolders(): Promise<FolderRow[]> {
 // Components
 // ============================================================
 
-export async function countComponents(): Promise<number> {
-  const { count, error } = await supabase
-    .from('components')
-    .select('*', { count: 'exact', head: true })
+export async function countComponents(ageGroup?: string): Promise<number> {
+  let query = supabase.from('components').select('*', { count: 'exact', head: true })
+  if (ageGroup) query = query.eq('curriculum', ageGroup)
+  const { count, error } = await query
   if (error) throw error
   return count ?? 0
 }
@@ -76,6 +76,52 @@ export async function fetchComponents(type?: string, curriculum?: string): Promi
   const { data, error } = await query
   if (error) throw error
   return (data ?? []) as ComponentRow[]
+}
+
+// ============================================================
+// Plan count — total saved plans (plan_date not null)
+// ============================================================
+export async function fetchPlanCount(): Promise<number> {
+  const { count, error } = await supabase
+    .from('plans')
+    .select('*', { count: 'exact', head: true })
+    .not('plan_date', 'is', null)
+  if (error) throw error
+  return count ?? 0
+}
+
+// ============================================================
+// Top components — most frequently used in saved plans
+// ============================================================
+export async function fetchTopComponents(
+  ageGroup?: string,
+  limit = 5
+): Promise<Array<{ component: ComponentRow; count: number }>> {
+  const { data: plans, error } = await supabase
+    .from('plans')
+    .select('items')
+    .not('plan_date', 'is', null)
+  if (error) throw error
+
+  const freq: Record<string, { component: ComponentRow; count: number }> = {}
+
+  for (const plan of plans ?? []) {
+    const items = (plan.items ?? []) as PlanItem[]
+    for (const item of items) {
+      if (!item.component?.id) continue
+      if (ageGroup && item.component.curriculum !== ageGroup) continue
+      const id = item.component.id
+      if (freq[id]) {
+        freq[id].count++
+      } else {
+        freq[id] = { component: item.component as ComponentRow, count: 1 }
+      }
+    }
+  }
+
+  return Object.values(freq)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit)
 }
 
 // ============================================================

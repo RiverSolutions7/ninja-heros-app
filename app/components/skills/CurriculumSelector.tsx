@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/app/lib/supabase'
 import type { CurriculumRow } from '@/app/lib/database.types'
 
-export default function CurriculumSelector() {
+export default function CurriculumSelector({ basePath = '/program' }: { basePath?: string }) {
   const router = useRouter()
   const params = useSearchParams()
   const current = params.get('curriculum')
@@ -27,7 +27,7 @@ export default function CurriculumSelector() {
         return (
           <button
             key={c.id}
-            onClick={() => router.push(`/skills?curriculum=${c.id}`)}
+            onClick={() => router.push(`${basePath}?curriculum=${c.id}`)}
             className={`flex-1 py-2 rounded-full text-sm font-heading transition-all duration-200 border ${
               active
                 ? 'bg-accent-fire/10 border-accent-fire/50 text-accent-fire shadow-glow-fire'
