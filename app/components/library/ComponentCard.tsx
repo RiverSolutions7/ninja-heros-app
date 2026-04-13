@@ -78,9 +78,7 @@ export default function ComponentCard({ component, showMenu = false, onClick }: 
   const firstPhoto = photos[0] ?? null
   const hasVideo = !!(component.video_link || component.video_url)
 
-  // Stations: show photo thumbnail when one exists
   // Games / Warmups: title + metadata only, with subtle media icons if content exists
-  const showPhoto = component.type === 'station' && firstPhoto !== null
   const showMediaBadges = component.type !== 'station' && (photos.length > 0 || hasVideo)
 
   return (
@@ -92,17 +90,26 @@ export default function ComponentCard({ component, showMenu = false, onClick }: 
       ].join(' ')}
     >
       <div className="flex items-center gap-3">
-        {/* Station photo thumbnail */}
-        {showPhoto && (
+        {/* Station thumbnail — photo if available, play icon if video only */}
+        {component.type === 'station' && (firstPhoto || component.video_url) && (
           <div className="relative flex-shrink-0">
-            <div className="w-14 h-14 rounded-xl overflow-hidden border border-bg-border/50">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={firstPhoto}
-                alt={component.title}
-                className="w-full h-full object-cover"
-                onError={(e) => { (e.currentTarget.parentElement as HTMLElement).style.display = 'none' }}
-              />
+            <div className={[
+              'w-14 h-14 rounded-xl overflow-hidden border border-bg-border/50 flex items-center justify-center',
+              !firstPhoto ? 'bg-black/40' : '',
+            ].join(' ')}>
+              {firstPhoto ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={firstPhoto}
+                  alt={component.title}
+                  className="w-full h-full object-cover"
+                  onError={(e) => { (e.currentTarget.parentElement as HTMLElement).style.display = 'none' }}
+                />
+              ) : (
+                <svg className={['w-6 h-6', meta.textColor].join(' ')} fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5.14v14l11-7-11-7z" />
+                </svg>
+              )}
             </div>
             {photos.length > 1 && (
               <span className="absolute bottom-0.5 right-0.5 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">

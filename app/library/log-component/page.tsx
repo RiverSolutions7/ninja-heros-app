@@ -8,6 +8,8 @@ import { uploadStationPhoto } from '@/app/lib/uploadPhoto'
 import type { ComponentType, CurriculumRow } from '@/app/lib/database.types'
 import SkillChip from '@/app/components/skills/SkillChip'
 import Toast from '@/app/components/ui/Toast'
+import VideoCapture from '@/app/components/ui/VideoCapture'
+import { uploadComponentVideo } from '@/app/lib/uploadVideo'
 import { useVoiceNote } from '@/app/hooks/useVoiceNote'
 
 interface PhotoDraft {
@@ -55,8 +57,12 @@ export default function LogComponentPage() {
   const [skills, setSkills] = useState<string[]>([])
   const [photos, setPhotos] = useState<PhotoDraft[]>([])
 
-  // Optional extras
+  // Video
   const [showVideo, setShowVideo] = useState(false)
+  const [videoFile, setVideoFile] = useState<File | null>(null)
+  const [videoPreview, setVideoPreview] = useState<string | null>(null)
+
+  // Optional extras
   const [showVideoLink, setShowVideoLink] = useState(false)
   const [videoLink, setVideoLink] = useState('')
 
@@ -172,6 +178,12 @@ export default function LogComponentPage() {
       for (const photo of photos) {
         try { photoUrls.push(await uploadStationPhoto(photo.file)) } catch { /* skip */ }
       }
+
+      let videoUrl: string | null = null
+      if (videoFile) {
+        try { videoUrl = await uploadComponentVideo(videoFile) } catch { /* skip */ }
+      }
+
       const { error: insertErr } = await supabase.from('components').insert({
         type: componentType,
         title: title.trim(),
@@ -179,6 +191,7 @@ export default function LogComponentPage() {
         description: description.trim() || null,
         skills: skills.length > 0 ? skills : null,
         photos: photoUrls.filter((u) => !u.startsWith('blob:')),
+        video_url: videoUrl,
         video_link: showVideoLink ? (videoLink.trim() || null) : null,
       })
       if (insertErr) throw insertErr
@@ -309,6 +322,54 @@ export default function LogComponentPage() {
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={handleFileAdded} className="hidden" aria-label="Take photo" />
       <input ref={libraryRef} type="file" accept="image/*" onChange={handleFileAdded} className="hidden" aria-label="Choose from library" />
 
+      {/* ── VIDEO ─────────────────────────────────────────── */}
+      {!showVideo ? (
+        <div className="mt-1 mb-1">
+          <button
+            type="button"
+            onClick={() => setShowVideo(true)}
+            className="flex items-center gap-1.5 text-xs text-text-dim border border-dashed border-bg-border rounded-full px-3 py-1.5 hover:border-text-dim/40 hover:text-text-muted transition-colors"
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            Add Video
+          </button>
+        </div>
+      ) : (
+        <>
+          <SectionDivider label="Video" />
+          <VideoCapture
+            preview={videoPreview}
+            onFileSelected={(file, preview) => { setVideoFile(file); setVideoPreview(preview) }}
+          />
+          {videoPreview && (
+            <button
+              type="button"
+              onClick={() => { setVideoFile(null); setVideoPreview(null) }}
+              className="flex items-center gap-1 text-xs text-red-400/70 hover:text-red-400 mt-2 transition-colors"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              Remove video
+            </button>
+          )}
+          {!videoPreview && (
+            <button
+              type="button"
+              onClick={() => setShowVideo(false)}
+              className="flex items-center gap-1 text-xs text-text-dim/50 hover:text-text-dim mt-2 transition-colors"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              Cancel
+            </button>
+          )}
+        </>
+      )}
+
       {/* ── TYPE ──────────────────────────────────────────── */}
       <SectionDivider label="Type" />
 
@@ -428,18 +489,22 @@ export default function LogComponentPage() {
       {addSkillError && <p className="text-xs text-red-400 mt-1">{addSkillError}</p>}
 
       {/* ── OPTIONAL: Video Link ───────────────────────────── */}
-      {(!showVideo || !showVideoLink) && (
+      {!showVideoLink && (
         <div className="flex gap-2 mt-6">
-          {!showVideo && (
-            <button type="button" onClick={() => setShowVideo(true)} className="flex items-center gap-1.5 text-xs text-text-dim border border-dashed border-bg-border rounded-full px-3 py-1.5 hover:border-text-dim/40 hover:text-text-muted transition-colors">
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-              Video Link
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setShowVideoLink(true)}
+            className="flex items-center gap-1.5 text-xs text-text-dim border border-dashed border-bg-border rounded-full px-3 py-1.5 hover:border-text-dim/40 hover:text-text-muted transition-colors"
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            Video Link
+          </button>
         </div>
       )}
 
-      {showVideo && (
+      {showVideoLink && (
         <>
           <SectionDivider label="Video Link" />
           <div className="flex items-center gap-2">
@@ -451,7 +516,7 @@ export default function LogComponentPage() {
               className="field-input flex-1"
               inputMode="url"
             />
-            <button type="button" onClick={() => { setShowVideo(false); setShowVideoLink(false); setVideoLink('') }} className="text-text-dim hover:text-red-400 transition-colors p-1.5">
+            <button type="button" onClick={() => { setShowVideoLink(false); setVideoLink('') }} className="text-text-dim hover:text-red-400 transition-colors p-1.5">
               <XIcon />
             </button>
           </div>

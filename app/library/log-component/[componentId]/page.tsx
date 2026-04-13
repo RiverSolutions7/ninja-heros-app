@@ -5,8 +5,10 @@ import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/app/lib/supabase'
 import { uploadStationPhoto } from '@/app/lib/uploadPhoto'
+import { uploadComponentVideo } from '@/app/lib/uploadVideo'
 import type { ComponentRow, ComponentType, CurriculumRow } from '@/app/lib/database.types'
 import SkillChip from '@/app/components/skills/SkillChip'
+import VideoCapture from '@/app/components/ui/VideoCapture'
 import { useVoiceNote } from '@/app/hooks/useVoiceNote'
 
 interface PhotoDraft {
@@ -75,6 +77,11 @@ export default function EditComponentPage() {
   const [skills, setSkills] = useState<string[]>([])
   const [newPhotos, setNewPhotos] = useState<PhotoDraft[]>([])
   const [existingPhotos, setExistingPhotos] = useState<string[]>([])
+
+  // Video (recorded/uploaded)
+  const [showVideo, setShowVideo] = useState(false)
+  const [videoFile, setVideoFile] = useState<File | null>(null)
+  const [videoPreview, setVideoPreview] = useState<string | null>(null)
 
   // Optional video link only
   const [showVideoLink, setShowVideoLink] = useState(false)
@@ -145,6 +152,8 @@ export default function EditComponentPage() {
         setDescription(c.description ?? '')
         setSkills(c.skills ?? [])
         setExistingPhotos(c.photos ?? [])
+        setVideoPreview(c.video_url ?? null)
+        setShowVideo(!!c.video_url)
         setVideoLink(c.video_link ?? '')
         setShowVideoLink(!!c.video_link)
         setLoading(false)
@@ -215,12 +224,24 @@ export default function EditComponentPage() {
 
       const allPhotos = [...existingPhotos, ...uploadedUrls].filter((u) => !u.startsWith('blob:'))
 
+      // Determine video_url:
+      // - New file selected → upload it
+      // - Existing URL unchanged (not a blob) → keep it
+      // - User removed → null
+      let videoUrl: string | null = null
+      if (videoFile) {
+        try { videoUrl = await uploadComponentVideo(videoFile) } catch { /* skip */ }
+      } else if (videoPreview && !videoPreview.startsWith('blob:')) {
+        videoUrl = videoPreview
+      }
+
       const { error: updateErr } = await supabase.from('components').update({
         title: title.trim(),
         curriculum: curriculum || null,
         description: description.trim() || null,
         skills: skills.length > 0 ? skills : null,
         photos: allPhotos,
+        video_url: videoUrl,
         video_link: showVideoLink ? (videoLink.trim() || null) : null,
       }).eq('id', componentId)
 
@@ -390,6 +411,54 @@ export default function EditComponentPage() {
       </div>
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={handleFileAdded} className="hidden" aria-label="Take photo" />
       <input ref={libraryRef} type="file" accept="image/*" onChange={handleFileAdded} className="hidden" aria-label="Choose from library" />
+
+      {/* ── VIDEO ─────────────────────────────────────────── */}
+      {!showVideo ? (
+        <div className="mt-1 mb-1">
+          <button
+            type="button"
+            onClick={() => setShowVideo(true)}
+            className="flex items-center gap-1.5 text-xs text-text-dim border border-dashed border-bg-border rounded-full px-3 py-1.5 hover:border-text-dim/40 hover:text-text-muted transition-colors"
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            Add Video
+          </button>
+        </div>
+      ) : (
+        <>
+          <SectionDivider label="Video" />
+          <VideoCapture
+            preview={videoPreview}
+            onFileSelected={(file, preview) => { setVideoFile(file); setVideoPreview(preview) }}
+          />
+          {videoPreview && (
+            <button
+              type="button"
+              onClick={() => { setVideoFile(null); setVideoPreview(null) }}
+              className="flex items-center gap-1 text-xs text-red-400/70 hover:text-red-400 mt-2 transition-colors"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              Remove video
+            </button>
+          )}
+          {!videoPreview && (
+            <button
+              type="button"
+              onClick={() => { setShowVideo(false) }}
+              className="flex items-center gap-1 text-xs text-text-dim/50 hover:text-text-dim mt-2 transition-colors"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              Cancel
+            </button>
+          )}
+        </>
+      )}
 
       {/* ── NAME ──────────────────────────────────────────── */}
       <SectionDivider label="Name" />
