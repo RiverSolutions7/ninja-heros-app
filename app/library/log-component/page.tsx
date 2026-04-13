@@ -5,10 +5,8 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/app/lib/supabase'
 import { uploadStationPhoto } from '@/app/lib/uploadPhoto'
-import { uploadComponentVideo } from '@/app/lib/uploadVideo'
 import type { ComponentType, CurriculumRow } from '@/app/lib/database.types'
 import SkillChip from '@/app/components/skills/SkillChip'
-import VideoCapture from '@/app/components/ui/VideoCapture'
 import Toast from '@/app/components/ui/Toast'
 import { useVoiceNote } from '@/app/hooks/useVoiceNote'
 
@@ -39,42 +37,27 @@ function SectionDivider({ label }: { label: string }) {
 const TYPE_LABELS: Record<ComponentType, string> = {
   game: 'Game',
   warmup: 'Warmup',
-  station: 'Station / Drill',
+  station: 'Station',
 }
 
-const TYPE_PLACEHOLDERS: Record<ComponentType, { title: string; description: string }> = {
-  game: {
-    title: 'e.g. Cube Game, Ninja Tag, Freeze Tag…',
-    description: 'Rules, setup, how to play…',
-  },
-  warmup: {
-    title: 'e.g. Dynamic Stretching, Bear Crawl Circuit…',
-    description: 'Exercise sequence, timing, cues…',
-  },
-  station: {
-    title: 'e.g. Box Jump Progression, Balance Beam Walk…',
-    description: 'What does the kid do? Coaching tips?',
-  },
-}
+const MIC_IDLE_LABEL = 'Tap to name and describe this component'
+const MIC_RECORDING_LABEL = 'Listening… tap again to stop'
+const MIC_PROCESSING_LABEL = 'Processing…'
+const MIC_DONE_LABEL = 'Name and description filled ✓'
 
 export default function LogComponentPage() {
   const router = useRouter()
 
   const [componentType, setComponentType] = useState<ComponentType>('game')
   const [title, setTitle] = useState('')
-  const [curriculum, setCurriculum] = useState('')
   const [description, setDescription] = useState('')
+  const [curriculum, setCurriculum] = useState('')
   const [skills, setSkills] = useState<string[]>([])
   const [photos, setPhotos] = useState<PhotoDraft[]>([])
-  const [equipmentName, setEquipmentName] = useState('')
 
-  // Optional fields
-  const [showDuration, setShowDuration] = useState(false)
+  // Optional extras
   const [showVideo, setShowVideo] = useState(false)
   const [showVideoLink, setShowVideoLink] = useState(false)
-  const [durationMinutes, setDurationMinutes] = useState<number | null>(null)
-  const [videoFile, setVideoFile] = useState<File | null>(null)
-  const [videoPreview, setVideoPreview] = useState<string | null>(null)
   const [videoLink, setVideoLink] = useState('')
 
   const [curriculums, setCurriculums] = useState<CurriculumRow[]>([])
@@ -98,7 +81,7 @@ export default function LogComponentPage() {
     isSupported: voiceSupported,
     startRecording,
     stopRecording,
-    parseNote,
+    parseComponent,
     reset: resetVoice,
   } = useVoiceNote()
 
@@ -108,18 +91,19 @@ export default function LogComponentPage() {
       startRecording()
     } else if (voiceState === 'recording') {
       stopRecording()
-      if (transcript) setDescription(transcript)
-      const structured = await parseNote()
-      if (structured) setDescription(structured)
+      const result = await parseComponent(componentType)
+      if (result.title) setTitle(result.title)
+      if (result.description) setDescription(result.description)
+      if (result.title) setTitleError(null)
     }
   }
 
   const micColors: Record<string, string> = {
-    idle: 'bg-bg-input border border-bg-border text-text-muted hover:bg-white/5',
+    idle: 'bg-bg-card border-2 border-bg-border text-text-muted hover:border-accent-fire/40 hover:text-accent-fire',
     recording: 'bg-accent-fire text-white shadow-glow-fire',
-    processing: 'bg-bg-input border border-bg-border text-text-dim',
-    done: 'bg-accent-green/20 border border-accent-green/40 text-accent-green',
-    error: 'bg-red-900/30 border border-red-500/40 text-red-400',
+    processing: 'bg-bg-card border-2 border-bg-border text-text-dim',
+    done: 'bg-accent-green/15 border-2 border-accent-green/50 text-accent-green',
+    error: 'bg-red-900/20 border-2 border-red-500/40 text-red-400',
   }
 
   useEffect(() => {
@@ -181,28 +165,21 @@ export default function LogComponentPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setTitleError(null)
-    if (!title.trim()) { setTitleError('Title is required'); return }
+    if (!title.trim()) { setTitleError('Give this component a name'); return }
     setSubmitting(true)
     try {
       const photoUrls: string[] = []
       for (const photo of photos) {
         try { photoUrls.push(await uploadStationPhoto(photo.file)) } catch { /* skip */ }
       }
-      let videoUrl: string | null = null
-      if (videoFile) {
-        try { videoUrl = await uploadComponentVideo(videoFile) } catch { /* skip */ }
-      }
       const { error: insertErr } = await supabase.from('components').insert({
         type: componentType,
         title: title.trim(),
         curriculum: curriculum || null,
         description: description.trim() || null,
-        equipment: componentType === 'station' ? (equipmentName.trim() || null) : null,
         skills: skills.length > 0 ? skills : null,
         photos: photoUrls.filter((u) => !u.startsWith('blob:')),
-        duration_minutes: showDuration ? durationMinutes : null,
         video_link: showVideoLink ? (videoLink.trim() || null) : null,
-        video_url: videoUrl,
       })
       if (insertErr) throw insertErr
       setToast({ message: 'Component saved ✓', type: 'success' })
@@ -214,14 +191,11 @@ export default function LogComponentPage() {
     }
   }
 
-  const placeholders = TYPE_PLACEHOLDERS[componentType]
-
   return (
     <form onSubmit={handleSubmit} className="pb-6">
 
       {/* Header */}
-      <div className="relative flex items-center gap-3 mb-6 pt-2">
-        <div className="absolute inset-x-0 -top-4 h-24 bg-gradient-to-b from-accent-fire/[0.07] to-transparent pointer-events-none rounded-2xl -z-10" />
+      <div className="flex items-center gap-3 mb-6 pt-2">
         <Link
           href="/library?view=components"
           className="flex items-center justify-center w-8 h-8 rounded-lg text-text-dim hover:text-text-primary hover:bg-white/5 transition-colors -ml-1"
@@ -230,121 +204,59 @@ export default function LogComponentPage() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
         </Link>
-        <div>
-          <h1 className="font-heading text-2xl text-text-primary leading-none">Log Component</h1>
-          <p className="flex items-center gap-1.5 text-text-dim text-xs mt-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-accent-fire inline-block opacity-60" />
-            Just Tumble · Ninja H.E.R.O.S.
-          </p>
-        </div>
+        <h1 className="font-heading text-xl text-text-primary leading-none">Log Component</h1>
       </div>
 
-      {/* Type picker */}
-      <div className="flex bg-bg-card rounded-xl p-1 mb-5 border border-bg-border">
-        {(['game', 'warmup', 'station'] as ComponentType[]).map((type) => (
-          <button
-            key={type}
-            type="button"
-            onClick={() => setComponentType(type)}
-            className={`flex-1 py-2 text-sm font-heading rounded-lg transition-all ${
-              componentType === type
-                ? 'bg-accent-fire text-white shadow-lg'
-                : 'text-text-dim hover:text-text-muted'
-            }`}
-          >
-            {TYPE_LABELS[type].split(' / ')[0]}
-          </button>
-        ))}
-      </div>
+      {/* ── MIC HERO ──────────────────────────────────────── */}
+      <div className="flex flex-col items-center py-6 mb-2 rounded-2xl bg-bg-card border border-bg-border">
+        <button
+          type="button"
+          onClick={handleMicToggle}
+          disabled={voiceState === 'processing'}
+          className={[
+            'w-20 h-20 flex items-center justify-center rounded-full transition-all duration-200 mb-4',
+            micColors[voiceState],
+            voiceState === 'recording' ? 'scale-105' : 'active:scale-95',
+            voiceState === 'processing' ? 'cursor-not-allowed' : '',
+          ].join(' ')}
+          aria-label={voiceState === 'recording' ? 'Stop recording' : 'Start voice recording'}
+        >
+          {voiceState === 'recording' ? (
+            <svg className="w-8 h-8 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zM8 11a4 4 0 008 0h2a6 6 0 01-5 5.91V19h3v2H8v-2h3v-2.09A6 6 0 016 11h2z" />
+            </svg>
+          ) : voiceState === 'processing' ? (
+            <div className="w-8 h-8 border-2 border-current border-t-transparent rounded-full animate-spin" />
+          ) : voiceState === 'done' ? (
+            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          ) : (
+            <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zM8 11a4 4 0 008 0h2a6 6 0 01-5 5.91V19h3v2H8v-2h3v-2.09A6 6 0 016 11h2z" />
+            </svg>
+          )}
+        </button>
 
-      {/* Title */}
-      <div className="mb-4">
-        <input
-          type="text"
-          value={title}
-          onChange={(e) => { setTitle(e.target.value); setTitleError(null) }}
-          placeholder={placeholders.title}
-          className="field-input text-base"
-          autoFocus
-        />
-        {titleError && <p className="text-accent-fire text-xs mt-1">{titleError}</p>}
-      </div>
-
-      {/* Curriculum */}
-      {curriculums.length > 1 && (
-        <div className="flex gap-2 mb-1">
-          {curriculums.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => { setCurriculum(c.age_group); setSkills([]) }}
-              className={`flex-1 py-1.5 rounded-full text-xs font-heading transition-all border ${
-                curriculum === c.age_group
-                  ? 'bg-accent-fire/10 border-accent-fire/40 text-accent-fire'
-                  : 'bg-bg-card border-bg-border text-text-dim hover:border-accent-fire/30 hover:text-text-muted'
-              }`}
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* ── DESCRIPTION ───────────────────────────────────── */}
-      <SectionDivider label="Description" />
-
-      {/* Mic row */}
-      <div className="flex items-center gap-3 mb-3">
-        {voiceSupported && (
-          <button
-            type="button"
-            onClick={handleMicToggle}
-            disabled={voiceState === 'processing'}
-            className={[
-              'w-11 h-11 flex items-center justify-center rounded-full transition-all flex-shrink-0',
-              micColors[voiceState],
-              voiceState === 'processing' ? 'cursor-not-allowed' : '',
-            ].join(' ')}
-            aria-label={voiceState === 'recording' ? 'Stop recording' : 'Start voice recording'}
-          >
-            {voiceState === 'recording' ? (
-              <svg className="w-5 h-5 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zM8 11a4 4 0 008 0h2a6 6 0 01-5 5.91V19h3v2H8v-2h3v-2.09A6 6 0 016 11h2z" />
-              </svg>
-            ) : voiceState === 'processing' ? (
-              <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-            ) : voiceState === 'done' ? (
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-            ) : (
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zM8 11a4 4 0 008 0h2a6 6 0 01-5 5.91V19h3v2H8v-2h3v-2.09A6 6 0 016 11h2z" />
-              </svg>
-            )}
-          </button>
-        )}
-        <p className="text-sm text-text-dim leading-snug">
-          {voiceState === 'recording' && <span className="text-accent-fire font-semibold animate-pulse">Listening… tap to stop</span>}
-          {voiceState === 'processing' && <span>Processing…</span>}
-          {voiceState === 'done' && <span className="text-accent-green font-semibold">Description formatted ✓</span>}
-          {voiceState === 'error' && <span className="text-red-400">{errorMessage}</span>}
-          {voiceState === 'idle' && voiceSupported && <span>Tap mic to speak the description</span>}
-          {!voiceSupported && <span>Type a description below</span>}
+        <p className={`text-sm font-semibold text-center leading-snug ${
+          voiceState === 'recording' ? 'text-accent-fire animate-pulse' :
+          voiceState === 'done' ? 'text-accent-green' :
+          voiceState === 'error' ? 'text-red-400' :
+          'text-text-muted'
+        }`}>
+          {voiceState === 'recording' && MIC_RECORDING_LABEL}
+          {voiceState === 'processing' && MIC_PROCESSING_LABEL}
+          {voiceState === 'done' && MIC_DONE_LABEL}
+          {voiceState === 'error' && (errorMessage ?? 'Could not process. Try again.')}
+          {voiceState === 'idle' && (voiceSupported ? MIC_IDLE_LABEL : 'Fill in the details below')}
         </p>
+
+        {voiceState === 'recording' && transcript && (
+          <p className="text-xs text-text-dim italic text-center mt-3 px-6 leading-relaxed max-w-xs">
+            &ldquo;{transcript}&rdquo;
+          </p>
+        )}
       </div>
-
-      {voiceState === 'recording' && transcript && (
-        <p className="text-xs text-text-dim italic mb-3 px-1 leading-relaxed">&ldquo;{transcript}&rdquo;</p>
-      )}
-
-      <textarea
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        placeholder={placeholders.description}
-        rows={4}
-        className="field-textarea resize-none leading-relaxed"
-      />
 
       {/* ── PHOTOS ────────────────────────────────────────── */}
       <SectionDivider label="Photos" />
@@ -355,7 +267,7 @@ export default function LogComponentPage() {
             <div
               key={photo.localId}
               className="relative flex-shrink-0 rounded-xl overflow-hidden"
-              style={{ scrollSnapAlign: 'start', width: 112, height: 84 }}
+              style={{ scrollSnapAlign: 'start', width: 120, height: 90 }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={photo.preview} alt="" className="w-full h-full object-cover" />
@@ -394,8 +306,82 @@ export default function LogComponentPage() {
           From Library
         </button>
       </div>
-      <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={handleFileAdded} className="hidden" />
-      <input ref={libraryRef} type="file" accept="image/*" onChange={handleFileAdded} className="hidden" />
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={handleFileAdded} className="hidden" aria-label="Take photo" />
+      <input ref={libraryRef} type="file" accept="image/*" onChange={handleFileAdded} className="hidden" aria-label="Choose from library" />
+
+      {/* ── TYPE ──────────────────────────────────────────── */}
+      <SectionDivider label="Type" />
+
+      <div className="flex bg-bg-input rounded-xl p-1 border border-bg-border">
+        {(['game', 'warmup', 'station'] as ComponentType[]).map((type) => (
+          <button
+            key={type}
+            type="button"
+            onClick={() => setComponentType(type)}
+            className={`flex-1 py-2 text-sm font-heading rounded-lg transition-all ${
+              componentType === type
+                ? 'bg-accent-fire text-white shadow-md'
+                : 'text-text-dim hover:text-text-muted'
+            }`}
+          >
+            {TYPE_LABELS[type]}
+          </button>
+        ))}
+      </div>
+
+      {/* ── NAME ──────────────────────────────────────────── */}
+      <SectionDivider label="Name" />
+
+      <input
+        type="text"
+        value={title}
+        onChange={(e) => { setTitle(e.target.value); setTitleError(null) }}
+        placeholder={
+          componentType === 'game' ? 'e.g. Cube Game, Ninja Tag…' :
+          componentType === 'warmup' ? 'e.g. Bear Crawl Circuit…' :
+          'e.g. Box Jump Progression…'
+        }
+        className="field-input text-base"
+      />
+      {titleError && <p className="text-accent-fire text-xs mt-1.5">{titleError}</p>}
+
+      {/* ── DESCRIPTION ───────────────────────────────────── */}
+      <SectionDivider label="Description" />
+
+      <textarea
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        placeholder={
+          componentType === 'game' ? 'Rules, setup, how to play…' :
+          componentType === 'warmup' ? 'Exercise sequence, timing, cues…' :
+          'What does the kid do? Any coaching tips?'
+        }
+        rows={4}
+        className="field-textarea resize-none leading-relaxed"
+      />
+
+      {/* ── CURRICULUM ────────────────────────────────────── */}
+      {curriculums.length > 0 && (
+        <>
+          <SectionDivider label="Curriculum" />
+          <div className="flex gap-2">
+            {curriculums.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => { setCurriculum(c.age_group); setSkills([]) }}
+                className={`flex-1 py-2 rounded-full text-xs font-heading transition-all border ${
+                  curriculum === c.age_group
+                    ? 'bg-accent-fire/10 border-accent-fire/40 text-accent-fire'
+                    : 'bg-bg-card border-bg-border text-text-dim hover:border-accent-fire/30 hover:text-text-muted'
+                }`}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
       {/* ── SKILLS ────────────────────────────────────────── */}
       <SectionDivider label="Skills" />
@@ -419,19 +405,10 @@ export default function LogComponentPage() {
               className="px-2.5 py-1 bg-bg-card border border-bg-border rounded-full text-sm text-text-primary placeholder:text-text-dim focus:outline-none focus:border-accent-green w-32"
               autoFocus
             />
-            <button
-              type="button"
-              onClick={handleAddSkill}
-              disabled={!newSkillName.trim() || addSkillSaving}
-              className="px-2.5 py-1 bg-accent-green text-white text-xs font-heading rounded-full disabled:opacity-50"
-            >
+            <button type="button" onClick={handleAddSkill} disabled={!newSkillName.trim() || addSkillSaving} className="px-2.5 py-1 bg-accent-green text-white text-xs font-heading rounded-full disabled:opacity-50">
               {addSkillSaving ? '…' : 'Add'}
             </button>
-            <button
-              type="button"
-              onClick={() => { setAddingSkill(false); setNewSkillName(''); setAddSkillError(null) }}
-              className="text-text-dim hover:text-text-primary p-1"
-            >
+            <button type="button" onClick={() => { setAddingSkill(false); setNewSkillName(''); setAddSkillError(null) }} className="text-text-dim hover:text-text-primary p-1">
               <XIcon />
             </button>
           </div>
@@ -450,106 +427,19 @@ export default function LogComponentPage() {
       </div>
       {addSkillError && <p className="text-xs text-red-400 mt-1">{addSkillError}</p>}
 
-      {/* ── EQUIPMENT NAME (stations only) ────────────────── */}
-      {componentType === 'station' && (
-        <>
-          <SectionDivider label="Equipment / Station" />
-          <input
-            type="text"
-            value={equipmentName}
-            onChange={(e) => setEquipmentName(e.target.value)}
-            placeholder="e.g. Station 1, Blue Lane, Vault Box…"
-            className="field-input"
-          />
-        </>
-      )}
-
-      {/* ── OPTIONAL: Duration / Video / Video Link ────────── */}
-      {(!showDuration || !showVideo || !showVideoLink) && (
-        <div className="flex flex-wrap gap-2 mt-6">
-          {!showDuration && (
-            <button
-              type="button"
-              onClick={() => setShowDuration(true)}
-              className="flex items-center gap-1.5 text-xs text-text-dim border border-dashed border-bg-border rounded-full px-3 py-1.5 hover:border-text-dim/40 hover:text-text-muted transition-colors"
-            >
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-              Duration
-            </button>
-          )}
+      {/* ── OPTIONAL: Video Link ───────────────────────────── */}
+      {(!showVideo || !showVideoLink) && (
+        <div className="flex gap-2 mt-6">
           {!showVideo && (
-            <button
-              type="button"
-              onClick={() => setShowVideo(true)}
-              className="flex items-center gap-1.5 text-xs text-text-dim border border-dashed border-bg-border rounded-full px-3 py-1.5 hover:border-text-dim/40 hover:text-text-muted transition-colors"
-            >
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-              Video
-            </button>
-          )}
-          {!showVideoLink && (
-            <button
-              type="button"
-              onClick={() => setShowVideoLink(true)}
-              className="flex items-center gap-1.5 text-xs text-text-dim border border-dashed border-bg-border rounded-full px-3 py-1.5 hover:border-text-dim/40 hover:text-text-muted transition-colors"
-            >
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
+            <button type="button" onClick={() => setShowVideo(true)} className="flex items-center gap-1.5 text-xs text-text-dim border border-dashed border-bg-border rounded-full px-3 py-1.5 hover:border-text-dim/40 hover:text-text-muted transition-colors">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
               Video Link
             </button>
           )}
         </div>
       )}
 
-      {showDuration && (
-        <>
-          <SectionDivider label="Duration" />
-          <div className="flex items-center gap-3">
-            <div className="relative flex-1">
-              <select
-                value={durationMinutes ?? ''}
-                onChange={(e) => setDurationMinutes(e.target.value ? Number(e.target.value) : null)}
-                className="field-select pr-8 w-full"
-              >
-                <option value="">Select duration</option>
-                {[1,2,3,4,5,6,7,8,9,10,15,20,30].map((n) => (
-                  <option key={n} value={n}>{n} min</option>
-                ))}
-              </select>
-              <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-dim pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-              </svg>
-            </div>
-            <button type="button" onClick={() => { setShowDuration(false); setDurationMinutes(null) }} className="text-text-dim hover:text-red-400 transition-colors p-1.5">
-              <XIcon />
-            </button>
-          </div>
-        </>
-      )}
-
       {showVideo && (
-        <>
-          <SectionDivider label="Video" />
-          <div className="flex items-start gap-2">
-            <div className="flex-1">
-              <VideoCapture
-                preview={videoPreview}
-                onFileSelected={(file, preview) => { setVideoFile(file); setVideoPreview(preview) }}
-              />
-            </div>
-            <button type="button" onClick={() => { setShowVideo(false); setVideoFile(null); setVideoPreview(null) }} className="text-text-dim hover:text-red-400 transition-colors p-1.5 mt-1">
-              <XIcon />
-            </button>
-          </div>
-        </>
-      )}
-
-      {showVideoLink && (
         <>
           <SectionDivider label="Video Link" />
           <div className="flex items-center gap-2">
@@ -561,14 +451,14 @@ export default function LogComponentPage() {
               className="field-input flex-1"
               inputMode="url"
             />
-            <button type="button" onClick={() => { setShowVideoLink(false); setVideoLink('') }} className="text-text-dim hover:text-red-400 transition-colors p-1.5">
+            <button type="button" onClick={() => { setShowVideo(false); setShowVideoLink(false); setVideoLink('') }} className="text-text-dim hover:text-red-400 transition-colors p-1.5">
               <XIcon />
             </button>
           </div>
         </>
       )}
 
-      {/* Save button */}
+      {/* Save */}
       <div className="mt-8">
         <button
           type="submit"

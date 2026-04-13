@@ -131,6 +131,33 @@ export function useVoiceNote() {
     }
   }
 
+  async function parseComponent(componentType: string): Promise<{ title: string; description: string }> {
+    const text = transcriptRef.current.trim()
+    if (!text) {
+      setVoiceState('error')
+      setErrorMessage('No speech detected. Try again.')
+      return { title: '', description: '' }
+    }
+
+    try {
+      const res = await fetch('/api/parse-component', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcript: text, componentType }),
+      })
+
+      if (!res.ok) throw new Error(`api ${res.status}`)
+
+      const data = (await res.json()) as { title: string; description: string }
+      setVoiceState('done')
+      return { title: data.title ?? '', description: data.description ?? '' }
+    } catch {
+      setVoiceState('error')
+      setErrorMessage('AI parse failed — transcript saved to description.')
+      return { title: '', description: `[Voice — please review]\n${text}` }
+    }
+  }
+
   function reset() {
     recognitionRef.current?.stop()
     recognitionRef.current = null
@@ -148,6 +175,7 @@ export function useVoiceNote() {
     startRecording,
     stopRecording,
     parseNote,
+    parseComponent,
     reset,
   }
 }
