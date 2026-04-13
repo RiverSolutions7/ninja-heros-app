@@ -286,103 +286,108 @@ function ViewPlanItem({
   item,
   index,
   onPhotoTap,
-  onRowTap,
 }: {
   item: PlanItem
   index: number
   onPhotoTap: (photos: string[]) => void
-  onRowTap: (item: PlanItem) => void
 }) {
   const meta = TYPE_META[item.component.type]
   const photos = (item.component.photos ?? []).filter(Boolean)
   const firstPhoto = photos[0] ?? null
-  const description = item.coachNote
-    ? { text: item.coachNote, isNote: true }
-    : item.component.description
-    ? { text: item.component.description, isNote: false }
-    : null
+  const hasCoachNote = !!item.coachNote
+  const descriptionText = item.coachNote ?? item.component.description ?? null
 
   return (
     <li
       className={[
-        'flex items-start gap-3 px-4 py-3.5 border-b border-bg-border/50 last:border-b-0 border-l-4',
+        'px-4 py-4 border-b border-bg-border/50 last:border-b-0 border-l-4',
         meta.border,
       ].join(' ')}
     >
-      <span className="text-[11px] font-heading text-text-dim/40 w-4 text-right flex-shrink-0 tabular-nums mt-1">
-        {index + 1}
-      </span>
-
-      {/* Thumbnail */}
-      <div className="relative flex-shrink-0">
-        <button
-          type="button"
-          onClick={() => photos.length > 0 && onPhotoTap(photos)}
-          className={[
-            'w-14 h-14 rounded-xl overflow-hidden block',
-            firstPhoto ? 'cursor-pointer active:opacity-80 transition-opacity' : 'cursor-default',
-          ].join(' ')}
-          tabIndex={firstPhoto ? 0 : -1}
-          aria-label={firstPhoto ? `View photos of ${item.component.title}` : undefined}
-        >
-          {firstPhoto ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={firstPhoto} alt={item.component.title} className="w-full h-full object-cover" />
-          ) : (
-            <TypePlaceholder type={item.component.type} className="w-full h-full rounded-xl" />
-          )}
-        </button>
-        {photos.length > 1 && (
-          <span className="absolute bottom-1 right-1 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">
-            +{photos.length - 1}
-          </span>
-        )}
-      </div>
-
-      {/* Content — tappable to open PlanItemSheet */}
-      <button
-        type="button"
-        onClick={() => onRowTap(item)}
-        className="flex-1 min-w-0 text-left active:opacity-70 transition-opacity"
-      >
-        <div className="flex items-start gap-1.5">
-          <div className="flex-1 min-w-0">
-            <p className="font-heading text-[15px] text-text-primary leading-snug">
-              {item.component.title}
-            </p>
-            <div className="flex items-center gap-1 mt-0.5">
-              <span className={['text-[10px] font-heading uppercase tracking-wide flex-shrink-0', meta.textColor].join(' ')}>
-                {meta.label}
-              </span>
-              {item.component.curriculum && (
-                <>
-                  <span className="text-text-dim/30 text-[10px] flex-shrink-0">·</span>
-                  <span className="text-[10px] text-text-dim truncate">{item.component.curriculum}</span>
-                </>
-              )}
-            </div>
-            {description && (
-              <p className={[
-                'text-[13px] mt-1.5 leading-relaxed line-clamp-3',
-                description.isNote ? 'text-accent-fire/80' : 'text-text-dim',
-              ].join(' ')}>
-                {description.text}
-              </p>
-            )}
-            {item.component.equipment && (
-              <p className="text-[11px] text-text-dim/60 mt-1">
-                <span className="font-heading uppercase tracking-wide text-[9px] text-text-dim/40 mr-1">Gear</span>
-                {item.component.equipment}
-              </p>
+      {/* Header row: index + title + duration */}
+      <div className="flex items-start gap-2 mb-2.5">
+        <span className="text-[11px] font-heading text-text-dim/40 w-4 text-right flex-shrink-0 tabular-nums mt-1">
+          {index + 1}
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="font-heading text-[15px] text-text-primary leading-snug">
+            {item.component.title}
+          </p>
+          <div className="flex items-center gap-1 mt-0.5">
+            <span className={['text-[10px] font-heading uppercase tracking-wide flex-shrink-0', meta.textColor].join(' ')}>
+              {meta.label}
+            </span>
+            {item.component.curriculum && (
+              <>
+                <span className="text-text-dim/30 text-[10px] flex-shrink-0">·</span>
+                <span className="text-[10px] text-text-dim truncate">{item.component.curriculum}</span>
+              </>
             )}
           </div>
-          {item.durationMinutes ? (
-            <span className="text-[11px] text-text-dim font-heading flex-shrink-0 mt-0.5">
-              {item.durationMinutes}m
-            </span>
-          ) : null}
         </div>
-      </button>
+        {item.durationMinutes ? (
+          <span className="text-[11px] text-text-dim font-heading flex-shrink-0 mt-1">
+            {item.durationMinutes}m
+          </span>
+        ) : null}
+      </div>
+
+      {/* Photo + content row */}
+      <div className="flex gap-3 pl-6">
+        {/* Thumbnail — tap opens lightbox */}
+        <div className="relative flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => photos.length > 0 && onPhotoTap(photos)}
+            className={[
+              'w-[84px] h-[84px] rounded-xl overflow-hidden block',
+              firstPhoto ? 'cursor-pointer active:opacity-80 transition-opacity' : 'cursor-default',
+            ].join(' ')}
+            tabIndex={firstPhoto ? 0 : -1}
+            aria-label={firstPhoto ? `View photos of ${item.component.title}` : undefined}
+          >
+            {firstPhoto ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={firstPhoto} alt={item.component.title} className="w-full h-full object-cover" />
+            ) : (
+              <TypePlaceholder type={item.component.type} className="w-full h-full rounded-xl" />
+            )}
+          </button>
+          {photos.length > 1 && (
+            <span className="absolute bottom-1 right-1 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">
+              +{photos.length - 1}
+            </span>
+          )}
+        </div>
+
+        {/* Text content */}
+        <div className="flex-1 min-w-0">
+          {/* Coach note — distinct highlighted block */}
+          {hasCoachNote && descriptionText && (
+            <div className="bg-accent-fire/8 border border-accent-fire/20 rounded-xl px-3 py-2.5 mb-2">
+              <p className="text-[11px] font-heading uppercase tracking-wide text-accent-fire/60 mb-1">Coach Note</p>
+              <p className="text-[13px] text-text-primary leading-relaxed whitespace-pre-wrap">
+                {descriptionText}
+              </p>
+            </div>
+          )}
+
+          {/* Library description (no coach note) */}
+          {!hasCoachNote && descriptionText && (
+            <p className="text-[13px] text-text-dim leading-relaxed mb-1.5">
+              {descriptionText}
+            </p>
+          )}
+
+          {/* Equipment */}
+          {item.component.equipment && (
+            <p className="text-[12px] text-text-dim">
+              <span className="font-heading uppercase text-[9px] text-text-dim/50 tracking-wide mr-1">Gear</span>
+              {item.component.equipment}
+            </p>
+          )}
+        </div>
+      </div>
     </li>
   )
 }
@@ -1338,7 +1343,6 @@ export default function TodaysPlanClient() {
                     item={item}
                     index={idx}
                     onPhotoTap={photos => setLightbox({ photos })}
-                    onRowTap={i => setActiveSheet(i)}
                   />
                 ))}
               </ul>
