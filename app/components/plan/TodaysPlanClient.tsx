@@ -355,10 +355,6 @@ function ViewPlanItem({
           </div>
         )}
 
-        {/* No-photo placeholder */}
-        {photos.length === 0 && (
-          <TypePlaceholder type={item.component.type} className="w-[90px] h-[90px] rounded-xl" />
-        )}
 
         {/* Coach note — distinct highlighted block */}
         {hasCoachNote && descriptionText && (
