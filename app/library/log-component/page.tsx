@@ -60,18 +60,6 @@ const TYPE_GATE_CONFIG: Record<ComponentType, {
       </svg>
     ),
   },
-  warmup: {
-    label: 'Warmup',
-    sublabel: 'Movement prep or exercise sequence',
-    cardBorder: 'border-accent-gold/30 hover:border-accent-gold/60',
-    cardBg: 'hover:bg-accent-gold/5',
-    textColor: 'text-accent-gold',
-    icon: (
-      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-      </svg>
-    ),
-  },
   station: {
     label: 'Station / Drill',
     sublabel: 'Skill-specific obstacle or drill',
@@ -88,7 +76,6 @@ const TYPE_GATE_CONFIG: Record<ComponentType, {
 
 const TYPE_BADGE: Record<ComponentType, string> = {
   game:    'bg-accent-green/10 text-accent-green border-accent-green/25',
-  warmup:  'bg-accent-gold/10 text-accent-gold border-accent-gold/25',
   station: 'bg-accent-blue/10 text-accent-blue border-accent-blue/25',
 }
 
@@ -643,7 +630,6 @@ export default function LogComponentPage() {
         onChange={(e) => { setTitle(e.target.value); setTitleError(null) }}
         placeholder={
           ct === 'game'    ? 'e.g. Cube Game, Ninja Tag…' :
-          ct === 'warmup'  ? 'e.g. Bear Crawl Circuit…' :
                              'e.g. Box Jump Progression…'
         }
         className="field-input text-base"
@@ -658,7 +644,6 @@ export default function LogComponentPage() {
         onChange={(e) => setDescription(e.target.value)}
         placeholder={
           ct === 'game'    ? 'Rules, setup, how to play…' :
-          ct === 'warmup'  ? 'Exercise sequence, timing, cues…' :
                              'What does the kid do? Any coaching tips?'
         }
         rows={4}

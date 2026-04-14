@@ -42,7 +42,8 @@ export async function backfillComponents(): Promise<void> {
           const title = (warmup.description as string)?.slice(0, 80).trim()
           if (title) {
             candidates.push({
-              type: 'warmup',
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              type: 'warmup' as any,
               title,
               curriculum: cls.age_group,
               description: (warmup.description as string)?.trim() || null,

@@ -8,7 +8,6 @@ interface Props {
 }
 
 const TYPE_META: Record<ComponentType, { label: string; accent: string; bg: string }> = {
-  warmup: { label: 'Warmup', accent: 'text-accent-gold', bg: 'bg-accent-gold/10' },
   station: { label: 'Station', accent: 'text-accent-blue', bg: 'bg-accent-blue/10' },
   game: { label: 'Game', accent: 'text-accent-green', bg: 'bg-accent-green/10' },
 }

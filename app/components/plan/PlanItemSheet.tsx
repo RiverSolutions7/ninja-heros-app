@@ -7,7 +7,6 @@ import { PhotoLightbox } from '@/app/components/ui/PhotoLightbox'
 import { useVoiceNote } from '@/app/hooks/useVoiceNote'
 
 const TYPE_META: Record<ComponentType, { label: string; accent: string; placeholderBg: string }> = {
-  warmup: { label: 'Warmup', accent: 'text-accent-gold', placeholderBg: 'bg-accent-gold/20' },
   station: { label: 'Station', accent: 'text-accent-blue', placeholderBg: 'bg-accent-blue/20' },
   game: { label: 'Game', accent: 'text-accent-green', placeholderBg: 'bg-accent-green/20' },
 }

@@ -14,13 +14,11 @@ import type { ComponentType } from '@/app/lib/database.types'
 
 const TYPE_LABEL: Record<ComponentType, string> = {
   game: 'Game',
-  warmup: 'Warmup',
   station: 'Station',
 }
 
 const TYPE_COLOR: Record<ComponentType, string> = {
   game: 'bg-accent-green',
-  warmup: 'bg-accent-gold',
   station: 'bg-accent-fire',
 }
 

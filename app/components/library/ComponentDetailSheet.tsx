@@ -180,7 +180,7 @@ export default function ComponentDetailSheet({ component, onClose }: ComponentDe
           {component.description && (
             <div>
               <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-1">
-                {component.type === 'warmup' ? 'Description' : 'Coaching Cue'}
+                Coaching Cue
               </p>
               <p className="text-sm text-text-primary leading-relaxed whitespace-pre-wrap">
                 {component.description}

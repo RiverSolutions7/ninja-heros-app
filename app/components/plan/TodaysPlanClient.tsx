@@ -109,13 +109,13 @@ function formatSelectedDayLabel(selectedIso: string, todayIso: string): string {
 function autoLabel(plan: PlanRow): string {
   if (plan.title) return plan.title
   const its = plan.items ?? []
-  const w = its.filter(i => i.component.type === 'warmup').length
-  const s = its.filter(i => i.component.type === 'station').length
-  const g = its.filter(i => i.component.type === 'game').length
+  const s = its.filter(i => i.component.type === 'station' && !i.isAdHoc).length
+  const g = its.filter(i => i.component.type === 'game' && !i.isAdHoc).length
+  const c = its.filter(i => i.isAdHoc).length
   const parts = [
-    w > 0 && `${w} warmup${w > 1 ? 's' : ''}`,
     s > 0 && `${s} station${s > 1 ? 's' : ''}`,
     g > 0 && `${g} game${g > 1 ? 's' : ''}`,
+    c > 0 && `${c} custom`,
   ].filter(Boolean) as string[]
   return parts.length ? parts.join(' · ') : 'Class Plan'
 }
@@ -125,17 +125,21 @@ const WEEK_DAY_LABELS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
 // ── Type icons + placeholder ──────────────────────────────────────────────────
 
 const TYPE_META: Record<ComponentType, { label: string; border: string; textColor: string; placeholderBg: string }> = {
-  warmup: { label: 'Warmup', border: 'border-l-accent-gold', textColor: 'text-accent-gold', placeholderBg: 'bg-accent-gold/20' },
   station: { label: 'Station', border: 'border-l-accent-blue', textColor: 'text-accent-blue', placeholderBg: 'bg-accent-blue/20' },
   game: { label: 'Game', border: 'border-l-accent-green', textColor: 'text-accent-green', placeholderBg: 'bg-accent-green/20' },
 }
 
+// Fallback for legacy warmup data embedded in saved plans
+const LEGACY_FALLBACK_META = TYPE_META['game']
+
+const CUSTOM_META = { label: 'Custom', border: 'border-l-accent-fire', textColor: 'text-accent-fire', placeholderBg: 'bg-accent-fire/15' }
+
+function resolveMeta(item: { isAdHoc?: boolean; component: { type: string } }) {
+  if (item.isAdHoc) return CUSTOM_META
+  return TYPE_META[item.component.type as ComponentType] ?? LEGACY_FALLBACK_META
+}
+
 const TYPE_ICONS: Record<ComponentType, React.ReactNode> = {
-  warmup: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-    </svg>
-  ),
   game: (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
@@ -147,6 +151,12 @@ const TYPE_ICONS: Record<ComponentType, React.ReactNode> = {
     </svg>
   ),
 }
+
+const CUSTOM_ICON = (
+  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
+  </svg>
+)
 
 function TypePlaceholder({ type, className }: { type: ComponentType; className?: string }) {
   const meta = TYPE_META[type]
@@ -172,8 +182,8 @@ function SortablePlanItem({
   onPhotoTap: (photos: string[]) => void
   onRowTap: (item: PlanItem) => void
 }) {
-  const meta = TYPE_META[item.component.type]
-  const photos = (item.component.photos ?? []).filter(Boolean)
+  const meta = resolveMeta(item)
+  const photos = item.isAdHoc ? [] : (item.component.photos ?? []).filter(Boolean)
   const firstPhoto = photos[0] ?? null
   const extraCount = photos.length - 1
 
@@ -208,7 +218,7 @@ function SortablePlanItem({
       <div className="relative flex-shrink-0">
         <button
           type="button"
-          onClick={() => photos.length > 0 && onPhotoTap(photos)}
+          onClick={() => !item.isAdHoc && photos.length > 0 && onPhotoTap(photos)}
           className={[
             'w-14 h-14 rounded-xl overflow-hidden block',
             firstPhoto ? 'cursor-pointer active:opacity-80 transition-opacity' : 'cursor-default',
@@ -216,11 +226,15 @@ function SortablePlanItem({
           tabIndex={firstPhoto ? 0 : -1}
           aria-label={firstPhoto ? `View photos of ${item.component.title}` : undefined}
         >
-          {firstPhoto ? (
+          {item.isAdHoc ? (
+            <div className="w-full h-full flex items-center justify-center bg-accent-fire/15">
+              <span className="text-accent-fire">{CUSTOM_ICON}</span>
+            </div>
+          ) : firstPhoto ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={firstPhoto} alt={item.component.title} className="w-full h-full object-cover" />
           ) : (
-            <TypePlaceholder type={item.component.type} className="w-full h-full rounded-xl" />
+            <TypePlaceholder type={item.component.type as ComponentType} className="w-full h-full rounded-xl" />
           )}
         </button>
         {extraCount > 0 && (
@@ -243,7 +257,7 @@ function SortablePlanItem({
               <span className={['text-[10px] font-heading uppercase tracking-wide flex-shrink-0', meta.textColor].join(' ')}>
                 {meta.label}
               </span>
-              {item.component.curriculum && (
+              {!item.isAdHoc && item.component.curriculum && (
                 <>
                   <span className="text-text-dim/30 text-[10px] flex-shrink-0">·</span>
                   <span className="text-[10px] text-text-dim truncate">{item.component.curriculum}</span>
@@ -291,10 +305,10 @@ function ViewPlanItem({
   index: number
   onPhotoTap: (photos: string[]) => void
 }) {
-  const meta = TYPE_META[item.component.type]
-  const photos = (item.component.photos ?? []).filter(Boolean)
+  const meta = resolveMeta(item)
+  const photos = item.isAdHoc ? [] : (item.component.photos ?? []).filter(Boolean)
   const hasCoachNote = !!item.coachNote
-  const descriptionText = item.coachNote ?? item.component.description ?? null
+  const descriptionText = item.coachNote ?? (!item.isAdHoc ? item.component.description : null) ?? null
 
   return (
     <li
@@ -316,7 +330,7 @@ function ViewPlanItem({
             <span className={['text-[10px] font-heading uppercase tracking-wide flex-shrink-0', meta.textColor].join(' ')}>
               {meta.label}
             </span>
-            {item.component.curriculum && (
+            {!item.isAdHoc && item.component.curriculum && (
               <>
                 <span className="text-text-dim/30 text-[10px] flex-shrink-0">·</span>
                 <span className="text-[10px] text-text-dim truncate">{item.component.curriculum}</span>
@@ -430,8 +444,9 @@ function DraftCard({
       </div>
       <div className="flex items-center gap-1.5 mb-4 flex-wrap">
         {preview.map((item) => {
-          const meta = TYPE_META[item.component.type]
-          const photo = item.component.photos?.[0] ?? null
+          const meta = resolveMeta(item)
+          const photo = !item.isAdHoc ? (item.component.photos?.[0] ?? null) : null
+          const icon = item.isAdHoc ? CUSTOM_ICON : TYPE_ICONS[item.component.type as ComponentType]
           return (
             <div key={item.localId} className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0">
               {photo ? (
@@ -440,7 +455,7 @@ function DraftCard({
               ) : (
                 <div className={['w-full h-full flex items-center justify-center', meta.placeholderBg].join(' ')}>
                   <span className={['w-3.5 h-3.5', meta.textColor].join(' ')}>
-                    {TYPE_ICONS[item.component.type]}
+                    {icon}
                   </span>
                 </div>
               )}
@@ -514,13 +529,13 @@ export default function TodaysPlanClient() {
   // ── Derived ──────────────────────────────────────────────────────────────────
   const totalMinutes = items.reduce((s, i) => s + (i.durationMinutes ?? 0), 0)
   const isOverBudget = !!(classLength && totalMinutes > classLength)
-  const warmupCount = items.filter(i => i.component.type === 'warmup').length
-  const stationCount = items.filter(i => i.component.type === 'station').length
-  const gameCount = items.filter(i => i.component.type === 'game').length
+  const stationCount = items.filter(i => !i.isAdHoc && i.component.type === 'station').length
+  const gameCount = items.filter(i => !i.isAdHoc && i.component.type === 'game').length
+  const customCount = items.filter(i => i.isAdHoc).length
   const typeSummary = [
-    warmupCount > 0 && `${warmupCount} warmup${warmupCount > 1 ? 's' : ''}`,
     stationCount > 0 && `${stationCount} station${stationCount > 1 ? 's' : ''}`,
     gameCount > 0 && `${gameCount} game${gameCount > 1 ? 's' : ''}`,
+    customCount > 0 && `${customCount} custom`,
   ].filter(Boolean).join(' · ')
 
   const siblingIndex = editingPlanId
@@ -671,6 +686,34 @@ export default function TodaysPlanClient() {
     setItems(prev => [
       ...prev,
       { localId: crypto.randomUUID(), component, durationMinutes: component.duration_minutes ?? null, coachNote: null },
+    ])
+  }
+
+  function handleAdHocSelect(title: string) {
+    setItems(prev => [
+      ...prev,
+      {
+        localId: crypto.randomUUID(),
+        component: {
+          id: crypto.randomUUID(),
+          type: 'station' as ComponentType,
+          title,
+          curriculum: null,
+          description: null,
+          equipment: null,
+          skills: [],
+          photos: [],
+          video_url: null,
+          video_link: null,
+          duration_minutes: null,
+          folder_id: null,
+          in_handoff: false,
+          created_at: new Date().toISOString(),
+        },
+        isAdHoc: true,
+        durationMinutes: null,
+        coachNote: null,
+      },
     ])
   }
 
@@ -1239,7 +1282,7 @@ export default function TodaysPlanClient() {
             <div className="text-center py-10 px-6">
               <p className="font-heading text-text-muted text-lg">Build today's class</p>
               <p className="text-text-dim text-sm mt-2 leading-relaxed">
-                Pick warmups, stations, and games from your library. Drag to reorder, tap any row to add a coach note.
+                Pick stations and games from your library, or create a custom activity. Drag to reorder, tap any row to add a coach note.
               </p>
               <Link href="/library" className="text-text-dim text-xs mt-3 inline-block underline underline-offset-2 hover:text-text-muted transition-colors">
                 Build your component library first
@@ -1435,8 +1478,9 @@ export default function TodaysPlanClient() {
       {showPicker && (
         <ComponentPickerModal
           onSelect={handleSelect}
+          onAdHocSelect={handleAdHocSelect}
           onClose={() => setShowPicker(false)}
-          existingIds={new Set(items.map(i => i.component.id))}
+          existingIds={new Set(items.filter(i => !i.isAdHoc).map(i => i.component.id))}
         />
       )}
 

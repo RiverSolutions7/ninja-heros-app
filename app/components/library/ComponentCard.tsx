@@ -11,13 +11,6 @@ const TYPE_META: Record<ComponentType, { label: string; border: string; badge: s
     textColor: 'text-accent-green',
     placeholderBg: 'bg-accent-green/20',
   },
-  warmup: {
-    label: 'Warmup',
-    border: 'border-l-accent-gold',
-    badge: 'bg-accent-gold/10 text-accent-gold border border-accent-gold/20',
-    textColor: 'text-accent-gold',
-    placeholderBg: 'bg-accent-gold/20',
-  },
   station: {
     label: 'Station',
     border: 'border-l-accent-blue',
@@ -32,11 +25,6 @@ export { TYPE_META }
 // ── Type icons (shown when no photo) ─────────────────────────────────────────
 
 const TYPE_ICONS: Record<ComponentType, React.ReactNode> = {
-  warmup: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-    </svg>
-  ),
   game: (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
@@ -78,7 +66,7 @@ export default function ComponentCard({ component, showMenu = false, onClick }: 
   const firstPhoto = photos[0] ?? null
   const hasVideo = !!(component.video_link || component.video_url)
 
-  // Games / Warmups: title + metadata only, with subtle media icons if content exists
+  // Games: title + metadata only, with subtle media icons if content exists
   const showMediaBadges = component.type !== 'station' && (photos.length > 0 || hasVideo)
 
   return (

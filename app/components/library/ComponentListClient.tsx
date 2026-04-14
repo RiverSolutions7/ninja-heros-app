@@ -10,21 +10,19 @@ interface ComponentListClientProps {
 }
 
 const SUB_TABS: { type: ComponentType; label: string }[] = [
-  { type: 'game', label: 'Games' },
-  { type: 'warmup', label: 'Warmups' },
   { type: 'station', label: 'Stations' },
+  { type: 'game', label: 'Games' },
 ]
 
 const EMPTY_MESSAGES: Record<ComponentType, string> = {
   game: 'No games logged yet',
-  warmup: 'No warmups logged yet',
   station: 'No stations logged yet',
 }
 
 export default function ComponentListClient({ components }: ComponentListClientProps) {
   const [selected, setSelected] = useState<ComponentRow | null>(null)
   const [search, setSearch] = useState('')
-  const [activeType, setActiveType] = useState<ComponentType>('game')
+  const [activeType, setActiveType] = useState<ComponentType>('station')
 
   const filtered = components
     .filter((c) => c.type === activeType)

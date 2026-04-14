@@ -55,7 +55,7 @@ export interface FolderRow {
 // Component Library
 // ============================================================
 
-export type ComponentType = 'game' | 'warmup' | 'station'
+export type ComponentType = 'game' | 'station'
 
 export interface ComponentRow {
   id: string
@@ -81,6 +81,7 @@ export interface ComponentRow {
 export interface PlanItem {
   localId: string
   component: ComponentRow
+  isAdHoc?: boolean
   durationMinutes: number | null
   coachNote: string | null
 }

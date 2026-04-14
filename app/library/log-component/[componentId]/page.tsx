@@ -41,19 +41,16 @@ function SectionDivider({ label }: { label: string }) {
 
 const TYPE_ACCENT: Record<ComponentType, { badge: string }> = {
   game:    { badge: 'bg-accent-green/10 text-accent-green border-accent-green/20' },
-  warmup:  { badge: 'bg-accent-gold/10 text-accent-gold border-accent-gold/20' },
   station: { badge: 'bg-accent-fire/10 text-accent-fire border-accent-fire/20' },
 }
 
 const TYPE_LABELS: Record<ComponentType, string> = {
   game:    'Game',
-  warmup:  'Warmup',
   station: 'Station / Drill',
 }
 
 const TYPE_PLACEHOLDERS: Record<ComponentType, { name: string; desc: string }> = {
   game:    { name: 'e.g. Cube Game, Ninja Tag…',     desc: 'Rules, setup, how to play…' },
-  warmup:  { name: 'e.g. Bear Crawl Circuit…',       desc: 'Exercise sequence, timing, cues…' },
   station: { name: 'e.g. Box Jump Progression…',     desc: 'What does the kid do? Any coaching tips?' },
 }
 

@@ -60,11 +60,9 @@ function formatSavedAt(ts: string): string {
 function autoLabel(plan: PlanRow): string {
   if (plan.title) return plan.title
   const items = plan.items ?? []
-  const warmups = items.filter(i => i.component.type === 'warmup').length
   const stations = items.filter(i => i.component.type === 'station').length
   const games = items.filter(i => i.component.type === 'game').length
   const parts = [
-    warmups > 0 && `${warmups} warmup${warmups > 1 ? 's' : ''}`,
     stations > 0 && `${stations} station${stations > 1 ? 's' : ''}`,
     games > 0 && `${games} game${games > 1 ? 's' : ''}`,
   ].filter(Boolean) as string[]
