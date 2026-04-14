@@ -52,19 +52,6 @@ export default function ComponentCardMenu({ component }: ComponentCardMenuProps)
     setOpen((v) => !v)
   }
 
-  async function handleSendToHandoff() {
-    setOpen(false)
-    const { error } = await supabase.from('components').update({ in_handoff: true }).eq('id', component.id)
-    if (error) {
-      console.error('Failed to send to handoff:', error)
-      alert('Failed to send to Handoff. Please try again.')
-    } else {
-      router.refresh()
-      setToast('Sent to Handoff')
-      setTimeout(() => setToast(null), 2500)
-    }
-  }
-
   async function handleDelete() {
     setOpen(false)
     if (!window.confirm('Delete this component from the library? This cannot be undone.')) return
@@ -126,7 +113,7 @@ export default function ComponentCardMenu({ component }: ComponentCardMenuProps)
           >
             <button
               onClick={() => { setOpen(false); router.push(`/library/log-component/${component.id}`) }}
-              className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-text-primary hover:bg-white/5 transition-colors"
+              className="w-full flex items-center gap-2.5 px-4 py-3.5 text-sm text-text-primary hover:bg-white/5 transition-colors"
             >
               <svg className="w-4 h-4 text-text-dim flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -134,28 +121,11 @@ export default function ComponentCardMenu({ component }: ComponentCardMenuProps)
               Edit
             </button>
 
-            {!component.in_handoff ? (
-              <button
-                onClick={handleSendToHandoff}
-                className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-text-primary hover:bg-white/5 transition-colors border-t border-bg-border"
-              >
-                <svg className="w-4 h-4 text-text-dim flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-                Send to Handoff
-              </button>
-            ) : (
-              <div className="flex items-center gap-2.5 px-4 py-3 text-sm text-text-dim border-t border-bg-border opacity-60">
-                <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-                Already in Handoff
-              </div>
-            )}
+            <div className="h-px bg-bg-border mx-3" />
 
             <button
               onClick={handleDelete}
-              className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-accent-fire hover:bg-accent-fire/10 transition-colors border-t border-bg-border"
+              className="w-full flex items-center gap-2.5 px-4 py-3.5 text-sm text-accent-fire hover:bg-accent-fire/10 transition-colors"
             >
               <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

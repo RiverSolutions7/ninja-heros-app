@@ -946,18 +946,13 @@ export default function TodaysPlanClient() {
           </button>
         )}
 
-        {/* Title + subtitle */}
+        {/* Title */}
         <div className="flex-1 min-w-0">
-          <h1 className="font-heading text-2xl text-text-primary leading-none">{"Today's Plan"}</h1>
-          <p className="flex items-center gap-1.5 text-text-dim text-xs mt-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-accent-fire inline-block opacity-60" />
+          <h1 className="font-heading text-xl text-text-primary leading-none">
             {viewMode === 'editing' && editingPlanLabel
-              ? planViewMode === 'view' ? editingPlanLabel : `Editing: ${editingPlanLabel}`
+              ? editingPlanLabel
               : formatSelectedDayLabel(selectedDayIso, todayIso)}
-          </p>
-          {viewMode === 'editing' && saveStatus === 'saving' && (
-            <p className="text-[11px] mt-1 text-text-dim">Saving…</p>
-          )}
+          </h1>
         </div>
 
         {/* Right actions */}
@@ -978,10 +973,12 @@ export default function TodaysPlanClient() {
             <button
               type="button"
               onClick={() => setPlanViewMode('edit')}
-              className="inline-flex items-center border border-bg-border text-text-muted font-heading text-sm px-3 py-2 rounded-xl active:scale-95 transition-all hover:bg-white/5 min-h-[40px]"
+              className="w-10 h-10 flex items-center justify-center rounded-xl border border-bg-border text-text-muted hover:bg-white/5 active:scale-95 transition-all"
               aria-label="Edit plan"
             >
-              Edit
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
             </button>
           )}
           {/* Share — editing mode only */}
@@ -989,22 +986,17 @@ export default function TodaysPlanClient() {
             <button
               type="button"
               onClick={handleShare}
-              className="inline-flex items-center gap-1.5 border border-bg-border text-text-muted font-heading text-sm px-3 py-2 rounded-xl active:scale-95 transition-all hover:bg-white/5 min-h-[40px]"
+              className="w-10 h-10 flex items-center justify-center rounded-xl border border-bg-border text-text-muted hover:bg-white/5 active:scale-95 transition-all"
+              aria-label={copyFeedback ? 'Copied' : 'Share plan'}
             >
               {copyFeedback ? (
-                <>
-                  <svg className="w-4 h-4 text-accent-green" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                  Copied
-                </>
+                <svg className="w-4 h-4 text-accent-green" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
               ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                  </svg>
-                  Share
-                </>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                </svg>
               )}
             </button>
           )}
