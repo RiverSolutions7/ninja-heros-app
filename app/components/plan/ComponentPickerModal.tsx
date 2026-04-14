@@ -63,6 +63,7 @@ export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose,
   const [curriculums, setCurriculums] = useState<CurriculumRow[]>([])
   const [mounted, setMounted] = useState(false)
   const [lightbox, setLightbox] = useState<{ photos: string[]; index: number } | null>(null)
+  const [videoPreview, setVideoPreview] = useState<string | null>(null)
   // Create Your Own state
   const [adHocTitle, setAdHocTitle] = useState('')
   const [isRecording, setIsRecording] = useState(false)
@@ -316,35 +317,76 @@ export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose,
                       inPlan ? 'bg-accent-green/5' : '',
                     ].join(' ')}
                   >
-                    {/* Thumbnail — always rendered with icon placeholder */}
-                    <div className="relative flex-shrink-0 py-3.5">
-                      <button
-                        type="button"
-                        onClick={(e) => hasPhoto && handlePhotoTap(e, photos)}
-                        className={[
-                          'w-14 h-14 rounded-xl overflow-hidden block',
-                          hasPhoto ? 'cursor-pointer active:opacity-75 transition-opacity' : 'cursor-default',
-                        ].join(' ')}
-                        tabIndex={hasPhoto ? 0 : -1}
-                        aria-label={hasPhoto ? `View photos of ${component.title}` : undefined}
-                      >
-                        {hasPhoto ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={photos[0]} alt={component.title} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className={['w-full h-full flex items-center justify-center', TYPE_PLACEHOLDER[component.type]].join(' ')}>
-                            <span className={TYPE_ICON_COLOR[component.type]}>
-                              {TYPE_ICONS[component.type]}
+                    {/* Thumbnail */}
+                    {(() => {
+                      const hasVideoFile = !!component.video_url
+                      const hasVideoLink = !!component.video_link
+                      const isInteractive = hasPhoto || hasVideoFile || hasVideoLink
+                      function handleThumbClick(e: React.MouseEvent) {
+                        e.stopPropagation()
+                        if (hasPhoto) handlePhotoTap(e, photos)
+                        else if (hasVideoFile) setVideoPreview(component.video_url!)
+                        else if (hasVideoLink) window.open(component.video_link!, '_blank', 'noopener,noreferrer')
+                      }
+                      return (
+                        <div className="relative flex-shrink-0 py-3.5">
+                          <button
+                            type="button"
+                            onClick={isInteractive ? handleThumbClick : undefined}
+                            className={[
+                              'w-14 h-14 rounded-xl overflow-hidden block',
+                              isInteractive ? 'cursor-pointer active:opacity-75 transition-opacity' : 'cursor-default',
+                            ].join(' ')}
+                            tabIndex={isInteractive ? 0 : -1}
+                            aria-label={
+                              hasPhoto ? `View photos of ${component.title}` :
+                              hasVideoFile ? `Watch video of ${component.title}` :
+                              hasVideoLink ? `Open video link for ${component.title}` :
+                              undefined
+                            }
+                          >
+                            {hasPhoto ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={photos[0]} alt={component.title} className="w-full h-full object-cover" />
+                            ) : hasVideoFile || hasVideoLink ? (
+                              <div className="w-full h-full flex items-center justify-center bg-black/60">
+                                <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                  <path d="M8 5.14v14l11-7-11-7z" />
+                                </svg>
+                              </div>
+                            ) : (
+                              <div className={['w-full h-full flex items-center justify-center', TYPE_PLACEHOLDER[component.type]].join(' ')}>
+                                <span className={TYPE_ICON_COLOR[component.type]}>
+                                  {TYPE_ICONS[component.type]}
+                                </span>
+                              </div>
+                            )}
+                          </button>
+                          {extraCount > 0 && (
+                            <span className="absolute bottom-4 right-0 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">
+                              +{extraCount}
                             </span>
-                          </div>
-                        )}
-                      </button>
-                      {extraCount > 0 && (
-                        <span className="absolute bottom-4 right-0 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">
-                          +{extraCount}
-                        </span>
-                      )}
-                    </div>
+                          )}
+                          {/* Play overlay badge when there's both a photo and a video */}
+                          {hasPhoto && (hasVideoFile || hasVideoLink) && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                if (hasVideoFile) setVideoPreview(component.video_url!)
+                                else window.open(component.video_link!, '_blank', 'noopener,noreferrer')
+                              }}
+                              className="absolute bottom-4 right-0 bg-black/70 hover:bg-black/90 text-white rounded p-0.5 transition-colors"
+                              aria-label={`Watch video of ${component.title}`}
+                            >
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M8 5.14v14l11-7-11-7z" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })()}
 
                     {/* Row content */}
                     <button
@@ -402,6 +444,39 @@ export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose,
           initialIndex={lightbox.index}
           onClose={() => setLightbox(null)}
         />
+      )}
+
+      {/* Inline video preview */}
+      {videoPreview && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 10000 }}
+          className="bg-black flex flex-col"
+          onClick={() => setVideoPreview(null)}
+        >
+          <div className="flex items-center justify-between px-4 py-3 flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => setVideoPreview(null)}
+              className="text-white/70 hover:text-white transition-colors p-1.5 -ml-1.5"
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div
+            className="flex-1 flex items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <video
+              src={videoPreview}
+              controls
+              autoPlay
+              playsInline
+              className="max-w-full max-h-full"
+            />
+          </div>
+        </div>
       )}
     </div>
   )
