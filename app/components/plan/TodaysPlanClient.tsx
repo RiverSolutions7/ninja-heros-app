@@ -1188,7 +1188,17 @@ export default function TodaysPlanClient() {
           <div className="px-4 mt-5 pb-2">
             <button
               type="button"
-              onClick={() => { setPlanViewMode('edit'); setViewMode('editing'); setShowPicker(true) }}
+              onClick={() => {
+                // Always start with a clean slate — discard any stale scratchpad
+                setItems([])
+                setEditingPlanId(null)
+                setEditingPlanLabel(null)
+                activeDraftIdRef.current = null
+                try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
+                setPlanViewMode('edit')
+                setViewMode('editing')
+                setShowPicker(true)
+              }}
               className="w-full inline-flex items-center justify-center gap-2 bg-accent-fire text-white font-heading text-base py-4 rounded-2xl shadow-glow-fire active:scale-[0.98] transition-all min-h-[56px]"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
