@@ -29,7 +29,6 @@ export async function POST(request: NextRequest) {
 
   const typeLabel =
     componentType === 'game' ? 'game or activity'
-    : componentType === 'warmup' ? 'warmup'
     : 'station or drill'
 
   const skillsSection =
@@ -39,14 +38,15 @@ export async function POST(request: NextRequest) {
 
   const jsonExample =
     availableSkills && availableSkills.length > 0
-      ? '{"title": "Activity Name", "description": "• Cue one\\n• Cue two\\n• Cue three", "skills": ["Skill A"]}'
-      : '{"title": "Activity Name", "description": "• Cue one\\n• Cue two\\n• Cue three", "skills": []}'
+      ? '{"title": "Activity Name", "description": "• Cue one\\n• Cue two\\n• Cue three", "skills": ["Skill A"], "duration_minutes": 10}'
+      : '{"title": "Activity Name", "description": "• Cue one\\n• Cue two\\n• Cue three", "skills": [], "duration_minutes": null}'
 
   const prompt = `A ninja gym coach just described a ${typeLabel} out loud. Extract:
 
-1. A short, clear name for this ${typeLabel} (2–5 words). If the coach says a specific name, use it exactly. Otherwise infer the most natural title from what they described.
+1. A short, clear name for this ${typeLabel} (2–5 words). Infer the most natural title from what they described — the coach does not need to say the name explicitly.
 2. 2–3 concise coaching cues a substitute coach could follow. Each starts with "•". Action-oriented. No invented details.
 ${skillsSection}
+${skillsSection ? '4.' : '3.'} Duration in minutes as an integer if the coach explicitly mentions a time (e.g. "15 minutes", "half an hour", "five minute"). Otherwise null.
 
 Return ONLY valid JSON — no explanation, no markdown:
 ${jsonExample}
@@ -66,7 +66,7 @@ Coach said: "${transcript.trim()}"`
     // Extract JSON from response (handle any surrounding text)
     const jsonMatch = raw.match(/\{[\s\S]*\}/)
     if (!jsonMatch) throw new Error('No JSON in response')
-    const parsed = JSON.parse(jsonMatch[0]) as { title?: string; description?: string; skills?: string[] }
+    const parsed = JSON.parse(jsonMatch[0]) as { title?: string; description?: string; skills?: string[]; duration_minutes?: number | null }
 
     // Only return skills that actually exist in the available list
     const allowedSet = new Set(availableSkills ?? [])
@@ -74,10 +74,16 @@ Coach said: "${transcript.trim()}"`
       (s) => typeof s === 'string' && allowedSet.has(s)
     )
 
+    const durationMinutes =
+      typeof parsed.duration_minutes === 'number' && Number.isInteger(parsed.duration_minutes) && parsed.duration_minutes > 0
+        ? parsed.duration_minutes
+        : null
+
     return NextResponse.json({
       title: parsed.title?.trim() ?? '',
       description: parsed.description?.trim() ?? '',
       skills: matchedSkills,
+      duration_minutes: durationMinutes,
     })
   } catch {
     return NextResponse.json({ error: 'parse_failed' }, { status: 500 })

@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/app/lib/supabase'
 import type { ComponentRow, ComponentType, CurriculumRow } from '@/app/lib/database.types'
 import { PhotoLightbox } from '@/app/components/ui/PhotoLightbox'
+import { useVoiceNote } from '@/app/hooks/useVoiceNote'
 
 type TabValue = ComponentType | 'custom'
 
@@ -47,7 +48,7 @@ let _lastTypeFilter: TabValue = 'station'
 
 interface ComponentPickerModalProps {
   onSelect: (component: ComponentRow) => void
-  onAdHocSelect: (title: string) => void
+  onAdHocSelect: (title: string, description?: string, durationMinutes?: number) => void
   onClose: () => void
   existingIds?: Set<string>
 }
@@ -66,8 +67,9 @@ export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose,
   const [videoPreview, setVideoPreview] = useState<string | null>(null)
   // Create Your Own state
   const [adHocTitle, setAdHocTitle] = useState('')
-  const [isRecording, setIsRecording] = useState(false)
-  const recognitionRef = useRef<{ stop: () => void } | null>(null)
+  const [adHocDescription, setAdHocDescription] = useState('')
+  const [adHocDuration, setAdHocDuration] = useState<number | null>(null)
+  const { voiceState, transcript, startRecording, stopRecording, parseComponent, reset: resetVoice } = useVoiceNote()
 
   useEffect(() => {
     setMounted(true)
@@ -91,46 +93,33 @@ export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose,
     _lastTypeFilter = tab
     setTypeFilter(tab)
     setSearch('')
-    if (tab !== 'custom') stopRecording()
+    if (tab !== 'custom') resetVoice()
   }
 
-  function startRecording() {
-    const SpeechRecognition = (window as Window & { SpeechRecognition?: typeof window.SpeechRecognition; webkitSpeechRecognition?: typeof window.SpeechRecognition }).SpeechRecognition
-      ?? (window as Window & { webkitSpeechRecognition?: typeof window.SpeechRecognition }).webkitSpeechRecognition
-    if (!SpeechRecognition) return
-    const recognition = new SpeechRecognition()
-    recognition.continuous = false
-    recognition.interimResults = true
-    recognition.lang = 'en-US'
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    recognition.onresult = (e: any) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const transcript = Array.from(e.results as any[]).map((r: any) => r[0].transcript).join('')
-      setAdHocTitle(transcript)
+  async function handleMicToggle() {
+    if (voiceState === 'idle' || voiceState === 'error' || voiceState === 'done') {
+      resetVoice()
+      setAdHocTitle('')
+      setAdHocDescription('')
+      setAdHocDuration(null)
+      startRecording()
+    } else if (voiceState === 'recording') {
+      stopRecording()
+      const result = await parseComponent('station', [])
+      if (result.title) setAdHocTitle(result.title)
+      if (result.description) setAdHocDescription(result.description)
+      setAdHocDuration(result.durationMinutes ?? null)
     }
-    recognition.onend = () => setIsRecording(false)
-    recognition.onerror = () => setIsRecording(false)
-    recognitionRef.current = recognition
-    recognition.start()
-    setIsRecording(true)
-  }
-
-  function stopRecording() {
-    recognitionRef.current?.stop()
-    recognitionRef.current = null
-    setIsRecording(false)
-  }
-
-  function handleMicToggle() {
-    if (isRecording) stopRecording()
-    else startRecording()
   }
 
   function handleAdHocAdd() {
     const t = adHocTitle.trim()
     if (!t) return
-    onAdHocSelect(t)
+    onAdHocSelect(t, adHocDescription.trim() || undefined, adHocDuration ?? undefined)
     setAdHocTitle('')
+    setAdHocDescription('')
+    setAdHocDuration(null)
+    resetVoice()
   }
 
   let filtered = components
@@ -242,39 +231,85 @@ export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose,
       {/* List — hidden on Create Your Own tab */}
       {typeFilter === 'custom' ? (
         /* ── Create Your Own UI ─────────────────────────────────── */
-        <div className="flex-1 flex flex-col items-center justify-center px-6 gap-6">
+        <div className="flex-1 overflow-y-auto flex flex-col items-center justify-start px-6 pt-8 pb-6 gap-5">
           {/* Mic button */}
           <button
             type="button"
             onClick={handleMicToggle}
+            disabled={voiceState === 'processing'}
             className={[
-              'w-20 h-20 rounded-full flex items-center justify-center transition-all',
-              isRecording
+              'w-20 h-20 rounded-full flex items-center justify-center transition-all flex-shrink-0',
+              voiceState === 'recording'
                 ? 'bg-accent-fire text-white shadow-lg shadow-accent-fire/30 scale-110 animate-pulse'
+                : voiceState === 'processing'
+                ? 'bg-bg-card border-2 border-bg-border text-text-dim cursor-not-allowed'
                 : 'bg-bg-card border-2 border-bg-border text-text-dim hover:border-accent-fire/50 hover:text-accent-fire',
             ].join(' ')}
-            aria-label={isRecording ? 'Stop recording' : 'Start recording'}
+            aria-label={voiceState === 'recording' ? 'Stop recording' : 'Start recording'}
           >
-            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
-            </svg>
+            {voiceState === 'processing' ? (
+              <div className="w-6 h-6 border-2 border-accent-fire border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+              </svg>
+            )}
           </button>
 
-          {isRecording && (
-            <p className="text-xs text-accent-fire font-heading animate-pulse">Listening…</p>
+          {/* Status label */}
+          {voiceState === 'recording' && (
+            <p className="text-xs text-accent-fire font-heading animate-pulse -mt-2">Listening…</p>
+          )}
+          {voiceState === 'processing' && (
+            <p className="text-xs text-text-dim font-heading -mt-2">Generating…</p>
+          )}
+          {voiceState === 'idle' && (
+            <p className="text-xs text-text-dim/50 -mt-2">Tap mic and describe the activity</p>
+          )}
+
+          {/* Live transcript preview */}
+          {voiceState === 'recording' && transcript && (
+            <p className="text-xs text-text-dim italic text-center leading-relaxed -mt-2">{transcript}</p>
           )}
 
           {/* Title input */}
-          <div className="w-full">
-            <input
-              type="text"
-              value={adHocTitle}
-              onChange={(e) => setAdHocTitle(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleAdHocAdd() }}
-              placeholder="Activity name…"
-              className="w-full bg-bg-input border border-bg-border rounded-xl px-4 py-3 text-base text-text-primary placeholder:text-text-dim focus:outline-none focus:border-accent-fire/50 transition-colors text-center"
-            />
-          </div>
+          <input
+            type="text"
+            value={adHocTitle}
+            onChange={(e) => setAdHocTitle(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) handleAdHocAdd() }}
+            placeholder="Activity name…"
+            className="w-full bg-bg-input border border-bg-border rounded-xl px-4 py-3 text-base text-text-primary placeholder:text-text-dim focus:outline-none focus:border-accent-fire/50 transition-colors"
+          />
+
+          {/* Description textarea */}
+          <textarea
+            value={adHocDescription}
+            onChange={(e) => setAdHocDescription(e.target.value)}
+            placeholder="Coaching cues… (optional)"
+            rows={3}
+            className="w-full bg-bg-input border border-bg-border rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-dim focus:outline-none focus:border-accent-fire/50 transition-colors resize-none leading-relaxed"
+          />
+
+          {/* Duration chip — only shown if voice extracted one */}
+          {adHocDuration && (
+            <div className="w-full flex items-center gap-2">
+              <span className="text-xs font-heading text-text-dim">Duration</span>
+              <span className="flex items-center gap-1.5 px-2.5 py-1 bg-accent-fire/10 border border-accent-fire/20 rounded-full text-xs font-heading text-accent-fire">
+                {adHocDuration} min
+                <button
+                  type="button"
+                  onClick={() => setAdHocDuration(null)}
+                  className="text-accent-fire/60 hover:text-accent-fire transition-colors"
+                  aria-label="Clear duration"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </span>
+            </div>
+          )}
 
           {/* Add to Plan button */}
           <button

@@ -71,6 +71,7 @@ export default function EditComponentPage() {
   const [title, setTitle] = useState('')
   const [curriculum, setCurriculum] = useState('')
   const [description, setDescription] = useState('')
+  const [durationMinutes, setDurationMinutes] = useState<number | null>(null)
   const [skills, setSkills] = useState<string[]>([])
   const [newPhotos, setNewPhotos] = useState<PhotoDraft[]>([])
   const [existingPhotos, setExistingPhotos] = useState<string[]>([])
@@ -126,6 +127,7 @@ export default function EditComponentPage() {
       const result = await parseComponent(component.type, component.type === 'station' ? availableSkills : [])
       if (result.title) { setTitle(result.title); setTitleError(null) }
       if (result.description) setDescription(result.description)
+      if (result.durationMinutes) setDurationMinutes(result.durationMinutes)
       if (component.type === 'station' && result.skills.length > 0) setSkills((prev) => {
         const merged = new Set([...prev, ...result.skills])
         return Array.from(merged)
@@ -147,6 +149,7 @@ export default function EditComponentPage() {
         setTitle(c.title)
         setCurriculum(c.curriculum ?? '')
         setDescription(c.description ?? '')
+        setDurationMinutes(c.duration_minutes ?? null)
         setSkills(c.skills ?? [])
         setExistingPhotos(c.photos ?? [])
         setVideoPreview(c.video_url ?? null)
@@ -240,6 +243,7 @@ export default function EditComponentPage() {
         photos: allPhotos,
         video_url: videoUrl,
         video_link: showVideoLink ? (videoLink.trim() || null) : null,
+        duration_minutes: durationMinutes,
       }).eq('id', componentId)
 
       if (updateErr) throw updateErr
@@ -479,6 +483,21 @@ export default function EditComponentPage() {
         rows={4}
         className="field-textarea resize-none leading-relaxed"
       />
+
+      {/* ── DURATION ──────────────────────────────────────── */}
+      <SectionDivider label="Duration (optional)" />
+      <div className="flex items-center gap-3">
+        <input
+          type="number"
+          min={1}
+          max={120}
+          value={durationMinutes ?? ''}
+          onChange={(e) => setDurationMinutes(e.target.value ? Number(e.target.value) : null)}
+          placeholder="—"
+          className="w-20 field-input text-center"
+        />
+        <span className="text-sm text-text-dim">minutes</span>
+      </div>
 
       {/* ── CURRICULUM ────────────────────────────────────── */}
       {curriculums.length > 0 && (

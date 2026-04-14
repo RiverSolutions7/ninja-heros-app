@@ -106,6 +106,7 @@ export default function LogComponentPage() {
   // Form fields
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
+  const [durationMinutes, setDurationMinutes] = useState<number | null>(null)
   const [skills, setSkills] = useState<string[]>([])
   const [photos, setPhotos] = useState<PhotoDraft[]>([])
 
@@ -224,6 +225,7 @@ export default function LogComponentPage() {
       const result = await parseComponent(componentType!, componentType === 'station' ? availableSkills : [])
       if (result.title) { setTitle(result.title); setTitleError(null) }
       if (result.description) setDescription(result.description)
+      if (result.durationMinutes) setDurationMinutes(result.durationMinutes)
       if (componentType === 'station' && result.skills.length > 0) setSkills(result.skills)
     }
   }
@@ -296,6 +298,7 @@ export default function LogComponentPage() {
         photos: photoUrls.filter((u) => !u.startsWith('blob:')),
         video_url: videoUrl,
         video_link: showVideoLink ? (videoLink.trim() || null) : null,
+        duration_minutes: durationMinutes,
       })
       if (insertErr) throw insertErr
       setToast({ message: 'Component saved ✓', type: 'success' })
@@ -649,6 +652,21 @@ export default function LogComponentPage() {
         rows={4}
         className="field-textarea resize-none leading-relaxed"
       />
+
+      {/* ── DURATION ──────────────────────────────────────── */}
+      <SectionDivider label="Duration (optional)" />
+      <div className="flex items-center gap-3">
+        <input
+          type="number"
+          min={1}
+          max={120}
+          value={durationMinutes ?? ''}
+          onChange={(e) => setDurationMinutes(e.target.value ? Number(e.target.value) : null)}
+          placeholder="—"
+          className="w-20 field-input text-center"
+        />
+        <span className="text-sm text-text-dim">minutes</span>
+      </div>
 
       {/* ── SKILLS (stations only) ────────────────────────── */}
       {ct === 'station' && (

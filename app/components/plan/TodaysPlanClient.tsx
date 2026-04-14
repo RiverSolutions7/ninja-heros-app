@@ -689,7 +689,7 @@ export default function TodaysPlanClient() {
     ])
   }
 
-  function handleAdHocSelect(title: string) {
+  function handleAdHocSelect(title: string, description?: string, durationMinutes?: number) {
     setItems(prev => [
       ...prev,
       {
@@ -699,19 +699,19 @@ export default function TodaysPlanClient() {
           type: 'station' as ComponentType,
           title,
           curriculum: null,
-          description: null,
+          description: description ?? null,
           equipment: null,
           skills: [],
           photos: [],
           video_url: null,
           video_link: null,
-          duration_minutes: null,
+          duration_minutes: durationMinutes ?? null,
           folder_id: null,
           in_handoff: false,
           created_at: new Date().toISOString(),
         },
         isAdHoc: true,
-        durationMinutes: null,
+        durationMinutes: durationMinutes ?? null,
         coachNote: null,
       },
     ])
@@ -1309,9 +1309,17 @@ export default function TodaysPlanClient() {
                 <svg className="w-3.5 h-3.5 text-text-dim flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <span className={['text-xs font-heading', isOverBudget ? 'text-accent-fire' : 'text-text-muted'].join(' ')}>
+                <button
+                  type="button"
+                  onClick={classLength ? () => setShowLengthPicker(v => !v) : undefined}
+                  className={[
+                    'text-xs font-heading',
+                    isOverBudget ? 'text-accent-fire' : 'text-text-muted',
+                    classLength ? 'underline underline-offset-2 cursor-pointer' : '',
+                  ].join(' ')}
+                >
                   {classLength ? `${totalMinutes} / ${classLength} min` : `${totalMinutes} min`}
-                </span>
+                </button>
                 {classLength && (
                   <div className="flex-1 h-1 bg-bg-border rounded-full overflow-hidden">
                     <div

@@ -134,12 +134,12 @@ export function useVoiceNote() {
   async function parseComponent(
     componentType: string,
     availableSkills?: string[]
-  ): Promise<{ title: string; description: string; skills: string[] }> {
+  ): Promise<{ title: string; description: string; skills: string[]; durationMinutes: number | null }> {
     const text = transcriptRef.current.trim()
     if (!text) {
       setVoiceState('error')
       setErrorMessage('No speech detected. Try again.')
-      return { title: '', description: '', skills: [] }
+      return { title: '', description: '', skills: [], durationMinutes: null }
     }
 
     try {
@@ -151,17 +151,18 @@ export function useVoiceNote() {
 
       if (!res.ok) throw new Error(`api ${res.status}`)
 
-      const data = (await res.json()) as { title: string; description: string; skills: string[] }
+      const data = (await res.json()) as { title: string; description: string; skills: string[]; duration_minutes: number | null }
       setVoiceState('done')
       return {
         title: data.title ?? '',
         description: data.description ?? '',
         skills: data.skills ?? [],
+        durationMinutes: data.duration_minutes ?? null,
       }
     } catch {
       setVoiceState('error')
       setErrorMessage('AI parse failed — transcript saved to description.')
-      return { title: '', description: `[Voice — please review]\n${text}`, skills: [] }
+      return { title: '', description: `[Voice — please review]\n${text}`, skills: [], durationMinutes: null }
     }
   }
 
