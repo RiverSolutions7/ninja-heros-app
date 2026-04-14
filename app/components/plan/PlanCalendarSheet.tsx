@@ -86,6 +86,8 @@ interface PlanCalendarSheetProps {
   onClose: () => void
   /** Override the initial view. Defaults to 'week' for browse, 'month' for save. */
   defaultView?: ViewMode
+  /** Pre-fill the plan title field with a value the coach already typed. */
+  initialTitle?: string
 }
 
 type ViewMode = 'week' | 'month'
@@ -127,6 +129,7 @@ export function PlanCalendarSheet({
   onLoadPlan,
   onClose,
   defaultView,
+  initialTitle = '',
 }: PlanCalendarSheetProps) {
   const today = new Date(todayIso + 'T00:00:00')
 
@@ -138,7 +141,7 @@ export function PlanCalendarSheet({
   const [viewYear, setViewYear] = useState(today.getFullYear())
   const [viewMonth, setViewMonth] = useState(today.getMonth())
   const [selectedIso, setSelectedIso] = useState<string | null>(null)
-  const [planTitle, setPlanTitle] = useState('')
+  const [planTitle, setPlanTitle] = useState(initialTitle)
   const [browsePlans, setBrowsePlans] = useState<PlanRow[]>([])
   const [browseLoading, setBrowseLoading] = useState(false)
 

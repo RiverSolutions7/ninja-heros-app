@@ -1521,6 +1521,7 @@ export default function TodaysPlanClient() {
           mode="save"
           todayIso={todayIso}
           datesWithPlans={datesWithPlans}
+          initialTitle={draftNameValue}
           onSaveToCal={async (date, title) => {
             setShowDatePicker(false)
             await handleAddToCalendar(date, title)
