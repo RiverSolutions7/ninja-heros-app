@@ -26,18 +26,11 @@ import { PhotoLightbox } from '@/app/components/ui/PhotoLightbox'
 import { PlanItemSheet } from './PlanItemSheet'
 import { PlanCalendarSheet } from './PlanCalendarSheet'
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
 
-interface Draft {
-  id: string
-  name?: string
-  items: PlanItem[]
-  createdAt: string
-}
-
-const DRAFTS_KEY = 'ninja-plan-drafts'
+// sessionStorage key: silently persists an in-progress new plan across page
+// refreshes within the same tab. Invisible to the coach — pure protection.
 const SESSION_KEY = 'ninja-plan-session'
-const MAX_DRAFTS = 5
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -50,20 +43,6 @@ function offsetDate(isoDate: string, days: number): string {
 function formatDisplayDate(isoDate: string): string {
   const d = new Date(isoDate + 'T00:00:00')
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
-
-function formatDraftTime(isoString: string): string {
-  const d = new Date(isoString)
-  const now = new Date()
-  const isToday = d.toDateString() === now.toDateString()
-  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-  return isToday
-    ? `Today · ${time}`
-    : `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${time}`
-}
-
-function saveDraftsToStorage(drafts: Draft[]) {
-  try { localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts)) } catch { /* ignore */ }
 }
 
 // ── Week strip helpers ────────────────────────────────────────────────────────
@@ -438,52 +417,6 @@ function SortablePlanItem({
   )
 }
 
-// ── Draft card ────────────────────────────────────────────────────────────────
-
-function DraftCard({
-  draft,
-  onContinue,
-  onDiscard,
-}: {
-  draft: Draft
-  onContinue: () => void
-  onDiscard: () => void
-}) {
-  const count = draft.items.length
-
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={onContinue}
-        className="w-full text-left bg-bg-card border border-bg-border border-l-4 border-l-accent-fire rounded-xl pl-4 pr-12 py-3.5 active:bg-white/5 transition-colors"
-      >
-        <div className="flex items-center gap-1.5 text-[10px] font-heading uppercase tracking-wide">
-          <span className="text-accent-fire">Draft</span>
-          <span className="text-text-dim/40">·</span>
-          <span className="text-text-dim">Tap to continue</span>
-        </div>
-        <p className="font-heading text-[15px] text-text-primary leading-tight mt-0.5 truncate">
-          {draft.name || 'Untitled plan'}
-        </p>
-        <p className="text-[11px] text-text-dim mt-0.5">
-          {count} component{count !== 1 ? 's' : ''} · {formatDraftTime(draft.createdAt)}
-        </p>
-      </button>
-      <button
-        type="button"
-        onClick={onDiscard}
-        className="absolute top-2 right-2 text-text-dim/40 hover:text-accent-fire transition-colors p-1.5"
-        aria-label="Discard draft"
-      >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
-    </div>
-  )
-}
-
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function TodaysPlanClient() {
@@ -503,10 +436,6 @@ export default function TodaysPlanClient() {
   const [selectedDayIso, setSelectedDayIso] = useState<string>(todayIso)
   const [selectedDayPlans, setSelectedDayPlans] = useState<PlanRow[]>([])
   const [selectedDayLoading, setSelectedDayLoading] = useState(false)
-
-  // ── Drafts ───────────────────────────────────────────────────────────────────
-  const [drafts, setDrafts] = useState<Draft[]>([])
-  const activeDraftIdRef = useRef<string | null>(null)
 
   // ── Calendar ─────────────────────────────────────────────────────────────────
   const [datesWithPlans, setDatesWithPlans] = useState<Set<string>>(new Set())
@@ -565,26 +494,20 @@ export default function TodaysPlanClient() {
 
   // ── Effects ───────────────────────────────────────────────────────────────────
 
-  // Mount: session recovery → drafts → calendar data
+  // Mount: session recovery → class length → calendar data
   useEffect(() => {
     setMounted(true)
 
-    // Session recovery
+    // Session recovery — restore an in-progress new plan after refresh
     try {
       const session = sessionStorage.getItem(SESSION_KEY)
       if (session) {
         const recovered = JSON.parse(session) as PlanItem[]
         if (recovered.length > 0) {
           setItems(recovered)
-          setViewMode('editing') // restore editing view
+          setViewMode('editing')
         }
       }
-    } catch { /* ignore */ }
-
-    // Drafts
-    try {
-      const raw = localStorage.getItem(DRAFTS_KEY)
-      if (raw) setDrafts(JSON.parse(raw) as Draft[])
     } catch { /* ignore */ }
 
     // Class length
@@ -661,39 +584,9 @@ export default function TodaysPlanClient() {
     } catch { /* ignore */ }
   }, [items, mounted, editingPlanId])
 
-  // Auto-save active draft to localStorage
-  useEffect(() => {
-    if (!mounted) return
-    if (editingPlanId !== null) return
-    const id = activeDraftIdRef.current
-    if (!id) return
-    if (items.length === 0) {
-      setDrafts(prev => {
-        const next = prev.filter(d => d.id !== id)
-        saveDraftsToStorage(next)
-        return next
-      })
-      activeDraftIdRef.current = null
-      return
-    }
-    setDrafts(prev => {
-      const without = prev.filter(d => d.id !== id)
-      const updated = [
-        { id, items, createdAt: new Date().toISOString() },
-        ...without,
-      ].slice(0, MAX_DRAFTS)
-      saveDraftsToStorage(updated)
-      return updated
-    })
-  }, [items, mounted, editingPlanId])
-
   // ── Handlers ──────────────────────────────────────────────────────────────────
 
   function handleSelect(component: ComponentRow) {
-    // Auto-assign draft ID on first item so auto-save kicks in immediately
-    if (!activeDraftIdRef.current && !editingPlanId) {
-      activeDraftIdRef.current = randomId()
-    }
     setItems(prev => [
       ...prev,
       { localId: randomId(), component, durationMinutes: component.duration_minutes ?? null, coachNote: null },
@@ -701,10 +594,6 @@ export default function TodaysPlanClient() {
   }
 
   function handleAdHocSelect(title: string, description?: string, durationMinutes?: number) {
-    // Auto-assign draft ID on first item so auto-save kicks in immediately
-    if (!activeDraftIdRef.current && !editingPlanId) {
-      activeDraftIdRef.current = randomId()
-    }
     setItems(prev => [
       ...prev,
       {
@@ -815,19 +704,6 @@ export default function TodaysPlanClient() {
       setLastAddedPlanId(plan.id)
       setEditingPlanId(plan.id)
       setEditingPlanLabel(formatDisplayDate(date))
-      // Capture draft id BEFORE clearing the ref — React's setDrafts updater
-      // is deferred, so reading the ref inside the updater sees null and the
-      // filter becomes a no-op. This caused the saved plan to also persist
-      // as a draft.
-      const capturedDraftId = activeDraftIdRef.current
-      if (capturedDraftId) {
-        activeDraftIdRef.current = null
-        setDrafts(prev => {
-          const next = prev.filter(d => d.id !== capturedDraftId)
-          saveDraftsToStorage(next)
-          return next
-        })
-      }
       const from = offsetDate(todayIso, -180)
       const to = offsetDate(todayIso, 180)
       const dates = await fetchDatesWithPlans(from, to)
@@ -844,7 +720,6 @@ export default function TodaysPlanClient() {
 
   function handleLoadPlan(plan: PlanRow) {
     if (saveTimer.current) clearTimeout(saveTimer.current)
-    activeDraftIdRef.current = null
     setEditingPlanId(plan.id)
     const titlePart = plan.title ? plan.title : null
     const datePart = plan.plan_date ? formatDisplayDate(plan.plan_date) : null
@@ -858,45 +733,8 @@ export default function TodaysPlanClient() {
     setViewMode('editing')
   }
 
-  function handleContinueDraft(draft: Draft) {
-    if (saveTimer.current) clearTimeout(saveTimer.current)
-    activeDraftIdRef.current = draft.id
-    setItems(draft.items)
-    setEditingPlanId(null)
-    setEditingPlanLabel(null)
-    setLastAddedPlanId(null)
-    setSaveStatus('idle')
-
-    setViewMode('editing')
-  }
-
-  function handleDiscardDraft(draftId: string) {
-    setDrafts(prev => {
-      const next = prev.filter(d => d.id !== draftId)
-      saveDraftsToStorage(next)
-      return next
-    })
-    if (activeDraftIdRef.current === draftId) {
-      if (saveTimer.current) clearTimeout(saveTimer.current)
-      setItems([])
-      setEditingPlanId(null)
-      setEditingPlanLabel(null)
-      setSaveStatus('idle')
-      activeDraftIdRef.current = null
-  
-    }
-  }
-
   function handleClearPlan() {
     if (saveTimer.current) clearTimeout(saveTimer.current)
-    const id = activeDraftIdRef.current
-    if (id) {
-      setDrafts(prev => {
-        const next = prev.filter(d => d.id !== id)
-        saveDraftsToStorage(next)
-        return next
-      })
-    }
     setItems([])
     setEditingPlanId(null)
     setEditingPlanLabel(null)
@@ -904,7 +742,6 @@ export default function TodaysPlanClient() {
     setSaveStatus('idle')
     setCalendarAddedTo(null)
 
-    activeDraftIdRef.current = null
     try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
     setViewMode('dashboard')
   }
@@ -1227,27 +1064,7 @@ export default function TodaysPlanClient() {
             )}
           </div>
 
-          {/* ── Drafts ── */}
-          {drafts.length > 0 && (
-            <>
-              <div className="mx-4 mt-5 border-t border-bg-border/40" />
-              <div className="px-4 mt-5">
-                <p className="text-[11px] font-heading uppercase tracking-wider text-text-dim mb-3">Drafts</p>
-                <div className="flex flex-col gap-2">
-                  {drafts.map(draft => (
-                    <DraftCard
-                      key={draft.id}
-                      draft={draft}
-                      onContinue={() => handleContinueDraft(draft)}
-                      onDiscard={() => handleDiscardDraft(draft.id)}
-                    />
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* ── Start New Plan CTA ── */}
+          {/* ── Start Plan CTA ── */}
           <div className="px-4 mt-5 pb-2">
             <button
               type="button"
@@ -1256,7 +1073,6 @@ export default function TodaysPlanClient() {
                 setItems([])
                 setEditingPlanId(null)
                 setEditingPlanLabel(null)
-                activeDraftIdRef.current = null
                 try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
                 setViewMode('editing')
                 setShowPicker(true)
@@ -1267,7 +1083,7 @@ export default function TodaysPlanClient() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
               </svg>
               {selectedDayIso === todayIso
-                ? 'Start New Plan'
+                ? 'Plan for today'
                 : `Plan for ${formatShortDay(selectedDayIso)}`}
             </button>
           </div>
@@ -1412,7 +1228,7 @@ export default function TodaysPlanClient() {
                   </button>
                 </div>
               ) : (
-                /* New draft: single primary CTA */
+                /* New plan: single primary CTA */
                 <button
                   type="button"
                   onClick={() => setShowDatePicker(true)}
@@ -1431,7 +1247,7 @@ export default function TodaysPlanClient() {
             </p>
           )}
 
-          {/* ── Clear & start over (new drafts only) ── */}
+          {/* ── Clear & start over (new plan only) ── */}
           {items.length > 0 && !editingPlanId && (
             <div className="px-4 pb-4 flex justify-center gap-4">
               <button
