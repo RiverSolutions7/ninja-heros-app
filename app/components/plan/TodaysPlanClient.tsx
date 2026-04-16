@@ -1331,7 +1331,6 @@ export default function TodaysPlanClient() {
       {activeSheet && (
         <PlanItemSheet
           item={activeSheet}
-          planDate={todayIso}
           onSaveNote={(localId, note) => {
             handleNoteChange(localId, note)
             setActiveSheet(prev => prev ? { ...prev, coachNote: note || null } : null)

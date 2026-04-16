@@ -11,20 +11,14 @@ const TYPE_META: Record<ComponentType, { label: string; accent: string; placehol
   game: { label: 'Game', accent: 'text-accent-green', placeholderBg: 'bg-accent-green/20' },
 }
 
-function formatDisplayDate(isoDate: string): string {
-  const d = new Date(isoDate + 'T00:00:00')
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
-
 interface PlanItemSheetProps {
   item: PlanItem
-  planDate: string
   onSaveNote: (localId: string, note: string) => void
   onDurationChange: (localId: string, value: string) => void
   onClose: () => void
 }
 
-export function PlanItemSheet({ item, planDate, onSaveNote, onDurationChange, onClose }: PlanItemSheetProps) {
+export function PlanItemSheet({ item, onSaveNote, onDurationChange, onClose }: PlanItemSheetProps) {
   const [visible, setVisible] = useState(false)
   // Pre-fill with existing coach note, or fall back to library description as a starting point
   const [noteText, setNoteText] = useState(item.coachNote ?? item.component.description ?? '')
@@ -172,26 +166,20 @@ export function PlanItemSheet({ item, planDate, onSaveNote, onDurationChange, on
             <div className={['mx-4 mt-3 h-20 rounded-xl', meta.placeholderBg].join(' ')} />
           )}
 
-          {/* Title + type badge */}
-          <div className="px-4 pt-4">
-            <div className="flex items-start gap-2">
-              <h2 className="font-heading text-xl text-text-primary leading-snug flex-1">
-                {item.component.title}
-              </h2>
-              <span className={['text-xs font-heading mt-1 flex-shrink-0', meta.accent].join(' ')}>
-                {meta.label}
-              </span>
+          {/* Metadata row + title — library-card hierarchy */}
+          <div className="px-4 pt-3">
+            <div className="flex items-center gap-1.5 text-[10px] font-heading uppercase tracking-wide">
+              <span className={meta.accent}>{meta.label}</span>
+              {item.component.curriculum && (
+                <>
+                  <span className="text-text-dim/40">·</span>
+                  <span className="text-text-dim">{item.component.curriculum}</span>
+                </>
+              )}
             </div>
-            {item.component.curriculum && (
-              <p className="text-xs text-text-dim mt-0.5">{item.component.curriculum}</p>
-            )}
-            {/* Date-specific reassurance */}
-            <p className="text-[11px] text-text-dim/40 mt-1.5 flex items-center gap-1">
-              <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              {formatDisplayDate(planDate)} only · won&apos;t change the library
-            </p>
+            <h2 className="font-heading text-xl text-text-primary leading-snug mt-1">
+              {item.component.title}
+            </h2>
           </div>
 
           {/* Equipment */}
@@ -202,31 +190,34 @@ export function PlanItemSheet({ item, planDate, onSaveNote, onDurationChange, on
             </div>
           )}
 
-          {/* Optional duration stepper */}
-          <div className="px-4 mt-4 flex items-center gap-3">
-            <span className="text-xs text-text-dim font-heading flex-shrink-0">Duration</span>
+          {/* Duration stepper */}
+          <div className="px-4 mt-3 flex items-center justify-between">
+            <span className="text-xs text-text-dim font-heading">Duration</span>
             <div className="flex items-center">
               <button
                 type="button"
                 onClick={() => handleDurationStep(-5)}
                 disabled={!localDuration}
-                className="w-8 h-8 flex items-center justify-center rounded-l-lg border border-bg-border bg-bg-input text-text-muted active:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                className="w-9 h-9 flex items-center justify-center rounded-l-lg border border-bg-border bg-bg-input text-text-muted active:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                 aria-label="Decrease duration"
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" />
                 </svg>
               </button>
-              <div className="h-8 px-3 flex items-center justify-center border-t border-b border-bg-border bg-bg-input min-w-[60px]">
-                <span className="text-text-muted text-xs font-heading whitespace-nowrap">
-                  {localDuration ? `${localDuration} min` : '— min'}
+              <div className="h-9 px-4 flex items-center justify-center border-t border-b border-bg-border bg-bg-input min-w-[72px]">
+                <span className={[
+                  'font-heading whitespace-nowrap',
+                  localDuration ? 'text-text-primary text-sm' : 'text-text-dim text-sm',
+                ].join(' ')}>
+                  {localDuration ? `${localDuration} min` : '—'}
                 </span>
               </div>
               <button
                 type="button"
                 onClick={() => handleDurationStep(5)}
                 disabled={!!localDuration && localDuration >= 120}
-                className="w-8 h-8 flex items-center justify-center rounded-r-lg border border-bg-border bg-bg-input text-text-muted active:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                className="w-9 h-9 flex items-center justify-center rounded-r-lg border border-bg-border bg-bg-input text-text-muted active:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                 aria-label="Increase duration"
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -234,22 +225,21 @@ export function PlanItemSheet({ item, planDate, onSaveNote, onDurationChange, on
                 </svg>
               </button>
             </div>
-            <span className="text-[11px] text-text-dim/40">optional</span>
           </div>
 
-          {/* Coach Note section */}
-          <div className="px-4 mt-5 pb-2">
+          {/* Running Note section */}
+          <div className="px-4 mt-4 pb-2">
             <div className="flex items-center gap-2 mb-3">
               <div className="h-px flex-1 bg-bg-border" />
               <span className="text-[11px] font-heading uppercase tracking-wider text-text-dim px-2">
-                Coach Note
+                Running Note
               </span>
               <div className="h-px flex-1 bg-bg-border" />
             </div>
 
-            {/* Mic button + label row */}
-            <div className="flex items-center gap-3 mb-3">
-              {isSupported ? (
+            {/* Mic button + label row — hidden entirely when voice unsupported */}
+            {isSupported && (
+              <div className="flex items-center gap-3 mb-2">
                 <button
                   type="button"
                   onClick={handleMicToggle}
@@ -263,32 +253,29 @@ export function PlanItemSheet({ item, planDate, onSaveNote, onDurationChange, on
                 >
                   {micIcon()}
                 </button>
-              ) : null}
-              <div className="flex-1 min-w-0">
-                {voiceState === 'recording' && (
-                  <p className="text-xs text-accent-fire animate-pulse">Listening… tap mic to stop</p>
-                )}
-                {voiceState === 'processing' && (
-                  <p className="text-xs text-text-dim">Processing…</p>
-                )}
-                {voiceState === 'done' && (
-                  <p className="text-xs text-accent-green">Note formatted ✓</p>
-                )}
-                {voiceState === 'error' && errorMessage && (
-                  <p className="text-xs text-red-400">{errorMessage}</p>
-                )}
-                {voiceState === 'idle' && isSupported && (
-                  <p className="text-xs text-text-dim">Tap mic to speak running instructions</p>
-                )}
-                {!isSupported && (
-                  <p className="text-xs text-text-dim">Voice not supported — type below</p>
-                )}
+                <div className="flex-1 min-w-0">
+                  {voiceState === 'recording' && (
+                    <p className="text-xs text-accent-fire animate-pulse">Listening… tap mic to stop</p>
+                  )}
+                  {voiceState === 'processing' && (
+                    <p className="text-xs text-text-dim">Processing…</p>
+                  )}
+                  {voiceState === 'done' && (
+                    <p className="text-xs text-accent-green">Note formatted ✓</p>
+                  )}
+                  {voiceState === 'error' && errorMessage && (
+                    <p className="text-xs text-red-400">{errorMessage}</p>
+                  )}
+                  {voiceState === 'idle' && (
+                    <p className="text-xs text-text-dim">Tap mic to dictate</p>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Live transcript preview while recording */}
             {voiceState === 'recording' && transcript && (
-              <p className="text-xs text-text-dim italic mb-3 px-1 leading-relaxed">
+              <p className="text-xs text-text-dim italic mb-2 px-1 leading-relaxed">
                 &ldquo;{transcript}&rdquo;
               </p>
             )}
@@ -298,7 +285,7 @@ export function PlanItemSheet({ item, planDate, onSaveNote, onDurationChange, on
               ref={textareaRef}
               value={noteText}
               onChange={(e) => setNoteText(e.target.value)}
-              placeholder="Add running instructions for this component…"
+              placeholder="Running instructions for this component…"
               rows={4}
               className="w-full bg-bg-input border border-bg-border rounded-xl px-3 py-2.5 text-sm text-text-primary placeholder:text-text-dim focus:outline-none focus:border-accent-fire/50 transition-colors resize-none leading-relaxed"
             />
