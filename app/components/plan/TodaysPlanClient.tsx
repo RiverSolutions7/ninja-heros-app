@@ -20,6 +20,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import type { ComponentRow, ComponentType, PlanItem, PlanRow } from '@/app/lib/database.types'
 import { addPlanToCalendar, updatePlanById, fetchDatesWithPlans, fetchPlansForDate, deletePlanById, movePlanToDate } from '@/app/lib/planQueries'
+import { randomId } from '@/app/lib/uuid'
 import ComponentPickerModal from './ComponentPickerModal'
 import { PhotoLightbox } from '@/app/components/ui/PhotoLightbox'
 import { PlanItemSheet } from './PlanItemSheet'
@@ -167,17 +168,17 @@ function TypePlaceholder({ type, className }: { type: ComponentType; className?:
   )
 }
 
-// ── Sortable plan item ────────────────────────────────────────────────────────
+// ── Sortable plan item (card design — matches Library Phase 2A) ─────────────
+
+const PLAN_THUMB = 72
 
 function SortablePlanItem({
   item,
-  index,
   onRemove,
   onPhotoTap,
   onRowTap,
 }: {
   item: PlanItem
-  index: number
   onRemove: (localId: string) => void
   onPhotoTap: (photos: string[]) => void
   onRowTap: (item: PlanItem) => void
@@ -195,102 +196,114 @@ function SortablePlanItem({
   }
 
   return (
-    <li
+    <div
       ref={setNodeRef}
       style={style}
       className={[
-        'flex items-center gap-3 px-4 py-3.5 border-b border-bg-border/50 last:border-b-0 border-l-4',
+        'relative flex items-center gap-3 px-3 py-2.5 rounded-xl bg-bg-card',
+        'border-l-4',
         meta.border,
       ].join(' ')}
     >
-      <span className="text-[11px] font-heading text-text-dim/40 w-4 text-right flex-shrink-0 tabular-nums">
-        {index + 1}
-      </span>
-      <span
-        className="text-text-dim/40 text-base leading-none select-none flex-shrink-0 cursor-grab active:cursor-grabbing p-1"
-        style={{ touchAction: 'none' }}
-        aria-label="Drag to reorder"
-        {...attributes}
-        {...listeners}
-      >
-        ⠿
-      </span>
-      <div className="relative flex-shrink-0">
+      {/* ─── Thumbnail slot ──────────────────────────────────── */}
+      <div className="relative shrink-0 rounded-lg overflow-hidden">
         <button
           type="button"
           onClick={() => !item.isAdHoc && photos.length > 0 && onPhotoTap(photos)}
-          className={[
-            'w-14 h-14 rounded-xl overflow-hidden block',
-            firstPhoto ? 'cursor-pointer active:opacity-80 transition-opacity' : 'cursor-default',
-          ].join(' ')}
+          style={{ width: PLAN_THUMB, height: PLAN_THUMB }}
+          className={firstPhoto ? 'cursor-pointer active:opacity-80 transition-opacity block' : 'cursor-default block'}
           tabIndex={firstPhoto ? 0 : -1}
           aria-label={firstPhoto ? `View photos of ${item.component.title}` : undefined}
         >
-          {item.isAdHoc ? (
-            <div className="w-full h-full flex items-center justify-center bg-accent-fire/15">
-              <span className="text-accent-fire">{CUSTOM_ICON}</span>
-            </div>
-          ) : firstPhoto ? (
+          {firstPhoto ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={firstPhoto} alt={item.component.title} className="w-full h-full object-cover" />
+            <img
+              src={firstPhoto}
+              alt={item.component.title}
+              style={{ width: PLAN_THUMB, height: PLAN_THUMB }}
+              className="object-cover block"
+            />
           ) : (
-            <TypePlaceholder type={item.component.type as ComponentType} className="w-full h-full rounded-xl" />
+            <div
+              style={{ width: PLAN_THUMB, height: PLAN_THUMB }}
+              className={['flex items-center justify-center', meta.textColor, 'opacity-50'].join(' ')}
+            >
+              {item.isAdHoc ? (
+                <span className="w-7 h-7">{CUSTOM_ICON}</span>
+              ) : (
+                <span className="w-7 h-7">{TYPE_ICONS[item.component.type as ComponentType]}</span>
+              )}
+            </div>
           )}
         </button>
         {extraCount > 0 && (
-          <span className="absolute bottom-1 right-1 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">
+          <span className="absolute bottom-0.5 right-0.5 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">
             +{extraCount}
           </span>
         )}
       </div>
+
+      {/* ─── Info stack ──────────────────────────────────────── */}
       <button
         type="button"
         onClick={() => onRowTap(item)}
         className="flex-1 min-w-0 text-left active:opacity-70 transition-opacity"
       >
-        <div className="flex items-center gap-1.5">
-          <div className="flex-1 min-w-0">
-            <p className="font-heading text-[15px] text-text-primary leading-snug truncate">
-              {item.component.title}
-            </p>
-            <div className="flex items-center gap-1 mt-0.5">
-              <span className={['text-[10px] font-heading uppercase tracking-wide flex-shrink-0', meta.textColor].join(' ')}>
-                {meta.label}
-              </span>
-              {!item.isAdHoc && item.component.curriculum && (
-                <>
-                  <span className="text-text-dim/30 text-[10px] flex-shrink-0">·</span>
-                  <span className="text-[10px] text-text-dim truncate">{item.component.curriculum}</span>
-                </>
-              )}
-            </div>
-            {item.coachNote && (
-              <p className="text-[11px] text-accent-fire/70 mt-0.5 truncate">
-                {item.coachNote.split('\n')[0]}
-              </p>
-            )}
-          </div>
-          {item.durationMinutes ? (
-            <span className="text-[11px] text-text-dim font-heading flex-shrink-0">
-              {item.durationMinutes}m
-            </span>
-          ) : null}
-          {!item.coachNote && (
-            <span className="text-[10px] text-text-dim/30 flex-shrink-0 font-heading">note</span>
+        <div className="flex items-center gap-1.5 text-[10px] font-heading uppercase tracking-wide">
+          <span className={meta.textColor}>{meta.label}</span>
+          {!item.isAdHoc && item.component.curriculum && (
+            <>
+              <span className="text-text-dim/40">·</span>
+              <span className="text-text-dim truncate">{item.component.curriculum}</span>
+            </>
+          )}
+          {item.durationMinutes != null && (
+            <>
+              <span className="text-text-dim/40">·</span>
+              <span className="text-text-dim">{item.durationMinutes} min</span>
+            </>
           )}
         </div>
+        <p className="font-heading text-[15px] text-text-primary leading-tight truncate mt-0.5">
+          {item.component.title}
+        </p>
+        {item.coachNote && (
+          <p className="text-[11px] text-text-muted mt-0.5 truncate">
+            {item.coachNote.split('\n')[0]}
+          </p>
+        )}
       </button>
-      <button
-        type="button"
-        onClick={() => onRemove(item.localId)}
-        className="text-text-dim/30 hover:text-text-muted transition-colors flex-shrink-0 p-1 -mr-1"
-        aria-label="Remove"
-      >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
-    </li>
+
+      {/* ─── Right-side controls ─────────────────────────────── */}
+      <div className="flex flex-col items-center gap-1.5 flex-shrink-0 -mr-1">
+        <span
+          className="text-text-dim/30 p-1 cursor-grab active:cursor-grabbing"
+          style={{ touchAction: 'none' }}
+          aria-label="Drag to reorder"
+          {...attributes}
+          {...listeners}
+        >
+          <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+            <circle cx="7" cy="5" r="1.25" />
+            <circle cx="13" cy="5" r="1.25" />
+            <circle cx="7" cy="10" r="1.25" />
+            <circle cx="13" cy="10" r="1.25" />
+            <circle cx="7" cy="15" r="1.25" />
+            <circle cx="13" cy="15" r="1.25" />
+          </svg>
+        </span>
+        <button
+          type="button"
+          onClick={() => onRemove(item.localId)}
+          className="text-text-dim/30 hover:text-accent-fire transition-colors p-1"
+          aria-label="Remove"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -500,9 +513,7 @@ export default function TodaysPlanClient() {
   // ── Drafts ───────────────────────────────────────────────────────────────────
   const [drafts, setDrafts] = useState<Draft[]>([])
   const activeDraftIdRef = useRef<string | null>(null)
-  const [showDraftNameInput, setShowDraftNameInput] = useState(false)
   const [draftNameValue, setDraftNameValue] = useState('')
-  const [draftSavedFeedback, setDraftSavedFeedback] = useState(false)
 
   // ── Calendar ─────────────────────────────────────────────────────────────────
   const [datesWithPlans, setDatesWithPlans] = useState<Set<string>>(new Set())
@@ -669,33 +680,41 @@ export default function TodaysPlanClient() {
       return
     }
     setDrafts(prev => {
-      const existing = prev.find(d => d.id === id)
       const without = prev.filter(d => d.id !== id)
+      const name = draftNameValue.trim() || undefined
       const updated = [
-        { id, name: existing?.name, items, createdAt: new Date().toISOString() },
+        { id, name, items, createdAt: new Date().toISOString() },
         ...without,
       ].slice(0, MAX_DRAFTS)
       saveDraftsToStorage(updated)
       return updated
     })
-  }, [items, mounted, editingPlanId])
+  }, [items, mounted, editingPlanId, draftNameValue])
 
   // ── Handlers ──────────────────────────────────────────────────────────────────
 
   function handleSelect(component: ComponentRow) {
+    // Auto-assign draft ID on first item so auto-save kicks in immediately
+    if (!activeDraftIdRef.current && !editingPlanId) {
+      activeDraftIdRef.current = randomId()
+    }
     setItems(prev => [
       ...prev,
-      { localId: crypto.randomUUID(), component, durationMinutes: component.duration_minutes ?? null, coachNote: null },
+      { localId: randomId(), component, durationMinutes: component.duration_minutes ?? null, coachNote: null },
     ])
   }
 
   function handleAdHocSelect(title: string, description?: string, durationMinutes?: number) {
+    // Auto-assign draft ID on first item so auto-save kicks in immediately
+    if (!activeDraftIdRef.current && !editingPlanId) {
+      activeDraftIdRef.current = randomId()
+    }
     setItems(prev => [
       ...prev,
       {
-        localId: crypto.randomUUID(),
+        localId: randomId(),
         component: {
-          id: crypto.randomUUID(),
+          id: randomId(),
           type: 'station' as ComponentType,
           title,
           curriculum: null,
@@ -762,31 +781,7 @@ export default function TodaysPlanClient() {
     }
   }
 
-  // ── Draft handlers ────────────────────────────────────────────────────────────
-
-  function handleSaveDraftTap() {
-    if (items.length === 0) return
-    if (!showDraftNameInput) { setShowDraftNameInput(true); return }
-    confirmSaveDraft()
-  }
-
-  function confirmSaveDraft() {
-    if (items.length === 0) return
-    const id = activeDraftIdRef.current ?? crypto.randomUUID()
-    activeDraftIdRef.current = id
-    const name = draftNameValue.trim() || undefined
-    setDrafts(prev => {
-      const without = prev.filter(d => d.id !== id)
-      const updated = [{ id, name, items, createdAt: new Date().toISOString() }, ...without].slice(0, MAX_DRAFTS)
-      saveDraftsToStorage(updated)
-      return updated
-    })
-    setDraftNameValue('')
-    setShowDraftNameInput(false)
-    setDraftSavedFeedback(true)
-    setTimeout(() => setDraftSavedFeedback(false), 1500)
-    try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
-  }
+  // ── Calendar save ─────────────────────────────────────────────────────────────
 
   async function handleAddToCalendar(date: string, title: string) {
     if (items.length === 0) return
@@ -830,7 +825,7 @@ export default function TodaysPlanClient() {
     setSaveStatus('idle')
     setCalendarAddedTo(null)
     setLastAddedPlanId(null)
-    setShowDraftNameInput(false)
+
     try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
     setPlanViewMode('view')
     setViewMode('editing')
@@ -844,7 +839,7 @@ export default function TodaysPlanClient() {
     setEditingPlanLabel(null)
     setLastAddedPlanId(null)
     setSaveStatus('idle')
-    setShowDraftNameInput(false)
+
     setPlanViewMode('edit')
     setViewMode('editing')
   }
@@ -862,7 +857,7 @@ export default function TodaysPlanClient() {
       setEditingPlanLabel(null)
       setSaveStatus('idle')
       activeDraftIdRef.current = null
-      setShowDraftNameInput(false)
+  
     }
   }
 
@@ -882,7 +877,7 @@ export default function TodaysPlanClient() {
     setLastAddedPlanId(null)
     setSaveStatus('idle')
     setCalendarAddedTo(null)
-    setShowDraftNameInput(false)
+
     setDraftNameValue('')
     activeDraftIdRef.current = null
     try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
@@ -1261,32 +1256,27 @@ export default function TodaysPlanClient() {
       {/* ════════════════════════════════════════════ */}
       {!loading && viewMode === 'editing' && (
         <>
-          {/* ── Add Component button (edit mode only) ── */}
-          {planViewMode === 'edit' && (
-            <div className="px-4 py-3">
-              <button
-                type="button"
-                onClick={() => setShowPicker(true)}
-                className="w-full inline-flex items-center justify-center gap-2 bg-accent-fire text-white font-heading text-base px-4 py-3.5 rounded-xl active:scale-95 transition-all shadow-glow-fire min-h-[52px]"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                </svg>
-                Add Component
-              </button>
-            </div>
-          )}
+          {/* Add Component button moved below items list */}
 
           {/* ── Empty state for new plan (edit mode only) ── */}
           {items.length === 0 && planViewMode === 'edit' && (
-            <div className="text-center py-10 px-6">
-              <p className="font-heading text-text-muted text-lg">Build today's class</p>
-              <p className="text-text-dim text-sm mt-2 leading-relaxed">
-                Pick stations and games from your library, or create a custom activity. Drag to reorder, tap any row to add a coach note.
+            <div className="text-center py-16 px-4">
+              <p className="font-heading text-text-primary text-lg leading-snug">
+                Start building
               </p>
-              <Link href="/library" className="text-text-dim text-xs mt-3 inline-block underline underline-offset-2 hover:text-text-muted transition-colors">
-                Build your component library first
-              </Link>
+              <p className="text-sm text-text-muted mt-2 leading-relaxed max-w-xs mx-auto">
+                Pick stations and games from your library, or create a custom activity.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowPicker(true)}
+                className="mt-5 inline-flex items-center gap-1.5 bg-bg-card border border-bg-border text-text-primary font-heading text-sm px-4 py-2.5 rounded-xl active:scale-95 transition-all min-h-[44px]"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                Add component
+              </button>
             </div>
           )}
 
@@ -1382,33 +1372,39 @@ export default function TodaysPlanClient() {
             ) : (
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                 <SortableContext items={items.map(i => i.localId)} strategy={verticalListSortingStrategy}>
-                  <ul className="mx-4 bg-bg-card rounded-2xl overflow-hidden border border-bg-border">
-                    {items.map((item, idx) => (
+                  <div className="mx-4 flex flex-col gap-2">
+                    {items.map((item) => (
                       <SortablePlanItem
                         key={item.localId}
                         item={item}
-                        index={idx}
                         onRemove={handleRemove}
                         onPhotoTap={photos => setLightbox({ photos })}
                         onRowTap={i => setActiveSheet(i)}
                       />
                     ))}
-                  </ul>
+                  </div>
                 </SortableContext>
               </DndContext>
             )
           )}
 
-          {/* ── Type summary ── */}
-          {items.length > 0 && typeSummary && (
-            <p className="text-center text-[11px] text-text-dim/50 px-4 pt-2">
-              {typeSummary}
-            </p>
+          {/* ── Add component (dashed, below items — edit mode) ── */}
+          {items.length > 0 && planViewMode === 'edit' && (
+            <button
+              type="button"
+              onClick={() => setShowPicker(true)}
+              className="mx-4 mt-3 w-[calc(100%-2rem)] flex items-center justify-center gap-1.5 bg-transparent border border-dashed border-bg-border text-text-dim hover:text-text-primary hover:border-text-muted font-heading text-sm px-4 py-3 rounded-xl transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              Add component
+            </button>
           )}
 
-          {/* ── Bottom action row (edit mode only) ── */}
+          {/* ── Bottom action area (edit mode only) ── */}
           {items.length > 0 && planViewMode === 'edit' && (
-            <div className="px-4 pt-3 pb-2">
+            <div className="px-4 pt-5 pb-2">
               {editingPlanId ? (
                 /* Saved plan: Options + Done Editing */
                 <div className="flex gap-2">
@@ -1428,25 +1424,18 @@ export default function TodaysPlanClient() {
                   </button>
                 </div>
               ) : (
-                /* New draft: Save Draft + Add to Calendar */
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={showDraftNameInput ? confirmSaveDraft : handleSaveDraftTap}
-                    className="flex-1 py-3.5 rounded-xl border border-bg-border font-heading text-sm text-text-muted hover:border-accent-fire/30 active:scale-[0.98] transition-all min-h-[52px]"
-                  >
-                    {draftSavedFeedback ? '✓ Draft Saved' : showDraftNameInput ? 'Confirm Save' : 'Save Draft'}
-                  </button>
+                /* New draft: single primary CTA */
+                <div>
                   <button
                     type="button"
                     onClick={() => setShowDatePicker(true)}
-                    className="flex-1 py-3.5 rounded-xl bg-accent-fire text-white font-heading text-sm shadow-glow-fire active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 min-h-[52px]"
+                    className="w-full font-heading text-base px-4 py-3.5 rounded-xl bg-accent-fire text-white active:scale-[0.98] transition-all min-h-[52px]"
                   >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    Add to Calendar
+                    Save to calendar
                   </button>
+                  <p className="text-center text-[10px] font-heading uppercase tracking-[0.18em] text-text-dim/60 mt-1.5">
+                    Drafts auto-save as you build
+                  </p>
                 </div>
               )}
             </div>
@@ -1459,7 +1448,7 @@ export default function TodaysPlanClient() {
             </p>
           )}
 
-          {/* ── Editing indicator (edit mode only) ── */}
+          {/* ── Editing indicator (edit mode only, saved plans) ── */}
           {editingPlanId && planViewMode === 'edit' && (
             <p className="text-center text-[11px] text-text-dim/50 px-4 pb-1">
               Editing saved plan · changes auto-save
