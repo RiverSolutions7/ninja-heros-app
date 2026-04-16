@@ -490,7 +490,7 @@ export default function TodaysPlanClient() {
 
   // ── Effects ───────────────────────────────────────────────────────────────────
 
-  // Mount: session recovery → class length → calendar data
+  // Mount: session recovery → legacy cleanup → calendar data
   useEffect(() => {
     setMounted(true)
 
@@ -504,6 +504,13 @@ export default function TodaysPlanClient() {
           setViewMode('editing')
         }
       }
+    } catch { /* ignore */ }
+
+    // Legacy cleanup — remove stale localStorage keys from features we've
+    // retired so devices that once had them don't carry the junk forever.
+    // Safe to call unconditionally (removeItem is a no-op if the key is absent).
+    try {
+      localStorage.removeItem('ninja-class-length') // time-budget feature (removed 2026-04)
     } catch { /* ignore */ }
 
     // Calendar dots
