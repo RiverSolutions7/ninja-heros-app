@@ -67,7 +67,7 @@ export default function ComponentListClient({ components }: ComponentListClientP
           </p>
         </div>
       ) : (
-        <div>
+        <div className="flex flex-col gap-2">
           {filtered.map((c) => (
             <ComponentCard
               key={c.id}
