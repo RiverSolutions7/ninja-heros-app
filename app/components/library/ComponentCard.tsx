@@ -61,13 +61,17 @@ interface ComponentCardProps {
   component: ComponentRow
   showMenu?: boolean
   onClick?: () => void
+  /** Optional node rendered in the right-side slot of the card. Takes precedence
+   * over showMenu when provided. Used by pickers to show inline status badges
+   * (e.g., "In plan") inside the flex row so the title truncates around it. */
+  trailing?: React.ReactNode
 }
 
 // 72px thumbnail — inline styles so dimensions don't depend on Tailwind JIT
 // picking up arbitrary values. Keeps photo and icon variants identical in size.
 const THUMB = 72
 
-export default function ComponentCard({ component, showMenu = false, onClick }: ComponentCardProps) {
+export default function ComponentCard({ component, showMenu = false, onClick, trailing }: ComponentCardProps) {
   const meta = TYPE_META[component.type]
   const photos = component.photos ?? []
   const firstPhoto = photos[0] ?? null
@@ -151,11 +155,13 @@ export default function ComponentCard({ component, showMenu = false, onClick }: 
         </p>
       </div>
 
-      {showMenu && (
+      {trailing ? (
+        <div className="flex-shrink-0">{trailing}</div>
+      ) : showMenu ? (
         <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
           <ComponentCardMenu component={component} />
         </div>
-      )}
+      ) : null}
     </div>
   )
 }
