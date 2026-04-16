@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { supabase } from '@/app/lib/supabase'
 import { uploadStationPhoto } from '@/app/lib/uploadPhoto'
 import { uploadComponentVideo } from '@/app/lib/uploadVideo'
+import { randomId } from '@/app/lib/uuid'
 import type { ComponentRow, ComponentType, CurriculumRow } from '@/app/lib/database.types'
 import SkillChip from '@/app/components/skills/SkillChip'
 import VideoCapture from '@/app/components/ui/VideoCapture'
@@ -206,7 +207,7 @@ export default function EditComponentPage() {
   function handleFileAdded(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    setNewPhotos((prev) => [...prev, { localId: crypto.randomUUID(), file, preview: URL.createObjectURL(file) }])
+    setNewPhotos((prev) => [...prev, { localId: randomId(), file, preview: URL.createObjectURL(file) }])
     e.target.value = ''
   }
 
