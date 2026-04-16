@@ -1,201 +1,547 @@
+// ============================================================
+// Component Detail Sheet — unified editorial detail view
+// ------------------------------------------------------------
+// Used from:
+//   • Library list (no onAdd prop → uses default library behavior:
+//     writes the component into the current plan session draft
+//     in sessionStorage, then auto-closes with a brief "Added" beat)
+//   • ComponentPickerModal (passes onAdd + isInPlan explicitly)
+//
+// Design principles (see /preview/component/* mock for reference):
+//   • One voice per screen — hero image + title own the frame.
+//   • Typography IS the UI — no chip-and-box-per-field chrome.
+//   • One hot color — fire red, used sparingly (meta line + CTA).
+//   • Editorial spacing — negative space is content.
+//   • Identity stats ("Taught N times", "Last used X") drive the
+//     reward loop; coach sees their own history every open.
+// ============================================================
+
 'use client'
 
-import { useState, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { ComponentRow } from '@/app/lib/database.types'
-import { TYPE_META } from './ComponentCard'
+import { useRouter } from 'next/navigation'
+import type { ComponentRow, PlanItem } from '@/app/lib/database.types'
+import { fetchComponentUsage, type ComponentUsage } from '@/app/lib/queries'
+import { randomId } from '@/app/lib/uuid'
+
+// Session storage key — must match TodaysPlanClient's SESSION_KEY
+const PLAN_SESSION_KEY = 'ninja-plan-session'
 
 interface ComponentDetailSheetProps {
   component: ComponentRow
   onClose: () => void
+  /** If provided, called instead of the default library-add behavior. */
+  onAdd?: () => void
+  /** Overrides in-plan detection when provided (picker passes this explicitly). */
+  isInPlan?: boolean
+  /**
+   * Presentation mode.
+   *   'default'   — browsing / planning context (Add-to-plan CTA).
+   *   'afterSave' — just-logged celebratory context. Footer swaps to
+   *                 Back-to-Library + Log-another. When paired with
+   *                 libraryRank, a celebration header is shown above
+   *                 the hero.
+   */
+  mode?: 'default' | 'afterSave'
+  /** Called when the coach taps "Log another" in afterSave mode. */
+  onLogAnother?: () => void
+  /**
+   * Total components in the coach's library (incl. the one just logged).
+   * When provided in afterSave mode, rendered as the big fire-red number
+   * in the celebration header above the hero — the visual signal that
+   * the library is growing.
+   */
+  libraryRank?: number
 }
 
-export default function ComponentDetailSheet({ component, onClose }: ComponentDetailSheetProps) {
-  const meta = TYPE_META[component.type]
-  const photos = component.photos ?? []
+// ── Formatters ───────────────────────────────────────────────────────────────
+function formatDaysSince(d: number | null): string {
+  if (d === null) return 'Never'
+  if (d === 0) return 'Today'
+  if (d === 1) return 'Yesterday'
+  if (d < 7) return `${d} days ago`
+  if (d < 14) return '1 week ago'
+  if (d < 30) return `${Math.floor(d / 7)} weeks ago`
+  if (d < 60) return '1 month ago'
+  return `${Math.floor(d / 30)} months ago`
+}
+
+function formatTimesUsed(n: number): string {
+  if (n === 0) return 'First time'
+  if (n === 1) return '1 time'
+  return `${n} times`
+}
+
+// ── Default library-add behavior ─────────────────────────────────────────────
+// Used when the sheet is opened from the library list (no onAdd prop).
+// Writes directly into the same sessionStorage key the Today's Plan editor
+// reads from, so the component shows up the next time the coach opens /plan.
+function addToPlanSession(component: ComponentRow): void {
+  try {
+    const raw = sessionStorage.getItem(PLAN_SESSION_KEY)
+    const items: PlanItem[] = raw ? JSON.parse(raw) : []
+    const alreadyIn = items.some((i) => i.component?.id === component.id)
+    if (alreadyIn) return
+    const newItem: PlanItem = {
+      localId: randomId(),
+      component,
+      isAdHoc: false,
+      durationMinutes: component.duration_minutes,
+      coachNote: null,
+    }
+    sessionStorage.setItem(PLAN_SESSION_KEY, JSON.stringify([...items, newItem]))
+  } catch {
+    /* ignore — quota or parse error */
+  }
+}
+
+function detectInPlan(componentId: string): boolean {
+  try {
+    const raw = sessionStorage.getItem(PLAN_SESSION_KEY)
+    if (!raw) return false
+    const items: PlanItem[] = JSON.parse(raw)
+    return items.some((i) => i.component?.id === componentId)
+  } catch {
+    return false
+  }
+}
+
+// ── Component ────────────────────────────────────────────────────────────────
+export default function ComponentDetailSheet({
+  component,
+  onClose,
+  onAdd,
+  isInPlan: isInPlanProp,
+  mode = 'default',
+  onLogAnother,
+  libraryRank,
+}: ComponentDetailSheetProps) {
+  const router = useRouter()
+  const photos = (component.photos ?? []).filter(Boolean)
+  const skills = component.skills ?? []
+
+  // Photo swipe state
   const [photoIndex, setPhotoIndex] = useState(0)
   const touchStartX = useRef(0)
 
-  function prevPhoto() {
-    setPhotoIndex((i) => (i - 1 + photos.length) % photos.length)
+  // Usage stats — fetched on mount, used for the reward-loop identity row
+  const [usage, setUsage] = useState<ComponentUsage | null>(null)
+
+  // Library-context in-plan detection (only used when prop is not provided)
+  const [libraryInPlan, setLibraryInPlan] = useState(false)
+
+  // CTA state — 'idle' | 'adding' | 'added'
+  const [addState, setAddState] = useState<'idle' | 'adding' | 'added'>('idle')
+
+  const isInPlan = isInPlanProp ?? libraryInPlan
+
+  useEffect(() => {
+    let cancelled = false
+    fetchComponentUsage(component.id)
+      .then((u) => { if (!cancelled) setUsage(u) })
+      .catch(() => { if (!cancelled) setUsage({ timesUsed: 0, lastUsed: null, daysSince: null }) })
+    return () => { cancelled = true }
+  }, [component.id])
+
+  useEffect(() => {
+    if (isInPlanProp === undefined) {
+      setLibraryInPlan(detectInPlan(component.id))
+    }
+  }, [component.id, isInPlanProp])
+
+  function handleSwipe(e: React.TouchEvent) {
+    if (photos.length < 2) return
+    const diff = touchStartX.current - e.changedTouches[0].clientX
+    if (diff > 50) setPhotoIndex((i) => (i + 1) % photos.length)
+    else if (diff < -50) setPhotoIndex((i) => (i - 1 + photos.length) % photos.length)
   }
-  function nextPhoto() {
-    setPhotoIndex((i) => (i + 1) % photos.length)
+
+  function handleEdit() {
+    router.push(`/library/log-component/${component.id}`)
+    onClose()
   }
+
+  function handleAdd() {
+    if (isInPlan || addState !== 'idle') return
+    setAddState('adding')
+    if (onAdd) {
+      // Picker flow — caller closes the sheet itself.
+      onAdd()
+      setAddState('added')
+    } else {
+      // Library flow — write to the plan session and leave the sheet open
+      // with a persistent green confirmation. Auto-closing made the success
+      // moment invisible on mobile ("nothing happened" feeling) and dropped
+      // the coach back on /library with no signal their plan had items.
+      addToPlanSession(component)
+      setAddState('added')
+      setLibraryInPlan(true)
+    }
+  }
+
+  function handleViewPlan() {
+    onClose()
+    router.push('/plan')
+  }
+
+  const metaLine = [
+    component.type === 'station' ? 'Station' : 'Game',
+    component.curriculum,
+  ]
+    .filter(Boolean)
+    .join('  ·  ')
+    .toUpperCase()
+
+  const durationValue = component.duration_minutes
+    ? `${component.duration_minutes}`
+    : '—'
+  const durationLabel = component.duration_minutes ? 'Minutes' : 'Duration'
+
+  const showCelebration = mode === 'afterSave' && typeof libraryRank === 'number'
 
   const sheet = (
     <div
-      style={{ position: 'fixed', inset: 0, zIndex: 9999 }}
-      className="bg-bg-primary flex flex-col"
+      style={{ position: 'fixed', inset: 0, zIndex: 10000 }}
+      className="bg-bg-primary overflow-y-auto"
     >
-      {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-4 border-b border-bg-border flex-shrink-0">
+      {/* ── Celebration header (afterSave only) ──────────────────────────── */}
+      {/* Editorial Strava-style stat block. Big fire-red number, thin uppercase
+          labels above/below. Signals "your library is growing" without confetti
+          or toast chrome — typography carries the pride. */}
+      {showCelebration && (
+        <div className="px-6 pt-10 pb-7 text-center">
+          <p
+            className="font-heading text-accent-fire leading-none"
+            style={{ fontSize: 'clamp(56px, 14vw, 88px)' }}
+          >
+            {libraryRank}
+          </p>
+          <p className="text-text-muted text-[11px] font-heading tracking-[0.2em] uppercase mt-3">
+            {libraryRank === 1 ? 'Component in your Library' : 'Components in your Library'}
+          </p>
+        </div>
+      )}
+
+      {/* ── Hero ─────────────────────────────────────────────────────────── */}
+      <div
+        className="relative w-full overflow-hidden"
+        style={{ aspectRatio: '4 / 5', maxHeight: '78vh' }}
+        onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX }}
+        onTouchEnd={handleSwipe}
+      >
+        {photos.length > 0 ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={photos[photoIndex]}
+            alt={`${component.title} photo ${photoIndex + 1}`}
+            className="absolute inset-0 w-full h-full object-cover"
+            draggable={false}
+          />
+        ) : (
+          // No-photo fallback — composed gradient, never a flat empty box
+          <div className="absolute inset-0 bg-gradient-to-br from-[#1a1540] via-[#0a0f24] to-[#2a1020]">
+            <div
+              className="absolute inset-0"
+              style={{
+                background:
+                  'radial-gradient(circle at 72% 18%, rgba(232,64,64,0.38), transparent 58%)',
+              }}
+            />
+            <div
+              className="absolute inset-0 opacity-[0.04]"
+              style={{
+                backgroundImage:
+                  'repeating-linear-gradient(45deg, #fff 0, #fff 1px, transparent 1px, transparent 14px)',
+              }}
+            />
+          </div>
+        )}
+
+        {/* Legibility gradient: dark at bottom for title, clear at top */}
+        <div className="absolute inset-x-0 bottom-0 h-3/5 bg-gradient-to-t from-bg-primary via-bg-primary/80 to-transparent pointer-events-none" />
+
+        {/* Back button — floating, glass */}
         <button
           type="button"
           onClick={onClose}
-          className="text-text-dim hover:text-text-primary transition-colors p-1.5 rounded-lg hover:bg-white/5 -ml-1.5"
+          aria-label="Back"
+          className="absolute top-4 left-4 w-10 h-10 rounded-full bg-black/40 flex items-center justify-center text-white/95 hover:bg-black/60 active:scale-95 transition-all"
+          style={{
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
+            minHeight: '40px',
+          }}
         >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2.2}
+          >
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-        <div className="flex-1 min-w-0">
-          <h2 className={`font-heading text-lg leading-none ${meta.textColor}`}>
+
+        {/* Edit pencil — discreet, mirror of back button */}
+        <button
+          type="button"
+          onClick={handleEdit}
+          aria-label="Edit component"
+          className="absolute top-4 right-4 w-10 h-10 rounded-full bg-black/40 flex items-center justify-center text-white/95 hover:bg-black/60 active:scale-95 transition-all"
+          style={{
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
+            minHeight: '40px',
+          }}
+        >
+          <svg
+            className="w-[18px] h-[18px]"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+            />
+          </svg>
+        </button>
+
+        {/* Dot indicators — only if multiple photos */}
+        {photos.length > 1 && (
+          <div
+            className="absolute left-0 right-0 flex justify-center gap-1.5 pointer-events-none"
+            style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 88px)' }}
+          >
+            {photos.map((_, i) => (
+              <span
+                key={i}
+                className={`h-[5px] rounded-full transition-all duration-200 ${
+                  i === photoIndex ? 'w-5 bg-white' : 'w-[5px] bg-white/40'
+                }`}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Title block — overlaid bottom-left */}
+        <div className="absolute inset-x-0 bottom-0 px-6 pb-7">
+          <p className="text-accent-fire text-[10px] font-heading tracking-[0.22em] mb-3">
+            {metaLine}
+          </p>
+          <h1
+            className="font-heading text-white leading-[1.02]"
+            style={{ fontSize: 'clamp(30px, 8.5vw, 44px)' }}
+          >
             {component.title}
-          </h2>
-          {component.curriculum && (
-            <p className="text-text-dim text-xs mt-0.5">{component.curriculum}</p>
-          )}
+          </h1>
         </div>
-        <span className={['text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0', meta.badge].join(' ')}>
-          {meta.label}
-        </span>
       </div>
 
-      {/* Scrollable body */}
-      <div className="flex-1 overflow-y-auto">
-        {/* Photos — full width, swipeable */}
-        {photos.length > 0 && (
-          <div
-            className="relative w-full bg-black"
-            style={{ aspectRatio: '4/3' }}
-            onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX }}
-            onTouchEnd={(e) => {
-              const diff = touchStartX.current - e.changedTouches[0].clientX
-              if (diff > 50) nextPhoto()
-              else if (diff < -50) prevPhoto()
-            }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={photos[photoIndex]}
-              alt={`${component.title} photo ${photoIndex + 1}`}
-              className="w-full h-full object-cover"
-            />
-            {/* Prev / Next buttons */}
-            {photos.length > 1 && (
-              <>
-                <button
-                  type="button"
-                  onClick={prevPhoto}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-2 transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  onClick={nextPhoto}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-2 transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
-                {/* Dot indicators */}
-                <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5 pointer-events-none">
-                  {photos.map((_, i) => (
-                    <span
-                      key={i}
-                      className={`w-1.5 h-1.5 rounded-full transition-colors ${
-                        i === photoIndex ? 'bg-white' : 'bg-white/30'
-                      }`}
-                    />
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
+      {/* ── Body ─────────────────────────────────────────────────────────── */}
+      <div className="px-6 pt-2 pb-32">
+        {/* Stat row — 3-up, no per-stat borders, one thin divider below */}
+        <div className="grid grid-cols-3 gap-3 pb-7 border-b border-white/[0.06]">
+          <Stat value={durationValue} label={durationLabel} />
+          <Stat
+            value={usage ? formatTimesUsed(usage.timesUsed) : '—'}
+            label="Taught"
+          />
+          <Stat
+            value={usage ? formatDaysSince(usage.daysSince) : '—'}
+            label="Last used"
+          />
+        </div>
+
+        {/* Skills — single prose line, dot-separated */}
+        {skills.length > 0 && (
+          <Section label="Skills">
+            <p className="text-text-primary text-[15px] leading-relaxed">
+              {skills.map((s, i) => (
+                <span key={s}>
+                  {i > 0 && <span className="text-text-dim/50 mx-2 select-none">·</span>}
+                  <span>{s}</span>
+                </span>
+              ))}
+            </p>
+          </Section>
+        )}
+
+        {/* Description — editorial prose */}
+        {component.description && (
+          <Section label="How it runs">
+            <p className="text-text-primary text-[16px] leading-[1.7] whitespace-pre-wrap">
+              {component.description}
+            </p>
+          </Section>
+        )}
+
+        {/* Equipment — prose */}
+        {component.equipment && (
+          <Section label="Setup">
+            <p className="text-text-primary text-[15px] leading-relaxed">
+              {component.equipment}
+            </p>
+          </Section>
         )}
 
         {/* Uploaded video */}
         {component.video_url && (
-          <div className="px-4 pt-4">
-            <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-2">Video</p>
-            <div className="rounded-xl overflow-hidden border border-bg-border bg-black">
-              <video
-                controls
-                playsInline
-                src={component.video_url}
-                className="w-full"
-                style={{ maxHeight: 260 }}
-              />
-            </div>
-          </div>
+          <Section label="Video">
+            <video
+              src={component.video_url}
+              controls
+              playsInline
+              className="w-full rounded-2xl bg-black"
+              style={{ maxHeight: '320px' }}
+            />
+          </Section>
         )}
 
-        {/* External video link */}
+        {/* External video link — unobtrusive, not a chip */}
         {component.video_link && (
-          <div className="px-4 pt-4">
-            <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-2">Reference Video</p>
+          <Section label="Reference">
             <a
               href={component.video_link}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2.5 px-4 py-3 bg-bg-card border border-bg-border rounded-xl text-text-primary hover:border-accent-fire/40 hover:bg-accent-fire/5 transition-colors"
+              className="inline-flex items-center gap-2 text-accent-fire text-[15px] hover:underline underline-offset-4"
             >
-              <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-accent-fire/15 flex items-center justify-center">
-                <svg className="w-4 h-4 text-accent-fire" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8 5.14v14l11-7-11-7z" />
-                </svg>
-              </span>
-              <span className="text-sm font-semibold truncate">{component.video_link}</span>
-              <svg className="w-4 h-4 text-text-dim flex-shrink-0 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                />
               </svg>
+              Watch reference
             </a>
-          </div>
+          </Section>
         )}
+      </div>
 
-        {/* Detail fields */}
-        <div className="px-4 py-5 space-y-5">
-          {/* Skills */}
-          {(component.skills?.length ?? 0) > 0 && (
-            <div>
-              <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-2">
-                Skills
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {component.skills!.map((skill) => (
-                  <span key={skill} className="badge badge-skill">
-                    {skill}
-                  </span>
-                ))}
-              </div>
+      {/* ── Sticky CTA footer ────────────────────────────────────────────── */}
+      {/* Solid tap target (bg-bg-primary) so touches can't slip past on mobile
+          Safari, plus a gradient fade above it (absolute, pointer-events-none)
+          so the body content dissolves into the footer seamlessly — no hard
+          slicer line. */}
+      <div
+        className="fixed inset-x-0 bottom-0 px-6 pt-5 bg-bg-primary"
+        style={{ paddingBottom: 'max(20px, env(safe-area-inset-bottom, 20px))' }}
+      >
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute left-0 right-0 bottom-full h-10 bg-gradient-to-t from-bg-primary to-transparent"
+        />
+        <div className="max-w-2xl mx-auto">
+          {mode === 'afterSave' ? (
+            // Just-logged celebratory context — primary is Back to Library
+            // (the coach's most common next move), with a quiet link to keep
+            // logging if they're in flow.
+            <div className="flex flex-col items-center gap-3.5">
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-full font-heading text-[15px] tracking-wide py-4 rounded-2xl bg-accent-fire text-white active:scale-[0.98] transition-all"
+                style={{ minHeight: '52px' }}
+              >
+                Back to Library
+              </button>
+              {onLogAnother && (
+                <button
+                  type="button"
+                  onClick={onLogAnother}
+                  className="text-[13px] font-heading text-text-muted tracking-wide hover:text-text-primary active:opacity-70"
+                  style={{ minHeight: '32px' }}
+                >
+                  + Log another component
+                </button>
+              )}
             </div>
-          )}
-
-          {/* Equipment */}
-          {component.equipment && (
-            <div>
-              <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-1">
-                Equipment
-              </p>
-              <p className="text-sm font-bold text-accent-blue">{component.equipment}</p>
+          ) : addState === 'added' ? (
+            // Just added in this session — persistent green confirmation.
+            // "View plan →" only shown in library context (picker is already on /plan).
+            <div className="w-full flex items-center gap-3 py-3.5 px-5 rounded-2xl bg-accent-green/10 border border-accent-green/30">
+              <svg
+                className="w-5 h-5 text-accent-green flex-shrink-0"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2.5}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              <span className="flex-1 font-heading text-[14px] text-accent-green tracking-wide">
+                Added to today&apos;s plan
+              </span>
+              {!onAdd && (
+                <button
+                  type="button"
+                  onClick={handleViewPlan}
+                  className="text-[13px] font-heading text-accent-green tracking-wide hover:underline underline-offset-4 active:opacity-70"
+                  style={{ minHeight: '32px' }}
+                >
+                  View plan →
+                </button>
+              )}
             </div>
-          )}
-
-          {/* Description / Coaching Cue */}
-          {component.description && (
-            <div>
-              <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-1">
-                Coaching Cue
-              </p>
-              <p className="text-sm text-text-primary leading-relaxed whitespace-pre-wrap">
-                {component.description}
-              </p>
+          ) : isInPlan ? (
+            // Component was already in the plan when this sheet opened.
+            <div className="w-full flex items-center gap-3 py-3.5 px-5 rounded-2xl bg-white/[0.04] border border-white/[0.08]">
+              <svg
+                className="w-5 h-5 text-accent-green/80 flex-shrink-0"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2.5}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              <span className="flex-1 font-heading text-[14px] text-text-muted tracking-wide">
+                Already in today&apos;s plan
+              </span>
+              {!onAdd && (
+                <button
+                  type="button"
+                  onClick={handleViewPlan}
+                  className="text-[13px] font-heading text-text-muted tracking-wide hover:text-text-primary hover:underline underline-offset-4 active:opacity-70"
+                  style={{ minHeight: '32px' }}
+                >
+                  View plan →
+                </button>
+              )}
             </div>
-          )}
-
-          {/* Duration */}
-          {component.duration_minutes != null && (
-            <div>
-              <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-1">
-                Duration
-              </p>
-              <p className="text-sm text-text-primary">{component.duration_minutes} minutes</p>
-            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handleAdd}
+              disabled={addState !== 'idle'}
+              className={[
+                'w-full font-heading text-[15px] tracking-wide py-4 rounded-2xl transition-all',
+                'bg-accent-fire text-white shadow-glow-fire',
+                addState === 'idle' ? 'active:scale-[0.98]' : 'opacity-80',
+              ].join(' ')}
+              style={{ minHeight: '52px' }}
+            >
+              {addState === 'adding' ? (
+                <span className="inline-flex items-center gap-2">
+                  <span className="w-4 h-4 border-2 border-white/70 border-t-transparent rounded-full animate-spin" />
+                  Adding…
+                </span>
+              ) : (
+                <>Add to Today&apos;s Plan</>
+              )}
+            </button>
           )}
         </div>
       </div>
@@ -203,4 +549,33 @@ export default function ComponentDetailSheet({ component, onClose }: ComponentDe
   )
 
   return typeof window !== 'undefined' ? createPortal(sheet, document.body) : null
+}
+
+// ── Stat primitive — no borders, no box; type does the work ──────────────────
+function Stat({ value, label }: { value: string; label: string }) {
+  return (
+    <div>
+      <p
+        className="font-heading text-text-primary leading-none"
+        style={{ fontSize: 'clamp(18px, 5vw, 22px)' }}
+      >
+        {value}
+      </p>
+      <p className="text-text-dim text-[10px] font-heading tracking-[0.2em] uppercase mt-2">
+        {label}
+      </p>
+    </div>
+  )
+}
+
+// ── Section primitive — muted label, no header chrome, generous rhythm ───────
+function Section({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="pt-7">
+      <p className="text-text-dim text-[10px] font-heading tracking-[0.22em] uppercase mb-3">
+        {label}
+      </p>
+      {children}
+    </div>
+  )
 }

@@ -6,10 +6,13 @@ import Link from 'next/link'
 import { supabase } from '@/app/lib/supabase'
 import { uploadStationPhoto } from '@/app/lib/uploadPhoto'
 import { uploadComponentVideo } from '@/app/lib/uploadVideo'
-import type { ComponentType, CurriculumRow } from '@/app/lib/database.types'
+import { countComponents } from '@/app/lib/queries'
+import { randomId } from '@/app/lib/uuid'
+import type { ComponentRow, ComponentType, CurriculumRow } from '@/app/lib/database.types'
 import SkillChip from '@/app/components/skills/SkillChip'
 import Toast from '@/app/components/ui/Toast'
 import VideoCapture from '@/app/components/ui/VideoCapture'
+import ComponentDetailSheet from '@/app/components/library/ComponentDetailSheet'
 import { useVoiceNote } from '@/app/hooks/useVoiceNote'
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -130,6 +133,13 @@ export default function LogComponentPage() {
   const [submitting, setSubmitting] = useState(false)
   const [titleError, setTitleError] = useState<string | null>(null)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+
+  // After-save reward screen — the "I made something" moment.
+  // When set, the ComponentDetailSheet renders in 'afterSave' mode over
+  // (in place of) the form, with the coach's freshly-logged component and
+  // the new library count.
+  const [savedComponent, setSavedComponent] = useState<ComponentRow | null>(null)
+  const [libraryRank, setLibraryRank] = useState<number | null>(null)
 
   const newSkillInputRef = useRef<HTMLInputElement>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
@@ -267,7 +277,7 @@ export default function LogComponentPage() {
   function handleFileAdded(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    setPhotos((prev) => [...prev, { localId: crypto.randomUUID(), file, preview: URL.createObjectURL(file) }])
+    setPhotos((prev) => [...prev, { localId: randomId(), file, preview: URL.createObjectURL(file) }])
     e.target.value = ''
   }
 
@@ -289,31 +299,90 @@ export default function LogComponentPage() {
         try { videoUrl = await uploadComponentVideo(videoFile) } catch { /* skip */ }
       }
 
-      const { error: insertErr } = await supabase.from('components').insert({
-        type: componentType!,
-        title: title.trim(),
-        curriculum: curriculum || null,
-        description: description.trim() || null,
-        skills: skills.length > 0 ? skills : null,
-        photos: photoUrls.filter((u) => !u.startsWith('blob:')),
-        video_url: videoUrl,
-        video_link: showVideoLink ? (videoLink.trim() || null) : null,
-        duration_minutes: durationMinutes,
-      })
+      const { data: inserted, error: insertErr } = await supabase
+        .from('components')
+        .insert({
+          type: componentType!,
+          title: title.trim(),
+          curriculum: curriculum || null,
+          description: description.trim() || null,
+          skills: skills.length > 0 ? skills : null,
+          photos: photoUrls.filter((u) => !u.startsWith('blob:')),
+          video_url: videoUrl,
+          video_link: showVideoLink ? (videoLink.trim() || null) : null,
+          duration_minutes: durationMinutes,
+        })
+        .select()
+        .single()
       if (insertErr) throw insertErr
-      setToast({ message: 'Component saved ✓', type: 'success' })
-      await new Promise((r) => setTimeout(r, 1500))
-      router.push('/library?view=components')
+
+      // Fetch the new library count (post-insert) so we can celebrate.
+      // If this fails for any reason, fall back to showing the sheet
+      // without a count rather than blocking the reward screen.
+      let totalCount: number
+      try {
+        totalCount = await countComponents()
+      } catch {
+        totalCount = 0
+      }
+
+      setSavedComponent(inserted as ComponentRow)
+      setLibraryRank(totalCount)
+      // Leave submitting=true so the form beneath is disabled while the
+      // detail sheet overlay is showing. It gets reset in handleLogAnother.
     } catch {
       setToast({ message: 'Something went wrong. Please try again.', type: 'error' })
       setSubmitting(false)
     }
   }
 
+  // Reset form state for the "Log another" flow. Keep the coach's
+  // curriculum (same age group usually); drop them back on the type gate
+  // so they can pick station vs game again.
+  function handleLogAnother() {
+    setSavedComponent(null)
+    setLibraryRank(null)
+    setComponentType(null)
+    setTitle('')
+    setTitleError(null)
+    setDescription('')
+    setDurationMinutes(null)
+    setSkills([])
+    setPhotos([])
+    setShowVideo(false)
+    setVideoFile(null)
+    setVideoPreview(null)
+    setShowVideoLink(false)
+    setVideoLink('')
+    setAddingSkill(false)
+    setNewSkillName('')
+    setAddSkillError(null)
+    setSubmitting(false)
+    setToast(null)
+    resetVoice()
+    setGateStep('type')
+  }
+
   // ── Derived display values ────────────────────────────────────────────────────
 
   const curriculumLabel = curriculums.find((c) => c.age_group === curriculum)?.label ?? curriculum
   const typeConfig = componentType ? TYPE_GATE_CONFIG[componentType] : null
+
+  // ── Render: After-save reward screen ──────────────────────────────────────────
+  // The "I made something" moment. Replaces the form entirely until the coach
+  // taps Back to Library (exit) or Log another (reset + back to type gate).
+
+  if (savedComponent && libraryRank !== null) {
+    return (
+      <ComponentDetailSheet
+        component={savedComponent}
+        mode="afterSave"
+        libraryRank={libraryRank}
+        onClose={() => router.push('/library?view=components')}
+        onLogAnother={handleLogAnother}
+      />
+    )
+  }
 
   // ── Render: Loading ───────────────────────────────────────────────────────────
 

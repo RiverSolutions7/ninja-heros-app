@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/app/lib/supabase'
 import type { ComponentRow, ComponentType, CurriculumRow } from '@/app/lib/database.types'
 import { PhotoLightbox } from '@/app/components/ui/PhotoLightbox'
 import { useVoiceNote } from '@/app/hooks/useVoiceNote'
+import ComponentDetailSheet from '@/app/components/library/ComponentDetailSheet'
 
 type TabValue = ComponentType | 'custom'
 
@@ -65,10 +66,8 @@ export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose,
   const [mounted, setMounted] = useState(false)
   const [lightbox, setLightbox] = useState<{ photos: string[]; index: number } | null>(null)
   const [videoPreview, setVideoPreview] = useState<string | null>(null)
-  // Detail preview
+  // Detail preview — delegated to the unified ComponentDetailSheet
   const [preview, setPreview] = useState<ComponentRow | null>(null)
-  const [previewPhotoIndex, setPreviewPhotoIndex] = useState(0)
-  const previewTouchStartX = useRef(0)
   // Create Your Own state
   const [adHocTitle, setAdHocTitle] = useState('')
   const [adHocDescription, setAdHocDescription] = useState('')
@@ -140,8 +139,6 @@ export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose,
     if (existingIds?.has(component.id)) return
     onSelect(component)
   }
-
-  useEffect(() => { setPreviewPhotoIndex(0) }, [preview])
 
   function handlePhotoTap(e: React.MouseEvent, photos: string[]) {
     e.stopPropagation()
@@ -526,187 +523,15 @@ export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose,
         </div>
       )}
 
-      {/* ── Component detail preview overlay ────────────────── */}
-      {preview && (() => {
-        const inPlan = existingIds?.has(preview.id) ?? false
-        const photos = (preview.photos ?? []).filter(Boolean)
-        const meta = { color: TYPE_ICON_COLOR[preview.type], label: TYPE_LABEL[preview.type] }
-
-        return (
-          <div
-            style={{ position: 'absolute', inset: 0, zIndex: 100 }}
-            className="bg-bg-primary flex flex-col"
-          >
-            {/* Header */}
-            <div className="flex items-center gap-3 px-4 py-4 border-b border-bg-border flex-shrink-0">
-              <button
-                type="button"
-                onClick={() => setPreview(null)}
-                className="text-text-dim hover:text-text-primary transition-colors p-1.5 rounded-lg hover:bg-white/5 -ml-1.5"
-                aria-label="Back to list"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-              <div className="flex-1 min-w-0">
-                <h2 className={`font-heading text-base leading-tight truncate ${meta.color}`}>
-                  {preview.title}
-                </h2>
-                {preview.curriculum && (
-                  <p className="text-text-dim text-xs mt-0.5 truncate">{preview.curriculum}</p>
-                )}
-              </div>
-              <span className={`text-[10px] font-heading uppercase tracking-wider px-2 py-0.5 rounded-full flex-shrink-0 ${meta.color} bg-white/5 border border-current/20`}>
-                {meta.label}
-              </span>
-            </div>
-
-            {/* Scrollable body */}
-            <div className="flex-1 overflow-y-auto">
-              {/* Photos — swipeable */}
-              {photos.length > 0 && (
-                <div
-                  className="relative w-full bg-black flex-shrink-0"
-                  style={{ aspectRatio: '4/3' }}
-                  onTouchStart={(e) => { previewTouchStartX.current = e.touches[0].clientX }}
-                  onTouchEnd={(e) => {
-                    const diff = previewTouchStartX.current - e.changedTouches[0].clientX
-                    if (diff > 50) setPreviewPhotoIndex((i) => (i + 1) % photos.length)
-                    else if (diff < -50) setPreviewPhotoIndex((i) => (i - 1 + photos.length) % photos.length)
-                  }}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={photos[previewPhotoIndex]}
-                    alt={`${preview.title} photo ${previewPhotoIndex + 1}`}
-                    className="w-full h-full object-cover"
-                  />
-                  {photos.length > 1 && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => setPreviewPhotoIndex((i) => (i - 1 + photos.length) % photos.length)}
-                        className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-2 transition-colors"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                        </svg>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPreviewPhotoIndex((i) => (i + 1) % photos.length)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-2 transition-colors"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                        </svg>
-                      </button>
-                      <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5 pointer-events-none">
-                        {photos.map((_, i) => (
-                          <span key={i} className={`w-1.5 h-1.5 rounded-full transition-colors ${i === previewPhotoIndex ? 'bg-white' : 'bg-white/30'}`} />
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-
-              {/* Uploaded video */}
-              {preview.video_url && (
-                <div className="px-4 pt-4">
-                  <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-2">Video</p>
-                  <div className="rounded-xl overflow-hidden border border-bg-border bg-black">
-                    <video controls playsInline src={preview.video_url} className="w-full" style={{ maxHeight: 240 }} />
-                  </div>
-                </div>
-              )}
-
-              {/* External video link */}
-              {preview.video_link && (
-                <div className="px-4 pt-4">
-                  <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-2">Reference Video</p>
-                  <a
-                    href={preview.video_link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2.5 px-4 py-3 bg-bg-card border border-bg-border rounded-xl text-text-primary hover:border-accent-fire/40 transition-colors"
-                  >
-                    <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-accent-fire/15 flex items-center justify-center">
-                      <svg className="w-4 h-4 text-accent-fire" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M8 5.14v14l11-7-11-7z" />
-                      </svg>
-                    </span>
-                    <span className="text-sm font-semibold truncate flex-1">{preview.video_link}</span>
-                    <svg className="w-4 h-4 text-text-dim flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
-                  </a>
-                </div>
-              )}
-
-              {/* Detail fields */}
-              <div className="px-4 py-5 space-y-5">
-                {/* Coaching Cue / Description */}
-                {preview.description && (
-                  <div>
-                    <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-1">Coaching Cue</p>
-                    <p className="text-sm text-text-primary leading-relaxed whitespace-pre-wrap">{preview.description}</p>
-                  </div>
-                )}
-
-                {/* Skills */}
-                {(preview.skills?.length ?? 0) > 0 && (
-                  <div>
-                    <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-2">Skills</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {preview.skills!.map((skill) => (
-                        <span key={skill} className="badge badge-skill">{skill}</span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Equipment */}
-                {preview.equipment && (
-                  <div>
-                    <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-1">Equipment</p>
-                    <p className="text-sm font-bold text-accent-blue">{preview.equipment}</p>
-                  </div>
-                )}
-
-                {/* Duration */}
-                {preview.duration_minutes != null && (
-                  <div>
-                    <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-1">Duration</p>
-                    <p className="text-sm text-text-primary">{preview.duration_minutes} minutes</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Sticky Add to Plan footer */}
-            <div className="px-4 py-4 border-t border-bg-border flex-shrink-0">
-              {inPlan ? (
-                <div className="w-full py-3.5 rounded-xl bg-accent-green/10 border border-accent-green/20 flex items-center justify-center gap-2">
-                  <svg className="w-4 h-4 text-accent-green" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span className="text-sm font-heading text-accent-green">Already in plan</span>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => { handleItemSelect(preview); setPreview(null) }}
-                  className="w-full py-3.5 rounded-xl bg-accent-fire text-white font-heading text-sm hover:opacity-90 active:opacity-75 transition-all"
-                >
-                  Add to Plan
-                </button>
-              )}
-            </div>
-          </div>
-        )
-      })()}
+      {/* ── Component detail sheet — unified editorial view ─────────── */}
+      {preview && (
+        <ComponentDetailSheet
+          component={preview}
+          onClose={() => setPreview(null)}
+          onAdd={() => { handleItemSelect(preview); setPreview(null) }}
+          isInPlan={existingIds?.has(preview.id) ?? false}
+        />
+      )}
     </div>
   )
 
