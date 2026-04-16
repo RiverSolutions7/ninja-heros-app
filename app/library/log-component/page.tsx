@@ -31,13 +31,11 @@ function XIcon() {
   )
 }
 
-function SectionDivider({ label }: { label: string }) {
+function SectionLabel({ label, className = '' }: { label: string; className?: string }) {
   return (
-    <div className="relative flex items-center gap-3 my-5">
-      <div className="flex-1 h-px bg-bg-border" />
-      <span className="text-[11px] font-heading uppercase tracking-wider text-text-dim">{label}</span>
-      <div className="flex-1 h-px bg-bg-border" />
-    </div>
+    <p className={['text-[11px] font-heading uppercase tracking-[0.14em] text-text-dim mt-7 mb-2', className].join(' ')}>
+      {label}
+    </p>
   )
 }
 
@@ -75,11 +73,6 @@ const TYPE_GATE_CONFIG: Record<ComponentType, {
       </svg>
     ),
   },
-}
-
-const TYPE_BADGE: Record<ComponentType, string> = {
-  game:    'bg-accent-green/10 text-accent-green border-accent-green/25',
-  station: 'bg-accent-blue/10 text-accent-blue border-accent-blue/25',
 }
 
 // ── Voice labels ───────────────────────────────────────────────────────────────
@@ -238,14 +231,6 @@ export default function LogComponentPage() {
       if (result.durationMinutes) setDurationMinutes(result.durationMinutes)
       if (componentType === 'station' && result.skills.length > 0) setSkills(result.skills)
     }
-  }
-
-  const micColors: Record<string, string> = {
-    idle:       'bg-bg-card border-2 border-bg-border text-text-muted hover:border-accent-fire/40 hover:text-accent-fire',
-    recording:  'bg-accent-fire text-white shadow-glow-fire',
-    processing: 'bg-bg-card border-2 border-bg-border text-text-dim',
-    done:       'bg-accent-green/15 border-2 border-accent-green/50 text-accent-green',
-    error:      'bg-red-900/20 border-2 border-red-500/40 text-red-400',
   }
 
   // ── Skills ───────────────────────────────────────────────────────────────────
@@ -512,97 +497,112 @@ export default function LogComponentPage() {
   return (
     <form onSubmit={handleSubmit} className="pb-6">
 
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-6 pt-2">
+      {/* Header — editorial title + calm meta line */}
+      <div className="pt-2 mb-6">
         <button
           type="button"
           onClick={changeType}
-          className="flex items-center justify-center w-8 h-8 rounded-lg text-text-dim hover:text-text-primary hover:bg-white/5 transition-colors -ml-1 flex-shrink-0"
+          className="flex items-center justify-center w-8 h-8 rounded-lg text-text-dim hover:text-text-primary hover:bg-white/5 transition-colors -ml-1 mb-3"
           aria-label="Back to type selection"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-        <h1 className="font-heading text-xl text-text-primary leading-none flex-shrink-0">Log Component</h1>
-
-        {/* Curriculum badge — tappable if multiple curricula */}
-        {curriculumLabel && (
+        <h1 className="font-heading text-2xl text-text-primary leading-tight">
+          New {TYPE_GATE_CONFIG[ct].label}
+        </h1>
+        <div className="flex items-center gap-1.5 mt-1 text-[11px] font-heading uppercase tracking-[0.12em]">
+          {curriculumLabel && (
+            <>
+              <button
+                type="button"
+                onClick={changeCurriculum}
+                className="text-text-dim hover:text-text-muted transition-colors"
+              >
+                {curriculumLabel}
+              </button>
+              <span className="text-text-dim/40">·</span>
+            </>
+          )}
           <button
             type="button"
-            onClick={changeCurriculum}
-            className="text-[10px] font-heading uppercase tracking-wide px-2 py-1 rounded-full bg-accent-fire/10 border border-accent-fire/25 text-accent-fire transition-colors hover:bg-accent-fire/20 flex-shrink-0"
+            onClick={changeType}
+            className={[TYPE_GATE_CONFIG[ct].textColor, 'hover:opacity-80 transition-opacity'].join(' ')}
           >
-            {curriculumLabel}
+            {TYPE_GATE_CONFIG[ct].label}
           </button>
-        )}
-
-        {/* Type badge — always tappable */}
-        <button
-          type="button"
-          onClick={changeType}
-          className={[
-            'text-[10px] font-heading uppercase tracking-wide px-2 py-1 rounded-full border transition-colors flex-shrink-0',
-            TYPE_BADGE[ct],
-          ].join(' ')}
-        >
-          {TYPE_GATE_CONFIG[ct].label}
-        </button>
+        </div>
       </div>
 
-      {/* ── MIC HERO ──────────────────────────────────────── */}
-      <div className="flex flex-col items-center py-6 mb-2 rounded-2xl bg-bg-card border border-bg-border">
-        <button
-          type="button"
-          onClick={handleMicToggle}
-          disabled={voiceState === 'processing'}
+      {/* ── MIC ROW — compact, editorial ──────────────────── */}
+      <button
+        type="button"
+        onClick={handleMicToggle}
+        disabled={voiceState === 'processing'}
+        aria-label={voiceState === 'recording' ? 'Stop recording' : 'Start voice recording'}
+        className={[
+          'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all',
+          voiceState === 'recording'
+            ? 'bg-accent-fire/10 border-accent-fire/40'
+            : voiceState === 'done'
+              ? 'bg-accent-green/5 border-accent-green/30'
+              : voiceState === 'error'
+                ? 'bg-red-900/10 border-red-500/30'
+                : 'bg-bg-card border-bg-border hover:border-accent-fire/30',
+          voiceState === 'processing' ? 'cursor-not-allowed' : 'active:scale-[0.99]',
+        ].join(' ')}
+      >
+        <div
           className={[
-            'w-20 h-20 flex items-center justify-center rounded-full transition-all duration-200 mb-4',
-            micColors[voiceState],
-            voiceState === 'recording' ? 'scale-105' : 'active:scale-95',
-            voiceState === 'processing' ? 'cursor-not-allowed' : '',
+            'flex items-center justify-center rounded-full w-10 h-10 flex-shrink-0 transition-all',
+            voiceState === 'recording'  ? 'bg-accent-fire text-white shadow-glow-fire' :
+            voiceState === 'processing' ? 'bg-bg-input text-text-dim' :
+            voiceState === 'done'       ? 'bg-accent-green/20 text-accent-green' :
+            voiceState === 'error'      ? 'bg-red-500/20 text-red-400' :
+                                          'bg-bg-input text-text-muted',
           ].join(' ')}
-          aria-label={voiceState === 'recording' ? 'Stop recording' : 'Start voice recording'}
         >
           {voiceState === 'recording' ? (
-            <svg className="w-8 h-8 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
               <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zM8 11a4 4 0 008 0h2a6 6 0 01-5 5.91V19h3v2H8v-2h3v-2.09A6 6 0 016 11h2z" />
             </svg>
           ) : voiceState === 'processing' ? (
-            <div className="w-8 h-8 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
           ) : voiceState === 'done' ? (
-            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           ) : (
-            <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
               <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zM8 11a4 4 0 008 0h2a6 6 0 01-5 5.91V19h3v2H8v-2h3v-2.09A6 6 0 016 11h2z" />
             </svg>
           )}
-        </button>
-
-        <p className={`text-sm font-semibold text-center leading-snug ${
-          voiceState === 'recording'  ? 'text-accent-fire animate-pulse' :
-          voiceState === 'done'       ? 'text-accent-green' :
-          voiceState === 'error'      ? 'text-red-400' :
-          'text-text-muted'
-        }`}>
+        </div>
+        <p
+          className={[
+            'text-sm font-heading text-left leading-snug flex-1 min-w-0',
+            voiceState === 'recording' ? 'text-accent-fire' :
+            voiceState === 'done'      ? 'text-accent-green' :
+            voiceState === 'error'     ? 'text-red-400' :
+                                         'text-text-muted',
+          ].join(' ')}
+        >
           {voiceState === 'recording'  && MIC_RECORDING_LABEL}
           {voiceState === 'processing' && MIC_PROCESSING_LABEL}
           {voiceState === 'done'       && MIC_DONE_LABEL}
           {voiceState === 'error'      && (errorMessage ?? 'Could not process. Try again.')}
           {voiceState === 'idle'       && (voiceSupported ? MIC_IDLE_LABEL : 'Fill in the details below')}
         </p>
-
-        {voiceState === 'recording' && transcript && (
-          <p className="text-xs text-text-dim italic text-center mt-3 px-6 leading-relaxed max-w-xs">
-            &ldquo;{transcript}&rdquo;
-          </p>
-        )}
-      </div>
+      </button>
+      {voiceState === 'recording' && transcript && (
+        <p className="text-xs text-text-dim italic mt-2 px-3 leading-relaxed">
+          &ldquo;{transcript}&rdquo;
+        </p>
+      )}
 
       {/* ── PHOTOS ────────────────────────────────────────── */}
-      <SectionDivider label="Photos" />
+      <SectionLabel label="Photos" />
 
       {photos.length > 0 && (
         <div className="flex gap-2 overflow-x-auto pb-2 mb-3" style={{ scrollSnapType: 'x mandatory' }}>
@@ -626,27 +626,27 @@ export default function LogComponentPage() {
         </div>
       )}
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={() => cameraRef.current?.click()}
-          className="flex items-center gap-2 text-sm font-semibold text-accent-fire hover:text-accent-fire/80 transition-colors py-2 px-3 rounded-xl border border-accent-fire/30 hover:bg-accent-fire/5"
+          className="flex items-center gap-1.5 text-xs text-text-muted hover:text-accent-fire hover:border-accent-fire/40 transition-colors py-1.5 px-3 rounded-full border border-dashed border-bg-border"
         >
-          <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+          <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
-          Take Photo
+          Take photo
         </button>
         <button
           type="button"
           onClick={() => libraryRef.current?.click()}
-          className="flex items-center gap-2 text-sm font-semibold text-text-muted hover:text-text-primary transition-colors py-2 px-3 rounded-xl border border-bg-border hover:bg-white/5"
+          className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-primary hover:border-text-dim/60 transition-colors py-1.5 px-3 rounded-full border border-dashed border-bg-border"
         >
-          <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+          <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
-          From Library
+          From library
         </button>
       </div>
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={handleFileAdded} className="hidden" aria-label="Take photo" />
@@ -663,12 +663,12 @@ export default function LogComponentPage() {
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
             </svg>
-            Add Video
+            Add video
           </button>
         </div>
       ) : (
         <>
-          <SectionDivider label="Video" />
+          <SectionLabel label="Video" />
           <VideoCapture
             preview={videoPreview}
             onFileSelected={(file, preview) => { setVideoFile(file); setVideoPreview(preview) }}
@@ -694,7 +694,7 @@ export default function LogComponentPage() {
       )}
 
       {/* ── NAME ──────────────────────────────────────────── */}
-      <SectionDivider label="Name" />
+      <SectionLabel label="Name" />
 
       <input
         type="text"
@@ -709,7 +709,7 @@ export default function LogComponentPage() {
       {titleError && <p className="text-accent-fire text-xs mt-1.5">{titleError}</p>}
 
       {/* ── DESCRIPTION ───────────────────────────────────── */}
-      <SectionDivider label="Description" />
+      <SectionLabel label="Description" />
 
       <textarea
         value={description}
@@ -723,7 +723,7 @@ export default function LogComponentPage() {
       />
 
       {/* ── DURATION ──────────────────────────────────────── */}
-      <SectionDivider label="Duration (optional)" />
+      <SectionLabel label="Duration" />
       <div className="flex items-center gap-3">
         <input
           type="number"
@@ -739,7 +739,7 @@ export default function LogComponentPage() {
 
       {/* ── SKILLS (stations only) ────────────────────────── */}
       {ct === 'station' && (
-      <><SectionDivider label="Skills" />
+      <><SectionLabel label="Skills" />
 
       <div className="flex flex-wrap gap-2">
         {availableSkills.map((skill) => (
@@ -794,14 +794,14 @@ export default function LogComponentPage() {
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
             </svg>
-            Video Link
+            Video link
           </button>
         </div>
       )}
 
       {showVideoLink && (
         <>
-          <SectionDivider label="Video Link" />
+          <SectionLabel label="Video link" />
           <div className="flex items-center gap-2">
             <input
               type="url"
