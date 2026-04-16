@@ -307,118 +307,6 @@ function SortablePlanItem({
   )
 }
 
-// ── View-mode plan item (read-only, no drag handle or remove button) ──────────
-
-function ViewPlanItem({
-  item,
-  onPhotoTap,
-}: {
-  item: PlanItem
-  onPhotoTap: (photos: string[]) => void
-}) {
-  const meta = resolveMeta(item)
-  const photos = item.isAdHoc ? [] : (item.component.photos ?? []).filter(Boolean)
-  const firstPhoto = photos[0] ?? null
-  const extraCount = photos.length - 1
-  const coachNote = item.coachNote ?? null
-  const libraryDescription = !item.isAdHoc ? item.component.description ?? null : null
-
-  return (
-    <div
-      className={[
-        'relative flex items-start gap-3 px-3 py-3 rounded-xl bg-bg-card',
-        'border-l-4',
-        meta.border,
-      ].join(' ')}
-    >
-      {/* ─── Thumbnail slot ──────────────────────────────────── */}
-      <div className="relative shrink-0 rounded-lg overflow-hidden">
-        <button
-          type="button"
-          onClick={() => firstPhoto && onPhotoTap(photos)}
-          style={{ width: PLAN_THUMB, height: PLAN_THUMB }}
-          className={firstPhoto ? 'cursor-pointer active:opacity-80 transition-opacity block' : 'cursor-default block'}
-          tabIndex={firstPhoto ? 0 : -1}
-          aria-label={firstPhoto ? `View photos of ${item.component.title}` : undefined}
-        >
-          {firstPhoto ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={firstPhoto}
-              alt={item.component.title}
-              style={{ width: PLAN_THUMB, height: PLAN_THUMB }}
-              className="object-cover block"
-            />
-          ) : (
-            <div
-              style={{ width: PLAN_THUMB, height: PLAN_THUMB }}
-              className={['flex items-center justify-center', meta.textColor, 'opacity-50'].join(' ')}
-            >
-              {item.isAdHoc ? (
-                <span className="w-7 h-7">{CUSTOM_ICON}</span>
-              ) : (
-                <span className="w-7 h-7">{TYPE_ICONS[item.component.type as ComponentType]}</span>
-              )}
-            </div>
-          )}
-        </button>
-        {extraCount > 0 && (
-          <span className="absolute bottom-0.5 right-0.5 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">
-            +{extraCount}
-          </span>
-        )}
-      </div>
-
-      {/* ─── Info stack ──────────────────────────────────────── */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 text-[10px] font-heading uppercase tracking-wide">
-          <span className={meta.textColor}>{meta.label}</span>
-          {!item.isAdHoc && item.component.curriculum && (
-            <>
-              <span className="text-text-dim/40">·</span>
-              <span className="text-text-dim truncate">{item.component.curriculum}</span>
-            </>
-          )}
-          {item.durationMinutes != null && (
-            <>
-              <span className="text-text-dim/40">·</span>
-              <span className="text-text-dim">{item.durationMinutes} min</span>
-            </>
-          )}
-        </div>
-        <p className="font-heading text-[15px] text-text-primary leading-tight mt-0.5">
-          {item.component.title}
-        </p>
-
-        {/* Coach note — full text, calm styling */}
-        {coachNote && (
-          <div className="mt-2">
-            <p className="text-[10px] font-heading uppercase tracking-wide text-text-dim/60 mb-1">Coach Note</p>
-            <p className="text-[13px] text-text-muted leading-relaxed whitespace-pre-wrap">
-              {coachNote}
-            </p>
-          </div>
-        )}
-
-        {/* Library description — only when there's no coach note */}
-        {!coachNote && libraryDescription && (
-          <p className="text-[12px] text-text-dim leading-relaxed mt-1.5">
-            {libraryDescription}
-          </p>
-        )}
-
-        {/* Equipment */}
-        {!item.isAdHoc && item.component.equipment && (
-          <p className="text-[11px] text-text-dim/80 mt-2">
-            <span className="font-heading uppercase text-[9px] text-text-dim/50 tracking-wide mr-1">Gear</span>
-            {item.component.equipment}
-          </p>
-        )}
-      </div>
-    </div>
-  )
-}
-
 // ── Draft card ────────────────────────────────────────────────────────────────
 
 function DraftCard({
@@ -506,7 +394,6 @@ export default function TodaysPlanClient() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving'>('idle')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
-  const [planViewMode, setPlanViewMode] = useState<'view' | 'edit'>('view')
   const [showPlanOptions, setShowPlanOptions] = useState(false)
   const [showMoveCalendar, setShowMoveCalendar] = useState(false)
   const [classLength, setClassLength] = useState<number | null>(null)
@@ -556,7 +443,6 @@ export default function TodaysPlanClient() {
         if (recovered.length > 0) {
           setItems(recovered)
           setViewMode('editing') // restore editing view
-          setPlanViewMode('edit')
         }
       }
     } catch { /* ignore */ }
@@ -749,11 +635,7 @@ export default function TodaysPlanClient() {
   // ── View mode handlers ────────────────────────────────────────────────────────
 
   function handleBackToDashboard() {
-    if (planViewMode === 'edit' && editingPlanId) {
-      setPlanViewMode('view') // editing a saved plan → back to view, not dashboard
-    } else {
-      setViewMode('dashboard') // view mode or new draft → back to dashboard
-    }
+    setViewMode('dashboard')
   }
 
   // ── Calendar save ─────────────────────────────────────────────────────────────
@@ -766,7 +648,6 @@ export default function TodaysPlanClient() {
       setLastAddedPlanId(plan.id)
       setEditingPlanId(plan.id)
       setEditingPlanLabel(formatDisplayDate(date))
-      setPlanViewMode('view')
       if (activeDraftIdRef.current) {
         setDrafts(prev => {
           const next = prev.filter(d => d.id !== activeDraftIdRef.current)
@@ -802,7 +683,6 @@ export default function TodaysPlanClient() {
     setLastAddedPlanId(null)
 
     try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
-    setPlanViewMode('view')
     setViewMode('editing')
   }
 
@@ -815,7 +695,6 @@ export default function TodaysPlanClient() {
     setLastAddedPlanId(null)
     setSaveStatus('idle')
 
-    setPlanViewMode('edit')
     setViewMode('editing')
   }
 
@@ -856,7 +735,6 @@ export default function TodaysPlanClient() {
     setDraftNameValue('')
     activeDraftIdRef.current = null
     try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
-    setPlanViewMode('view')
     setViewMode('dashboard')
   }
 
@@ -876,7 +754,6 @@ export default function TodaysPlanClient() {
       setEditingPlanLabel(null)
       setItems([])
       setSaveStatus('idle')
-      setPlanViewMode('view')
       setViewMode('dashboard')
     } catch (err) {
       console.error('Delete failed:', err)
@@ -898,7 +775,6 @@ export default function TodaysPlanClient() {
       setSelectedDayIso(newDate)
       setShowMoveCalendar(false)
       setShowPlanOptions(false)
-      setPlanViewMode('view')
     } catch (err) {
       console.error('Move failed:', err)
     }
@@ -981,19 +857,6 @@ export default function TodaysPlanClient() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           </button>
-          {/* Edit button — view sub-mode of a saved plan */}
-          {viewMode === 'editing' && planViewMode === 'view' && editingPlanId && (
-            <button
-              type="button"
-              onClick={() => setPlanViewMode('edit')}
-              className="w-10 h-10 flex items-center justify-center rounded-xl border border-bg-border text-text-muted hover:bg-white/5 active:scale-95 transition-all"
-              aria-label="Edit plan"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-            </button>
-          )}
           {/* Share — editing mode only */}
           {viewMode === 'editing' && sharePlanId && items.length > 0 && (
             <button
@@ -1215,7 +1078,6 @@ export default function TodaysPlanClient() {
                 setEditingPlanLabel(null)
                 activeDraftIdRef.current = null
                 try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
-                setPlanViewMode('edit')
                 setViewMode('editing')
                 setShowPicker(true)
               }}
@@ -1240,19 +1102,19 @@ export default function TodaysPlanClient() {
         <>
           {/* Add Component button moved below items list */}
 
-          {/* ── Empty state for new plan (edit mode only) ── */}
-          {items.length === 0 && planViewMode === 'edit' && (
-            <div className="text-center py-16 px-4">
-              <p className="font-heading text-text-primary text-lg leading-snug">
+          {/* ── Empty state for new plan ── */}
+          {items.length === 0 && (
+            <div className="px-4 pt-10 pb-4">
+              <p className="font-heading text-text-primary text-lg leading-snug text-center">
                 Start building
               </p>
-              <p className="text-sm text-text-muted mt-2 leading-relaxed max-w-xs mx-auto">
+              <p className="text-sm text-text-muted mt-2 leading-relaxed max-w-xs mx-auto text-center">
                 Pick stations and games from your library, or create a custom activity.
               </p>
               <button
                 type="button"
                 onClick={() => setShowPicker(true)}
-                className="mt-5 inline-flex items-center gap-1.5 bg-bg-card border border-bg-border text-text-primary font-heading text-sm px-4 py-2.5 rounded-xl active:scale-95 transition-all min-h-[44px]"
+                className="mt-5 w-full flex items-center justify-center gap-1.5 bg-transparent border border-dashed border-bg-border text-text-dim hover:text-text-primary hover:border-text-muted font-heading text-sm px-4 py-3 rounded-xl transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -1262,8 +1124,8 @@ export default function TodaysPlanClient() {
             </div>
           )}
 
-          {/* ── Inline draft name (new drafts only, edit mode) ── */}
-          {planViewMode === 'edit' && !editingPlanId && (
+          {/* ── Inline draft name (new drafts only) ── */}
+          {!editingPlanId && (
             <div className="px-4 pt-2 pb-3">
               <input
                 value={draftNameValue}
@@ -1283,14 +1145,13 @@ export default function TodaysPlanClient() {
                 </svg>
                 <button
                   type="button"
-                  onClick={classLength ? () => setShowLengthPicker(v => !v) : undefined}
+                  onClick={() => setShowLengthPicker(v => !v)}
                   className={[
-                    'text-xs font-heading',
-                    isOverBudget ? 'text-accent-fire' : 'text-text-muted',
-                    classLength ? 'underline underline-offset-2 cursor-pointer' : '',
+                    'text-xs font-heading underline underline-offset-2',
+                    isOverBudget ? 'text-accent-fire' : classLength ? 'text-text-muted' : 'text-text-dim',
                   ].join(' ')}
                 >
-                  {classLength ? `${totalMinutes} / ${classLength} min` : `${totalMinutes} min`}
+                  {classLength ? `${totalMinutes} / ${classLength} min` : `${totalMinutes} min · set length`}
                 </button>
                 {classLength && (
                   <div className="flex-1 h-1 bg-bg-border rounded-full overflow-hidden">
@@ -1300,39 +1161,33 @@ export default function TodaysPlanClient() {
                     />
                   </div>
                 )}
-                {classLength ? (
-                  <button
-                    type="button"
-                    onClick={() => { setClassLength(null); setShowLengthPicker(false) }}
-                    className="text-text-dim/40 hover:text-text-dim transition-colors flex-shrink-0"
-                    aria-label="Clear class length"
-                  >
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setShowLengthPicker(v => !v)}
-                    className="text-[11px] text-text-dim/50 hover:text-text-dim transition-colors flex-shrink-0 underline underline-offset-2"
-                  >
-                    Set length
-                  </button>
-                )}
               </div>
               {showLengthPicker && (
-                <div className="flex gap-2 mt-2">
+                <div className="flex flex-wrap gap-2 mt-2">
                   {[30, 45, 60, 90].map(min => (
                     <button
                       key={min}
                       type="button"
                       onClick={() => { setClassLength(min); setShowLengthPicker(false) }}
-                      className="px-3 py-1.5 rounded-lg border border-bg-border text-xs font-heading text-text-muted hover:border-accent-fire/40 hover:text-accent-fire active:scale-95 transition-all"
+                      className={[
+                        'px-3 py-1.5 rounded-lg border text-xs font-heading transition-all active:scale-95',
+                        classLength === min
+                          ? 'border-accent-fire/60 text-accent-fire bg-accent-fire/10'
+                          : 'border-bg-border text-text-muted hover:border-accent-fire/40 hover:text-accent-fire',
+                      ].join(' ')}
                     >
                       {min} min
                     </button>
                   ))}
+                  {classLength && (
+                    <button
+                      type="button"
+                      onClick={() => { setClassLength(null); setShowLengthPicker(false) }}
+                      className="px-3 py-1.5 rounded-lg border border-bg-border text-xs font-heading text-text-dim hover:border-text-muted hover:text-text-muted transition-all active:scale-95"
+                    >
+                      No length
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -1340,37 +1195,25 @@ export default function TodaysPlanClient() {
 
           {/* ── Plan items ── */}
           {items.length > 0 && (
-            planViewMode === 'view' ? (
-              <div className="mx-4 flex flex-col gap-2">
-                {items.map((item) => (
-                  <ViewPlanItem
-                    key={item.localId}
-                    item={item}
-                    onPhotoTap={photos => setLightbox({ photos })}
-                  />
-                ))}
-              </div>
-            ) : (
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                <SortableContext items={items.map(i => i.localId)} strategy={verticalListSortingStrategy}>
-                  <div className="mx-4 flex flex-col gap-2">
-                    {items.map((item) => (
-                      <SortablePlanItem
-                        key={item.localId}
-                        item={item}
-                        onRemove={handleRemove}
-                        onPhotoTap={photos => setLightbox({ photos })}
-                        onRowTap={i => setActiveSheet(i)}
-                      />
-                    ))}
-                  </div>
-                </SortableContext>
-              </DndContext>
-            )
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={items.map(i => i.localId)} strategy={verticalListSortingStrategy}>
+                <div className="mx-4 flex flex-col gap-2">
+                  {items.map((item) => (
+                    <SortablePlanItem
+                      key={item.localId}
+                      item={item}
+                      onRemove={handleRemove}
+                      onPhotoTap={photos => setLightbox({ photos })}
+                      onRowTap={i => setActiveSheet(i)}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
           )}
 
-          {/* ── Add component (dashed, below items — edit mode) ── */}
-          {items.length > 0 && planViewMode === 'edit' && (
+          {/* ── Add component (dashed, below items) ── */}
+          {items.length > 0 && (
             <button
               type="button"
               onClick={() => setShowPicker(true)}
@@ -1383,41 +1226,29 @@ export default function TodaysPlanClient() {
             </button>
           )}
 
-          {/* ── Bottom action area (edit mode only) ── */}
-          {items.length > 0 && planViewMode === 'edit' && (
+          {/* ── Bottom action area ── */}
+          {items.length > 0 && (
             <div className="px-4 pt-5 pb-2">
               {editingPlanId ? (
-                /* Saved plan: Options + Done Editing */
-                <div className="flex gap-2">
+                /* Saved plan: just a subtle options link (changes autosave, back returns to dashboard) */
+                <div className="flex justify-center">
                   <button
                     type="button"
                     onClick={() => setShowPlanOptions(true)}
-                    className="py-3.5 px-4 rounded-xl border border-bg-border font-heading text-sm text-text-muted hover:bg-white/5 active:scale-[0.98] transition-all min-h-[52px]"
+                    className="text-xs font-heading text-text-dim/60 hover:text-text-muted transition-colors py-2"
                   >
-                    ··· Options
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPlanViewMode('view')}
-                    className="flex-1 py-3.5 rounded-xl border border-bg-border font-heading text-sm text-text-muted hover:border-accent-fire/30 active:scale-[0.98] transition-all min-h-[52px]"
-                  >
-                    Done Editing
+                    ··· Plan options
                   </button>
                 </div>
               ) : (
                 /* New draft: single primary CTA */
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => setShowDatePicker(true)}
-                    className="w-full font-heading text-base px-4 py-3.5 rounded-xl bg-accent-fire text-white active:scale-[0.98] transition-all min-h-[52px]"
-                  >
-                    Save to calendar
-                  </button>
-                  <p className="text-center text-[10px] font-heading uppercase tracking-[0.18em] text-text-dim/60 mt-1.5">
-                    Drafts auto-save as you build
-                  </p>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowDatePicker(true)}
+                  className="w-full font-heading text-base px-4 py-3.5 rounded-xl bg-accent-fire text-white active:scale-[0.98] transition-all min-h-[52px]"
+                >
+                  Save to calendar
+                </button>
               )}
             </div>
           )}
@@ -1429,15 +1260,8 @@ export default function TodaysPlanClient() {
             </p>
           )}
 
-          {/* ── Editing indicator (edit mode only, saved plans) ── */}
-          {editingPlanId && planViewMode === 'edit' && (
-            <p className="text-center text-[11px] text-text-dim/50 px-4 pb-1">
-              Editing saved plan · changes auto-save
-            </p>
-          )}
-
-          {/* ── Clear & start over (edit mode, new drafts only) ── */}
-          {items.length > 0 && planViewMode === 'edit' && !editingPlanId && (
+          {/* ── Clear & start over (new drafts only) ── */}
+          {items.length > 0 && !editingPlanId && (
             <div className="px-4 pb-4 flex justify-center gap-4">
               <button
                 type="button"
