@@ -171,6 +171,7 @@ function TypePlaceholder({ type, className }: { type: ComponentType; className?:
 // ── Sortable plan item (card design — matches Library Phase 2A) ─────────────
 
 const PLAN_THUMB = 72
+const SWIPE_COMMIT_PX = 96
 
 function SortablePlanItem({
   item,
@@ -195,113 +196,198 @@ function SortablePlanItem({
     opacity: isDragging ? 0.5 : 1,
   }
 
+  // ── Swipe-to-delete (mobile-first, works with mouse too) ───────────────────
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null)
+  const swipeClaimedRef = useRef(false)
+  const [swipeDx, setSwipeDx] = useState(0)
+  const [swipeAnimating, setSwipeAnimating] = useState(false)
+
+  function onRowPointerDown(e: React.PointerEvent) {
+    // Ignore if starting on an interactive child (button, input, etc.)
+    // — they handle their own pointer events.
+    swipeStartRef.current = { x: e.clientX, y: e.clientY }
+    swipeClaimedRef.current = false
+    setSwipeAnimating(false)
+  }
+
+  function onRowPointerMove(e: React.PointerEvent) {
+    if (!swipeStartRef.current) return
+    const dx = e.clientX - swipeStartRef.current.x
+    const dy = e.clientY - swipeStartRef.current.y
+    if (!swipeClaimedRef.current) {
+      // Claim only if clearly leftward + horizontal-dominant.
+      if (dx < -10 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        swipeClaimedRef.current = true
+        try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId) } catch { /* ignore */ }
+      } else if (Math.abs(dy) > 10) {
+        // Vertical movement wins — abandon swipe.
+        swipeStartRef.current = null
+        return
+      }
+    }
+    if (swipeClaimedRef.current) {
+      setSwipeDx(Math.min(0, dx))
+    }
+  }
+
+  function onRowPointerUp() {
+    if (swipeClaimedRef.current && swipeDx < -SWIPE_COMMIT_PX) {
+      // Commit — slide fully off, then fire remove. Undo toast handles safety.
+      setSwipeAnimating(true)
+      setSwipeDx(-1000)
+      setTimeout(() => onRemove(item.localId), 180)
+    } else {
+      // Spring back
+      setSwipeAnimating(true)
+      setSwipeDx(0)
+    }
+    swipeStartRef.current = null
+    swipeClaimedRef.current = false
+  }
+
+  const swipeProgress = Math.min(1, Math.abs(swipeDx) / SWIPE_COMMIT_PX)
+  const willCommit = swipeDx < -SWIPE_COMMIT_PX
+
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={[
-        'relative flex items-center gap-3 px-3 py-2.5 rounded-xl bg-bg-card',
-        'border-l-4',
-        meta.border,
-      ].join(' ')}
+      className="relative rounded-xl overflow-hidden group"
     >
-      {/* ─── Thumbnail slot ──────────────────────────────────── */}
-      <div className="relative shrink-0 rounded-lg overflow-hidden">
-        <button
-          type="button"
-          onClick={() => !item.isAdHoc && photos.length > 0 && onPhotoTap(photos)}
-          style={{ width: PLAN_THUMB, height: PLAN_THUMB }}
-          className={firstPhoto ? 'cursor-pointer active:opacity-80 transition-opacity block' : 'cursor-default block'}
-          tabIndex={firstPhoto ? 0 : -1}
-          aria-label={firstPhoto ? `View photos of ${item.component.title}` : undefined}
-        >
-          {firstPhoto ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={firstPhoto}
-              alt={item.component.title}
-              style={{ width: PLAN_THUMB, height: PLAN_THUMB }}
-              className="object-cover block"
-            />
-          ) : (
-            <div
-              style={{ width: PLAN_THUMB, height: PLAN_THUMB }}
-              className={['flex items-center justify-center', meta.textColor, 'opacity-50'].join(' ')}
-            >
-              {item.isAdHoc ? (
-                <span className="w-7 h-7">{CUSTOM_ICON}</span>
-              ) : (
-                <span className="w-7 h-7">{TYPE_ICONS[item.component.type as ComponentType]}</span>
-              )}
-            </div>
-          )}
-        </button>
-        {extraCount > 0 && (
-          <span className="absolute bottom-0.5 right-0.5 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">
-            +{extraCount}
-          </span>
-        )}
+      {/* ─── Swipe-reveal background (behind row) ───────────────────────── */}
+      <div
+        aria-hidden
+        className={[
+          'absolute inset-0 flex items-center justify-end pr-5 pointer-events-none rounded-xl',
+          willCommit ? 'bg-accent-fire' : 'bg-accent-fire/40',
+          'transition-colors duration-150',
+        ].join(' ')}
+        style={{ opacity: swipeProgress > 0.05 ? 1 : 0 }}
+      >
+        <div className="flex items-center gap-1.5 text-white font-heading text-xs uppercase tracking-wider">
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" />
+          </svg>
+          {willCommit ? 'Release' : 'Delete'}
+        </div>
       </div>
 
-      {/* ─── Info stack ──────────────────────────────────────── */}
-      <button
-        type="button"
-        onClick={() => onRowTap(item)}
-        className="flex-1 min-w-0 text-left active:opacity-70 transition-opacity"
+      {/* ─── Foreground row (translates with swipe) ─────────────────────── */}
+      <div
+        onPointerDown={onRowPointerDown}
+        onPointerMove={onRowPointerMove}
+        onPointerUp={onRowPointerUp}
+        onPointerCancel={onRowPointerUp}
+        style={{
+          transform: `translateX(${swipeDx}px)`,
+          transition: swipeAnimating ? 'transform 180ms ease-out' : 'none',
+        }}
+        onTransitionEnd={() => setSwipeAnimating(false)}
+        className={[
+          'relative flex items-center gap-3 px-3 py-2.5 rounded-xl bg-bg-card',
+          'border-l-4',
+          meta.border,
+        ].join(' ')}
       >
-        <div className="flex items-center gap-1.5 text-[10px] font-heading uppercase tracking-wide">
-          <span className={meta.textColor}>{meta.label}</span>
-          {!item.isAdHoc && item.component.curriculum && (
-            <>
-              <span className="text-text-dim/40">·</span>
-              <span className="text-text-dim truncate">{item.component.curriculum}</span>
-            </>
-          )}
-          {item.durationMinutes != null && (
-            <>
-              <span className="text-text-dim/40">·</span>
-              <span className="text-text-dim">{item.durationMinutes} min</span>
-            </>
+        {/* ─── Thumbnail slot ──────────────────────────────────── */}
+        <div className="relative shrink-0 rounded-lg overflow-hidden">
+          <button
+            type="button"
+            onClick={() => !item.isAdHoc && photos.length > 0 && onPhotoTap(photos)}
+            style={{ width: PLAN_THUMB, height: PLAN_THUMB }}
+            className={firstPhoto ? 'cursor-pointer active:opacity-80 transition-opacity block' : 'cursor-default block'}
+            tabIndex={firstPhoto ? 0 : -1}
+            aria-label={firstPhoto ? `View photos of ${item.component.title}` : undefined}
+          >
+            {firstPhoto ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={firstPhoto}
+                alt={item.component.title}
+                style={{ width: PLAN_THUMB, height: PLAN_THUMB }}
+                className="object-cover block"
+              />
+            ) : (
+              <div
+                style={{ width: PLAN_THUMB, height: PLAN_THUMB }}
+                className={['flex items-center justify-center', meta.textColor, 'opacity-50'].join(' ')}
+              >
+                {item.isAdHoc ? (
+                  <span className="w-7 h-7">{CUSTOM_ICON}</span>
+                ) : (
+                  <span className="w-7 h-7">{TYPE_ICONS[item.component.type as ComponentType]}</span>
+                )}
+              </div>
+            )}
+          </button>
+          {extraCount > 0 && (
+            <span className="absolute bottom-0.5 right-0.5 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">
+              +{extraCount}
+            </span>
           )}
         </div>
-        <p className="font-heading text-[15px] text-text-primary leading-tight truncate mt-0.5">
-          {item.component.title}
-        </p>
-        {item.coachNote && (
-          <p className="text-[11px] text-text-muted mt-0.5 truncate">
-            {item.coachNote.split('\n')[0]}
-          </p>
-        )}
-      </button>
 
-      {/* ─── Right-side controls ─────────────────────────────── */}
-      <div className="flex flex-col items-center gap-1.5 flex-shrink-0 -mr-1">
-        <span
-          className="text-text-dim/30 p-1 cursor-grab active:cursor-grabbing"
-          style={{ touchAction: 'none' }}
-          aria-label="Drag to reorder"
-          {...attributes}
-          {...listeners}
-        >
-          <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
-            <circle cx="7" cy="5" r="1.25" />
-            <circle cx="13" cy="5" r="1.25" />
-            <circle cx="7" cy="10" r="1.25" />
-            <circle cx="13" cy="10" r="1.25" />
-            <circle cx="7" cy="15" r="1.25" />
-            <circle cx="13" cy="15" r="1.25" />
-          </svg>
-        </span>
+        {/* ─── Info stack ──────────────────────────────────────── */}
         <button
           type="button"
-          onClick={() => onRemove(item.localId)}
-          className="text-text-dim/30 hover:text-accent-fire transition-colors p-1"
-          aria-label="Remove"
+          onClick={() => onRowTap(item)}
+          className="flex-1 min-w-0 text-left active:opacity-70 transition-opacity"
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
+          <div className="flex items-center gap-1.5 text-[10px] font-heading uppercase tracking-wide">
+            <span className={meta.textColor}>{meta.label}</span>
+            {!item.isAdHoc && item.component.curriculum && (
+              <>
+                <span className="text-text-dim/40">·</span>
+                <span className="text-text-dim truncate">{item.component.curriculum}</span>
+              </>
+            )}
+            {item.durationMinutes != null && (
+              <>
+                <span className="text-text-dim/40">·</span>
+                <span className="text-text-dim">{item.durationMinutes} min</span>
+              </>
+            )}
+          </div>
+          <p className="font-heading text-[15px] text-text-primary leading-tight truncate mt-0.5">
+            {item.component.title}
+          </p>
+          {item.coachNote && (
+            <p className="text-[11px] text-text-muted mt-0.5 truncate">
+              {item.coachNote.split('\n')[0]}
+            </p>
+          )}
         </button>
+
+        {/* ─── Right-side controls ─────────────────────────────── */}
+        <div className="flex flex-col items-center gap-1.5 flex-shrink-0 -mr-1">
+          <span
+            className="text-text-dim/30 p-1 cursor-grab active:cursor-grabbing"
+            style={{ touchAction: 'none' }}
+            aria-label="Drag to reorder"
+            {...attributes}
+            {...listeners}
+          >
+            <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+              <circle cx="7" cy="5" r="1.25" />
+              <circle cx="13" cy="5" r="1.25" />
+              <circle cx="7" cy="10" r="1.25" />
+              <circle cx="13" cy="10" r="1.25" />
+              <circle cx="7" cy="15" r="1.25" />
+              <circle cx="13" cy="15" r="1.25" />
+            </svg>
+          </span>
+          {/* Remove (visible on desktop-hover only; mobile uses swipe) */}
+          <button
+            type="button"
+            onClick={() => onRemove(item.localId)}
+            className="text-text-dim/20 hover:text-accent-fire transition-all p-1 opacity-0 sm:group-hover:opacity-100 focus:opacity-100"
+            aria-label="Remove"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -376,7 +462,6 @@ export default function TodaysPlanClient() {
   // ── Drafts ───────────────────────────────────────────────────────────────────
   const [drafts, setDrafts] = useState<Draft[]>([])
   const activeDraftIdRef = useRef<string | null>(null)
-  const [draftNameValue, setDraftNameValue] = useState('')
 
   // ── Calendar ─────────────────────────────────────────────────────────────────
   const [datesWithPlans, setDatesWithPlans] = useState<Set<string>>(new Set())
@@ -391,7 +476,11 @@ export default function TodaysPlanClient() {
   const [loading, setLoading] = useState(true)
   const [lightbox, setLightbox] = useState<{ photos: string[] } | null>(null)
   const [activeSheet, setActiveSheet] = useState<PlanItem | null>(null)
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving'>('idle')
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Recently-removed plan item (for undo toast)
+  const [removedItem, setRemovedItem] = useState<{ item: PlanItem; index: number } | null>(null)
+  const removedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [showPlanOptions, setShowPlanOptions] = useState(false)
@@ -500,7 +589,9 @@ export default function TodaysPlanClient() {
       setSaveStatus('saving')
       try {
         await updatePlanById(planId, currentItems)
-        setSaveStatus('idle')
+        setSaveStatus('saved')
+        if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
+        savedTimerRef.current = setTimeout(() => setSaveStatus('idle'), 1800)
       } catch (err) {
         setSaveStatus('idle')
         console.error('Auto-save failed:', err)
@@ -542,15 +633,14 @@ export default function TodaysPlanClient() {
     }
     setDrafts(prev => {
       const without = prev.filter(d => d.id !== id)
-      const name = draftNameValue.trim() || undefined
       const updated = [
-        { id, name, items, createdAt: new Date().toISOString() },
+        { id, items, createdAt: new Date().toISOString() },
         ...without,
       ].slice(0, MAX_DRAFTS)
       saveDraftsToStorage(updated)
       return updated
     })
-  }, [items, mounted, editingPlanId, draftNameValue])
+  }, [items, mounted, editingPlanId])
 
   // ── Handlers ──────────────────────────────────────────────────────────────────
 
@@ -598,7 +688,25 @@ export default function TodaysPlanClient() {
   }
 
   function handleRemove(localId: string) {
+    const idx = items.findIndex(i => i.localId === localId)
+    if (idx === -1) return
+    const snapshot = items[idx]
     setItems(prev => prev.filter(i => i.localId !== localId))
+    setRemovedItem({ item: snapshot, index: idx })
+    if (removedTimerRef.current) clearTimeout(removedTimerRef.current)
+    removedTimerRef.current = setTimeout(() => setRemovedItem(null), 4500)
+  }
+
+  function handleUndoRemove() {
+    if (!removedItem) return
+    const { item, index } = removedItem
+    setItems(prev => {
+      const next = [...prev]
+      next.splice(Math.min(index, next.length), 0, item)
+      return next
+    })
+    setRemovedItem(null)
+    if (removedTimerRef.current) clearTimeout(removedTimerRef.current)
   }
 
   function handleDurationChange(localId: string, value: string) {
@@ -634,7 +742,21 @@ export default function TodaysPlanClient() {
 
   // ── View mode handlers ────────────────────────────────────────────────────────
 
-  function handleBackToDashboard() {
+  async function handleBackToDashboard() {
+    // If a debounced save is still pending for an existing plan, flush it
+    // now before navigating away so the coach can trust the back action.
+    if (saveTimer.current && editingPlanId && items.length > 0) {
+      clearTimeout(saveTimer.current)
+      saveTimer.current = null
+      try {
+        setSaveStatus('saving')
+        await updatePlanById(editingPlanId, items)
+      } catch (err) {
+        console.error('Flush-on-back failed:', err)
+      } finally {
+        setSaveStatus('idle')
+      }
+    }
     setViewMode('dashboard')
   }
 
@@ -648,13 +770,18 @@ export default function TodaysPlanClient() {
       setLastAddedPlanId(plan.id)
       setEditingPlanId(plan.id)
       setEditingPlanLabel(formatDisplayDate(date))
-      if (activeDraftIdRef.current) {
+      // Capture draft id BEFORE clearing the ref — React's setDrafts updater
+      // is deferred, so reading the ref inside the updater sees null and the
+      // filter becomes a no-op. This caused the saved plan to also persist
+      // as a draft.
+      const capturedDraftId = activeDraftIdRef.current
+      if (capturedDraftId) {
+        activeDraftIdRef.current = null
         setDrafts(prev => {
-          const next = prev.filter(d => d.id !== activeDraftIdRef.current)
+          const next = prev.filter(d => d.id !== capturedDraftId)
           saveDraftsToStorage(next)
           return next
         })
-        activeDraftIdRef.current = null
       }
       const from = offsetDate(todayIso, -180)
       const to = offsetDate(todayIso, 180)
@@ -732,7 +859,6 @@ export default function TodaysPlanClient() {
     setSaveStatus('idle')
     setCalendarAddedTo(null)
 
-    setDraftNameValue('')
     activeDraftIdRef.current = null
     try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
     setViewMode('dashboard')
@@ -837,11 +963,20 @@ export default function TodaysPlanClient() {
 
         {/* Title */}
         <div className="flex-1 min-w-0">
-          <h1 className="font-heading text-xl text-text-primary leading-none">
+          <h1 className="font-heading text-xl text-text-primary leading-none truncate">
             {viewMode === 'editing' && editingPlanLabel
               ? editingPlanLabel
               : formatSelectedDayLabel(selectedDayIso, todayIso)}
           </h1>
+          {/* Save indicator — only while editing an existing saved plan */}
+          {viewMode === 'editing' && editingPlanId && saveStatus !== 'idle' && (
+            <p className={[
+              'text-[10px] font-heading uppercase tracking-wider leading-none mt-1.5 transition-opacity',
+              saveStatus === 'saving' ? 'text-text-dim' : 'text-accent-green',
+            ].join(' ')}>
+              {saveStatus === 'saving' ? 'Saving…' : '✓ Saved'}
+            </p>
+          )}
         </div>
 
         {/* Right actions */}
@@ -1124,18 +1259,6 @@ export default function TodaysPlanClient() {
             </div>
           )}
 
-          {/* ── Inline draft name (new drafts only) ── */}
-          {!editingPlanId && (
-            <div className="px-4 pt-2 pb-3">
-              <input
-                value={draftNameValue}
-                onChange={e => setDraftNameValue(e.target.value)}
-                placeholder="Name this plan (optional)"
-                className="w-full bg-transparent text-text-primary text-sm font-heading border-b border-bg-border/40 pb-1.5 placeholder:text-text-dim/30 focus:outline-none focus:border-accent-fire/40 transition-colors"
-              />
-            </div>
-          )}
-
           {/* ── Time budget ── */}
           {items.length > 0 && (totalMinutes > 0 || classLength) && (
             <div className="px-4 pt-1 pb-1">
@@ -1230,14 +1353,17 @@ export default function TodaysPlanClient() {
           {items.length > 0 && (
             <div className="px-4 pt-5 pb-2">
               {editingPlanId ? (
-                /* Saved plan: just a subtle options link (changes autosave, back returns to dashboard) */
+                /* Saved plan: subtle bordered pill — findable without being loud */
                 <div className="flex justify-center">
                   <button
                     type="button"
                     onClick={() => setShowPlanOptions(true)}
-                    className="text-xs font-heading text-text-dim/60 hover:text-text-muted transition-colors py-2"
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-bg-border font-heading text-xs uppercase tracking-wider text-text-muted hover:bg-white/5 hover:border-text-dim active:scale-95 transition-all"
                   >
-                    ··· Plan options
+                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                      <circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>
+                    </svg>
+                    Plan options
                   </button>
                 </div>
               ) : (
@@ -1273,6 +1399,24 @@ export default function TodaysPlanClient() {
             </div>
           )}
         </>
+      )}
+
+      {/* ── Undo toast (recently-removed plan item) ── */}
+      {removedItem && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 animate-slide-up">
+          <div className="flex items-center gap-3 bg-bg-card border border-bg-border shadow-card rounded-xl pl-4 pr-2 py-2">
+            <span className="text-sm text-text-muted">
+              Removed <span className="text-text-primary font-heading">{removedItem.item.component.title}</span>
+            </span>
+            <button
+              type="button"
+              onClick={handleUndoRemove}
+              className="px-3 py-1.5 rounded-lg bg-accent-fire/15 text-accent-fire font-heading text-xs uppercase tracking-wider hover:bg-accent-fire/25 active:scale-95 transition-all"
+            >
+              Undo
+            </button>
+          </div>
+        </div>
       )}
 
       {/* ── Modals / portals ── */}
@@ -1315,7 +1459,6 @@ export default function TodaysPlanClient() {
           mode="save"
           todayIso={todayIso}
           datesWithPlans={datesWithPlans}
-          initialTitle={draftNameValue}
           onSaveToCal={async (date, title) => {
             setShowDatePicker(false)
             await handleAddToCalendar(date, title)
