@@ -207,12 +207,8 @@ export function PlanCalendarSheet({
       setBrowsePlans([])
       const plans = await fetchPlansForDate(iso)
       setBrowseLoading(false)
-      if (plans.length === 1) {
-        onLoadPlan(plans[0])
-        setVisible(false)
-        setTimeout(onClose, 300)
-        return
-      }
+      // Always list plans as cards — never auto-load on date tap. Browse = explore,
+      // load requires an explicit card tap.
       setBrowsePlans(plans)
     } else {
       if (selectedIso === iso) resetMonthSelection()
@@ -530,11 +526,13 @@ export function PlanCalendarSheet({
                 </div>
               )}
 
-              {/* Browse mode: multiple plans */}
-              {mode === 'browse' && !browseLoading && browsePlans.length > 1 && (
+              {/* Browse mode: plans for selected date */}
+              {mode === 'browse' && !browseLoading && browsePlans.length > 0 && (
                 <div className="mt-4 pb-6">
                   <p className="text-xs text-text-dim mb-3 text-center">
-                    {browsePlans.length} plans on {formatConfirmDate(selectedIso!)}
+                    {browsePlans.length === 1
+                      ? formatConfirmDate(selectedIso!)
+                      : `${browsePlans.length} plans on ${formatConfirmDate(selectedIso!)}`}
                   </p>
                   <div className="space-y-2">
                     {browsePlans.map(plan => (
@@ -556,7 +554,7 @@ export function PlanCalendarSheet({
               {mode === 'browse' && !browseLoading && browsePlans.length === 0 && !selectedIso && (
                 <div className="mt-4 pb-6">
                   <p className="text-center text-xs text-text-dim py-2">
-                    Tap a highlighted date to load a saved plan
+                    Tap a highlighted date to view saved plans
                   </p>
                   <button type="button" onClick={handleClose}
                     className="mt-1 w-full text-sm text-text-dim/50 hover:text-text-dim transition-colors py-2">
