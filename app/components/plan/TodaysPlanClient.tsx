@@ -746,6 +746,16 @@ export default function TodaysPlanClient() {
     setViewMode('dashboard')
   }
 
+  /** Start a new plan from the dashboard — clean slate, opens picker. */
+  function handleStartNewPlan() {
+    setItems([])
+    setEditingPlanId(null)
+    setEditingPlanLabel(null)
+    try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
+    setViewMode('editing')
+    setShowPicker(true)
+  }
+
   async function handleDeletePlan() {
     if (!editingPlanId) return
     if (saveTimer.current) clearTimeout(saveTimer.current)
@@ -1004,11 +1014,15 @@ export default function TodaysPlanClient() {
 
           {/* ── Planned section ── */}
           <div className="px-4 mt-4">
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-1.5 mb-3">
               <p className="text-[11px] font-heading uppercase tracking-wider text-text-dim">Planned</p>
-              <span className="text-[11px] text-text-dim/50">{formatShortDay(selectedDayIso)}</span>
               {selectedDayPlans.length > 0 && (
-                <span className="ml-auto text-[11px] text-text-dim/50">{selectedDayPlans.length}</span>
+                <>
+                  <span className="text-text-dim/40 text-[11px]">·</span>
+                  <span className="text-[11px] font-heading uppercase tracking-wider text-text-dim/60">
+                    {selectedDayPlans.length}
+                  </span>
+                </>
               )}
             </div>
 
@@ -1021,28 +1035,39 @@ export default function TodaysPlanClient() {
             {!selectedDayLoading && selectedDayPlans.length > 0 && (
               <div className="flex flex-col gap-2">
                 {selectedDayPlans.map(plan => {
-                  const itemCount = (plan.items ?? []).length
+                  const planItems = plan.items ?? []
+                  const itemCount = planItems.length
+                  const totalMin = planItems.reduce((s, i) => s + (i.durationMinutes ?? 0), 0)
                   return (
                     <button
                       key={plan.id}
                       type="button"
                       onClick={() => handleLoadPlan(plan)}
-                      className="w-full text-left bg-bg-card border border-bg-border border-l-4 border-l-accent-green rounded-xl pl-4 pr-10 py-3.5 active:bg-white/5 transition-colors relative"
+                      className="w-full text-left bg-bg-card border border-bg-border border-l-4 border-l-accent-green rounded-xl pl-4 pr-10 py-3 active:bg-white/5 transition-colors relative"
                     >
                       <div className="flex items-center gap-1.5 text-[10px] font-heading uppercase tracking-wide">
                         <span className="text-accent-green">Saved</span>
+                        {totalMin > 0 && (
+                          <>
+                            <span className="text-text-dim/40">·</span>
+                            <span className="text-text-dim">{totalMin} min</span>
+                          </>
+                        )}
+                        {itemCount > 0 && (
+                          <>
+                            <span className="text-text-dim/40">·</span>
+                            <span className="text-text-dim">{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
+                          </>
+                        )}
                         {plan.updated_at && (
                           <>
                             <span className="text-text-dim/40">·</span>
-                            <span className="text-text-dim">{formatSavedAt(plan.updated_at)}</span>
+                            <span className="text-text-dim/60 normal-case tracking-normal">{formatSavedAt(plan.updated_at)}</span>
                           </>
                         )}
                       </div>
                       <p className="font-heading text-[15px] text-text-primary leading-tight mt-0.5 truncate">
                         {autoLabel(plan)}
-                      </p>
-                      <p className="text-[11px] text-text-dim mt-0.5">
-                        {itemCount} component{itemCount !== 1 ? 's' : ''}
                       </p>
                       <svg className="absolute top-1/2 -translate-y-1/2 right-3 w-4 h-4 text-text-dim/40 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
@@ -1055,37 +1080,42 @@ export default function TodaysPlanClient() {
 
             {!selectedDayLoading && selectedDayPlans.length === 0 && (
               <p className="text-xs text-text-dim/50 text-center py-8">
-                {selectedDayIso < todayIso
-                  ? 'Nothing was logged for this day'
-                  : selectedDayIso === todayIso
-                    ? 'No class today'
-                    : 'Nothing scheduled yet'}
+                No plan for this day
               </p>
             )}
           </div>
 
-          {/* ── Start Plan CTA ── */}
+          {/* ── Start Plan CTA ──                                          */}
+          {/* Demoted to outlined/secondary when the day already has saved  */}
+          {/* plan(s), so the saved cards above read as the primary state.  */}
           <div className="px-4 mt-5 pb-2">
-            <button
-              type="button"
-              onClick={() => {
-                // Always start with a clean slate — discard any stale scratchpad
-                setItems([])
-                setEditingPlanId(null)
-                setEditingPlanLabel(null)
-                try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
-                setViewMode('editing')
-                setShowPicker(true)
-              }}
-              className="w-full inline-flex items-center justify-center gap-2 bg-accent-fire text-white font-heading text-base py-4 rounded-2xl shadow-glow-fire active:scale-[0.98] transition-all min-h-[56px]"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-              {selectedDayIso === todayIso
-                ? 'Plan for today'
-                : `Plan for ${formatShortDay(selectedDayIso)}`}
-            </button>
+            {selectedDayPlans.length > 0 ? (
+              <button
+                type="button"
+                onClick={handleStartNewPlan}
+                className="w-full inline-flex items-center justify-center gap-1.5 bg-transparent border border-bg-border text-text-muted hover:border-accent-fire/40 hover:text-text-primary font-heading text-sm py-3 rounded-xl transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                {selectedDayIso === todayIso
+                  ? 'New plan for today'
+                  : `Another plan for ${formatShortDay(selectedDayIso)}`}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleStartNewPlan}
+                className="w-full inline-flex items-center justify-center gap-2 bg-accent-fire text-white font-heading text-base py-4 rounded-2xl shadow-glow-fire active:scale-[0.98] transition-all min-h-[56px]"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                {selectedDayIso === todayIso
+                  ? 'Plan for today'
+                  : `Plan for ${formatShortDay(selectedDayIso)}`}
+              </button>
+            )}
           </div>
 
         </div>

@@ -157,6 +157,8 @@ export function PlanCalendarSheet({
   }, [])
 
   // Load plans when a week day is selected (browse + week view)
+  // Always list plans as cards — never auto-load on passive selection. The week
+  // view is for browsing; explicit tap on a card is required to open a plan.
   useEffect(() => {
     if (mode !== 'browse' || viewMode !== 'week') return
     if (!datesWithPlans.has(selectedWeekIso)) {
@@ -167,13 +169,6 @@ export function PlanCalendarSheet({
     setWeekPlans([])
     fetchPlansForDate(selectedWeekIso).then(plans => {
       setWeekLoading(false)
-      if (plans.length === 1) {
-        // Single plan — load immediately
-        onLoadPlan(plans[0])
-        setVisible(false)
-        setTimeout(onClose, 300)
-        return
-      }
       setWeekPlans(plans)
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
