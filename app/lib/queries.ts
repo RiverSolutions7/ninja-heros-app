@@ -1,41 +1,9 @@
 import { supabase } from './supabase'
 import type {
   ComponentRow,
-  CurriculumRow,
-  SkillRow,
   FolderRow,
-  SkillRecency,
   PlanItem,
 } from './database.types'
-
-// ============================================================
-// Fetch all curriculums (ordered by sort_order, then created_at)
-// ============================================================
-export async function fetchCurriculums(): Promise<CurriculumRow[]> {
-  const { data, error } = await supabase
-    .from('curriculums')
-    .select('*')
-    .order('sort_order')
-    .order('created_at')
-  if (error) throw error
-  return (data ?? []) as CurriculumRow[]
-}
-
-// ============================================================
-// Fetch all skills from the skills table
-// ============================================================
-export async function fetchSkills(ageGroup?: string): Promise<SkillRow[]> {
-  const { data, error } = await supabase
-    .from('skills')
-    .select('*')
-    .order('name')
-  if (error) throw error
-  const rows = data ?? []
-  if (ageGroup) {
-    return rows.filter((r) => r.age_group === ageGroup)
-  }
-  return rows
-}
 
 // ============================================================
 // Fetch all folders
@@ -76,6 +44,49 @@ export async function fetchComponents(type?: string, curriculum?: string): Promi
   const { data, error } = await query
   if (error) throw error
   return (data ?? []) as ComponentRow[]
+}
+
+// ============================================================
+// Component usage — how often and how recently a component has
+// been taught (drawn from saved plans). Source of truth for the
+// "Taught N times / Last used X days ago" identity stats shown
+// on the component detail screen.
+// ============================================================
+export interface ComponentUsage {
+  timesUsed: number
+  lastUsed: string | null
+  daysSince: number | null
+}
+
+export async function fetchComponentUsage(componentId: string): Promise<ComponentUsage> {
+  const { data: plans, error } = await supabase
+    .from('plans')
+    .select('plan_date, items')
+    .not('plan_date', 'is', null)
+    .order('plan_date', { ascending: false })
+  if (error) throw error
+
+  let timesUsed = 0
+  let lastUsed: string | null = null
+  for (const plan of plans ?? []) {
+    const items = (plan.items ?? []) as PlanItem[]
+    const found = items.some((i) => i.component?.id === componentId)
+    if (found) {
+      timesUsed++
+      if (!lastUsed && plan.plan_date) lastUsed = plan.plan_date
+    }
+  }
+
+  let daysSince: number | null = null
+  if (lastUsed) {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const last = new Date(lastUsed)
+    last.setHours(0, 0, 0, 0)
+    daysSince = Math.floor((today.getTime() - last.getTime()) / 86_400_000)
+  }
+
+  return { timesUsed, lastUsed, daysSince }
 }
 
 // ============================================================
@@ -124,66 +135,3 @@ export async function fetchTopComponents(
     .slice(0, limit)
 }
 
-// ============================================================
-// Skill Tracker: compute recency from saved plan history
-// ============================================================
-export async function fetchSkillRecency(ageGroup?: string): Promise<SkillRecency[]> {
-  // Fetch skills and all saved plans in parallel
-  const [skillRows, { data: plans, error: plansError }] = await Promise.all([
-    fetchSkills(ageGroup),
-    supabase
-      .from('plans')
-      .select('plan_date, items')
-      .not('plan_date', 'is', null)
-      .order('plan_date', { ascending: false }),
-  ])
-
-  if (plansError) throw plansError
-
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-
-  // Build a map: skill name → most recent plan_date it appeared in
-  const skillLatest: Record<string, string> = {}
-
-  for (const plan of plans ?? []) {
-    const planDate = plan.plan_date as string
-    const items = (plan.items ?? []) as PlanItem[]
-
-    for (const item of items) {
-      const skills = item.component?.skills ?? []
-      // Filter by curriculum/age group if provided
-      if (ageGroup && item.component?.curriculum !== ageGroup) continue
-      for (const skill of skills) {
-        if (!skillLatest[skill] || planDate > skillLatest[skill]) {
-          skillLatest[skill] = planDate
-        }
-      }
-    }
-  }
-
-  return skillRows
-    .map((row): SkillRecency => {
-      const skill = row.name
-      const lastUsed = skillLatest[skill] ?? null
-      if (!lastUsed) {
-        return { skill, lastUsed: null, daysSince: null, status: 'never' }
-      }
-      const last = new Date(lastUsed)
-      last.setHours(0, 0, 0, 0)
-      const daysSince = Math.floor(
-        (today.getTime() - last.getTime()) / (1000 * 60 * 60 * 24)
-      )
-      const status =
-        daysSince <= 7 ? 'green' : daysSince <= 21 ? 'yellow' : 'red'
-      return { skill, lastUsed, daysSince, status }
-    })
-    .sort((a, b) => {
-      // Most overdue first: never > red (most days) > yellow > green
-      if (a.status === 'never' && b.status !== 'never') return -1
-      if (b.status === 'never' && a.status !== 'never') return 1
-      if (a.daysSince === null) return -1
-      if (b.daysSince === null) return 1
-      return b.daysSince - a.daysSince
-    })
-}
