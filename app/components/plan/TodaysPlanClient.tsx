@@ -311,104 +311,111 @@ function SortablePlanItem({
 
 function ViewPlanItem({
   item,
-  index,
   onPhotoTap,
 }: {
   item: PlanItem
-  index: number
   onPhotoTap: (photos: string[]) => void
 }) {
   const meta = resolveMeta(item)
   const photos = item.isAdHoc ? [] : (item.component.photos ?? []).filter(Boolean)
-  const hasCoachNote = !!item.coachNote
-  const descriptionText = item.coachNote ?? (!item.isAdHoc ? item.component.description : null) ?? null
+  const firstPhoto = photos[0] ?? null
+  const extraCount = photos.length - 1
+  const coachNote = item.coachNote ?? null
+  const libraryDescription = !item.isAdHoc ? item.component.description ?? null : null
 
   return (
-    <li
+    <div
       className={[
-        'px-4 py-4 border-b border-bg-border/50 last:border-b-0 border-l-4',
+        'relative flex items-start gap-3 px-3 py-3 rounded-xl bg-bg-card',
+        'border-l-4',
         meta.border,
       ].join(' ')}
     >
-      {/* Header row: index + title + duration */}
-      <div className="flex items-start gap-2 mb-2.5">
-        <span className="text-[11px] font-heading text-text-dim/40 w-4 text-right flex-shrink-0 tabular-nums mt-1">
-          {index + 1}
-        </span>
-        <div className="flex-1 min-w-0">
-          <p className="font-heading text-[15px] text-text-primary leading-snug">
-            {item.component.title}
-          </p>
-          <div className="flex items-center gap-1 mt-0.5">
-            <span className={['text-[10px] font-heading uppercase tracking-wide flex-shrink-0', meta.textColor].join(' ')}>
-              {meta.label}
-            </span>
-            {!item.isAdHoc && item.component.curriculum && (
-              <>
-                <span className="text-text-dim/30 text-[10px] flex-shrink-0">·</span>
-                <span className="text-[10px] text-text-dim truncate">{item.component.curriculum}</span>
-              </>
-            )}
-          </div>
-        </div>
-        {item.durationMinutes ? (
-          <span className="text-[11px] text-text-dim font-heading flex-shrink-0 mt-1">
-            {item.durationMinutes}m
+      {/* ─── Thumbnail slot ──────────────────────────────────── */}
+      <div className="relative shrink-0 rounded-lg overflow-hidden">
+        <button
+          type="button"
+          onClick={() => firstPhoto && onPhotoTap(photos)}
+          style={{ width: PLAN_THUMB, height: PLAN_THUMB }}
+          className={firstPhoto ? 'cursor-pointer active:opacity-80 transition-opacity block' : 'cursor-default block'}
+          tabIndex={firstPhoto ? 0 : -1}
+          aria-label={firstPhoto ? `View photos of ${item.component.title}` : undefined}
+        >
+          {firstPhoto ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={firstPhoto}
+              alt={item.component.title}
+              style={{ width: PLAN_THUMB, height: PLAN_THUMB }}
+              className="object-cover block"
+            />
+          ) : (
+            <div
+              style={{ width: PLAN_THUMB, height: PLAN_THUMB }}
+              className={['flex items-center justify-center', meta.textColor, 'opacity-50'].join(' ')}
+            >
+              {item.isAdHoc ? (
+                <span className="w-7 h-7">{CUSTOM_ICON}</span>
+              ) : (
+                <span className="w-7 h-7">{TYPE_ICONS[item.component.type as ComponentType]}</span>
+              )}
+            </div>
+          )}
+        </button>
+        {extraCount > 0 && (
+          <span className="absolute bottom-0.5 right-0.5 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">
+            +{extraCount}
           </span>
-        ) : null}
+        )}
       </div>
 
-      {/* Stacked body — full width below header */}
-      <div className="pl-6 space-y-2.5">
-        {/* Photo strip — horizontal scroll, all photos visible */}
-        {photos.length > 0 && (
-          <div className="flex gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-            {photos.map((url, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => onPhotoTap(photos)}
-                className="flex-shrink-0 rounded-xl overflow-hidden active:opacity-80 transition-opacity"
-                aria-label={`View photo ${i + 1} of ${item.component.title}`}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={url}
-                  alt={`${item.component.title} photo ${i + 1}`}
-                  className="w-[90px] h-[90px] object-cover"
-                />
-              </button>
-            ))}
-          </div>
-        )}
-
-
-        {/* Coach note — distinct highlighted block */}
-        {hasCoachNote && descriptionText && (
-          <div className="bg-accent-fire/8 border border-accent-fire/20 rounded-xl px-3 py-2.5">
-            <p className="text-[11px] font-heading uppercase tracking-wide text-accent-fire/60 mb-1">Coach Note</p>
-            <p className="text-[13px] text-text-primary leading-relaxed whitespace-pre-wrap">
-              {descriptionText}
-            </p>
-          </div>
-        )}
-
-        {/* Library description (no coach note) */}
-        {!hasCoachNote && descriptionText && (
-          <p className="text-[13px] text-text-dim leading-relaxed">
-            {descriptionText}
-            </p>
+      {/* ─── Info stack ──────────────────────────────────────── */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 text-[10px] font-heading uppercase tracking-wide">
+          <span className={meta.textColor}>{meta.label}</span>
+          {!item.isAdHoc && item.component.curriculum && (
+            <>
+              <span className="text-text-dim/40">·</span>
+              <span className="text-text-dim truncate">{item.component.curriculum}</span>
+            </>
           )}
+          {item.durationMinutes != null && (
+            <>
+              <span className="text-text-dim/40">·</span>
+              <span className="text-text-dim">{item.durationMinutes} min</span>
+            </>
+          )}
+        </div>
+        <p className="font-heading text-[15px] text-text-primary leading-tight mt-0.5">
+          {item.component.title}
+        </p>
+
+        {/* Coach note — full text, calm styling */}
+        {coachNote && (
+          <div className="mt-2">
+            <p className="text-[10px] font-heading uppercase tracking-wide text-text-dim/60 mb-1">Coach Note</p>
+            <p className="text-[13px] text-text-muted leading-relaxed whitespace-pre-wrap">
+              {coachNote}
+            </p>
+          </div>
+        )}
+
+        {/* Library description — only when there's no coach note */}
+        {!coachNote && libraryDescription && (
+          <p className="text-[12px] text-text-dim leading-relaxed mt-1.5">
+            {libraryDescription}
+          </p>
+        )}
 
         {/* Equipment */}
-        {item.component.equipment && (
-          <p className="text-[12px] text-text-dim">
+        {!item.isAdHoc && item.component.equipment && (
+          <p className="text-[11px] text-text-dim/80 mt-2">
             <span className="font-heading uppercase text-[9px] text-text-dim/50 tracking-wide mr-1">Gear</span>
             {item.component.equipment}
           </p>
         )}
       </div>
-    </li>
+    </div>
   )
 }
 
@@ -423,68 +430,36 @@ function DraftCard({
   onContinue: () => void
   onDiscard: () => void
 }) {
-  const preview = draft.items.slice(0, 5)
-  const extra = draft.items.length - preview.length
+  const count = draft.items.length
 
   return (
-    <div className="bg-bg-card rounded-2xl border border-bg-border p-4">
-      <div className="flex items-start justify-between gap-2 mb-3">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full bg-accent-fire/10 flex items-center justify-center flex-shrink-0">
-            <svg className="w-4 h-4 text-accent-fire" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
-          </div>
-          <div>
-            <p className="font-heading text-sm text-text-primary leading-snug">
-              {draft.name || 'Draft Plan'}
-            </p>
-            <p className="text-[11px] text-text-dim mt-0.5">
-              {draft.items.length} component{draft.items.length !== 1 ? 's' : ''} · {formatDraftTime(draft.createdAt)}
-            </p>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={onDiscard}
-          className="text-text-dim/40 hover:text-text-muted transition-colors flex-shrink-0 p-1 -mr-1 -mt-1"
-          aria-label="Discard draft"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-      <div className="flex items-center gap-1.5 mb-4 flex-wrap">
-        {preview.map((item) => {
-          const meta = resolveMeta(item)
-          const photo = !item.isAdHoc ? (item.component.photos?.[0] ?? null) : null
-          const icon = item.isAdHoc ? CUSTOM_ICON : TYPE_ICONS[item.component.type as ComponentType]
-          return (
-            <div key={item.localId} className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0">
-              {photo ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={photo} alt={item.component.title} className="w-full h-full object-cover" />
-              ) : (
-                <div className={['w-full h-full flex items-center justify-center', meta.placeholderBg].join(' ')}>
-                  <span className={['w-3.5 h-3.5', meta.textColor].join(' ')}>
-                    {icon}
-                  </span>
-                </div>
-              )}
-            </div>
-          )
-        })}
-        {extra > 0 && (
-          <span className="text-[11px] text-text-dim/60 ml-0.5">+{extra}</span>
-        )}
-      </div>
+    <div className="relative">
       <button
         type="button"
         onClick={onContinue}
-        className="w-full bg-accent-fire/10 border border-accent-fire/30 text-accent-fire font-heading text-sm py-2.5 rounded-xl active:scale-[0.98] transition-all"
+        className="w-full text-left bg-bg-card border border-bg-border border-l-4 border-l-accent-fire rounded-xl pl-4 pr-12 py-3.5 active:bg-white/5 transition-colors"
       >
-        Continue Editing
+        <div className="flex items-center gap-1.5 text-[10px] font-heading uppercase tracking-wide">
+          <span className="text-accent-fire">Draft</span>
+          <span className="text-text-dim/40">·</span>
+          <span className="text-text-dim">Tap to continue</span>
+        </div>
+        <p className="font-heading text-[15px] text-text-primary leading-tight mt-0.5 truncate">
+          {draft.name || 'Untitled plan'}
+        </p>
+        <p className="text-[11px] text-text-dim mt-0.5">
+          {count} component{count !== 1 ? 's' : ''} · {formatDraftTime(draft.createdAt)}
+        </p>
+      </button>
+      <button
+        type="button"
+        onClick={onDiscard}
+        className="absolute top-2 right-2 text-text-dim/40 hover:text-accent-fire transition-colors p-1.5"
+        aria-label="Discard draft"
+      >
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
       </button>
     </div>
   )
@@ -1164,30 +1139,37 @@ export default function TodaysPlanClient() {
             )}
 
             {!selectedDayLoading && selectedDayPlans.length > 0 && (
-              <div className="space-y-2">
-                {selectedDayPlans.map(plan => (
-                  <button
-                    key={plan.id}
-                    type="button"
-                    onClick={() => handleLoadPlan(plan)}
-                    className="w-full text-left bg-accent-fire/10 border border-accent-fire/25 rounded-2xl px-4 py-3.5 active:bg-accent-fire/20 transition-colors"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="font-heading text-sm text-text-primary leading-snug truncate flex-1">
+              <div className="flex flex-col gap-2">
+                {selectedDayPlans.map(plan => {
+                  const itemCount = (plan.items ?? []).length
+                  return (
+                    <button
+                      key={plan.id}
+                      type="button"
+                      onClick={() => handleLoadPlan(plan)}
+                      className="w-full text-left bg-bg-card border border-bg-border border-l-4 border-l-accent-green rounded-xl pl-4 pr-10 py-3.5 active:bg-white/5 transition-colors relative"
+                    >
+                      <div className="flex items-center gap-1.5 text-[10px] font-heading uppercase tracking-wide">
+                        <span className="text-accent-green">Saved</span>
+                        {plan.updated_at && (
+                          <>
+                            <span className="text-text-dim/40">·</span>
+                            <span className="text-text-dim">{formatSavedAt(plan.updated_at)}</span>
+                          </>
+                        )}
+                      </div>
+                      <p className="font-heading text-[15px] text-text-primary leading-tight mt-0.5 truncate">
                         {autoLabel(plan)}
                       </p>
-                      <svg className="w-4 h-4 text-accent-fire flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <p className="text-[11px] text-text-dim mt-0.5">
+                        {itemCount} component{itemCount !== 1 ? 's' : ''}
+                      </p>
+                      <svg className="absolute top-1/2 -translate-y-1/2 right-3 w-4 h-4 text-text-dim/40 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                       </svg>
-                    </div>
-                    <p className="text-[11px] text-text-dim mt-0.5">
-                      {(plan.items ?? []).length} component{(plan.items ?? []).length !== 1 ? 's' : ''}
-                      {plan.updated_at && (
-                        <span className="text-text-dim/50"> · saved {formatSavedAt(plan.updated_at)}</span>
-                      )}
-                    </p>
-                  </button>
-                ))}
+                    </button>
+                  )
+                })}
               </div>
             )}
 
@@ -1208,7 +1190,7 @@ export default function TodaysPlanClient() {
               <div className="mx-4 mt-5 border-t border-bg-border/40" />
               <div className="px-4 mt-5">
                 <p className="text-[11px] font-heading uppercase tracking-wider text-text-dim mb-3">Drafts</p>
-                <div className="space-y-3">
+                <div className="flex flex-col gap-2">
                   {drafts.map(draft => (
                     <DraftCard
                       key={draft.id}
@@ -1359,16 +1341,15 @@ export default function TodaysPlanClient() {
           {/* ── Plan items ── */}
           {items.length > 0 && (
             planViewMode === 'view' ? (
-              <ul className="mx-4 bg-bg-card rounded-2xl overflow-hidden border border-bg-border">
-                {items.map((item, idx) => (
+              <div className="mx-4 flex flex-col gap-2">
+                {items.map((item) => (
                   <ViewPlanItem
                     key={item.localId}
                     item={item}
-                    index={idx}
                     onPhotoTap={photos => setLightbox({ photos })}
                   />
                 ))}
-              </ul>
+              </div>
             ) : (
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                 <SortableContext items={items.map(i => i.localId)} strategy={verticalListSortingStrategy}>
