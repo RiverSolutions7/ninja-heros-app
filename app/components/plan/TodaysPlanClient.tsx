@@ -459,12 +459,8 @@ export default function TodaysPlanClient() {
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [showPlanOptions, setShowPlanOptions] = useState(false)
   const [showMoveCalendar, setShowMoveCalendar] = useState(false)
-  const [classLength, setClassLength] = useState<number | null>(null)
-  const [showLengthPicker, setShowLengthPicker] = useState(false)
 
   // ── Derived ──────────────────────────────────────────────────────────────────
-  const totalMinutes = items.reduce((s, i) => s + (i.durationMinutes ?? 0), 0)
-  const isOverBudget = !!(classLength && totalMinutes > classLength)
   const stationCount = items.filter(i => !i.isAdHoc && i.component.type === 'station').length
   const gameCount = items.filter(i => !i.isAdHoc && i.component.type === 'game').length
   const customCount = items.filter(i => i.isAdHoc).length
@@ -510,12 +506,6 @@ export default function TodaysPlanClient() {
       }
     } catch { /* ignore */ }
 
-    // Class length
-    try {
-      const stored = parseInt(localStorage.getItem('ninja-class-length') || '', 10)
-      if (stored > 0) setClassLength(stored)
-    } catch { /* ignore */ }
-
     // Calendar dots
     const from = offsetDate(todayIso, -180)
     const to = offsetDate(todayIso, 180)
@@ -541,14 +531,6 @@ export default function TodaysPlanClient() {
       })
       .catch(() => setSelectedDayLoading(false))
   }, [selectedDayIso, mounted, datesWithPlans])
-
-  // Persist class length
-  useEffect(() => {
-    try {
-      if (classLength) localStorage.setItem('ninja-class-length', String(classLength))
-      else localStorage.removeItem('ninja-class-length')
-    } catch { /* ignore */ }
-  }, [classLength])
 
   // Auto-save to Supabase when editing a calendar plan
   const debouncedSave = useCallback((currentItems: PlanItem[], planId: string) => {
@@ -1147,63 +1129,6 @@ export default function TodaysPlanClient() {
                 </svg>
                 Add component
               </button>
-            </div>
-          )}
-
-          {/* ── Time budget ── */}
-          {items.length > 0 && (totalMinutes > 0 || classLength) && (
-            <div className="px-4 pt-1 pb-1">
-              <div className="flex items-center gap-2">
-                <svg className="w-3.5 h-3.5 text-text-dim flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <button
-                  type="button"
-                  onClick={() => setShowLengthPicker(v => !v)}
-                  className={[
-                    'text-xs font-heading underline underline-offset-2',
-                    isOverBudget ? 'text-accent-fire' : classLength ? 'text-text-muted' : 'text-text-dim',
-                  ].join(' ')}
-                >
-                  {classLength ? `${totalMinutes} / ${classLength} min` : `${totalMinutes} min · set length`}
-                </button>
-                {classLength && (
-                  <div className="flex-1 h-1 bg-bg-border rounded-full overflow-hidden">
-                    <div
-                      className={['h-full rounded-full transition-all', isOverBudget ? 'bg-accent-fire' : 'bg-accent-green'].join(' ')}
-                      style={{ width: `${Math.min(100, (totalMinutes / classLength) * 100)}%` }}
-                    />
-                  </div>
-                )}
-              </div>
-              {showLengthPicker && (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {[30, 45, 60, 90].map(min => (
-                    <button
-                      key={min}
-                      type="button"
-                      onClick={() => { setClassLength(min); setShowLengthPicker(false) }}
-                      className={[
-                        'px-3 py-1.5 rounded-lg border text-xs font-heading transition-all active:scale-95',
-                        classLength === min
-                          ? 'border-accent-fire/60 text-accent-fire bg-accent-fire/10'
-                          : 'border-bg-border text-text-muted hover:border-accent-fire/40 hover:text-accent-fire',
-                      ].join(' ')}
-                    >
-                      {min} min
-                    </button>
-                  ))}
-                  {classLength && (
-                    <button
-                      type="button"
-                      onClick={() => { setClassLength(null); setShowLengthPicker(false) }}
-                      className="px-3 py-1.5 rounded-lg border border-bg-border text-xs font-heading text-text-dim hover:border-text-muted hover:text-text-muted transition-all active:scale-95"
-                    >
-                      No length
-                    </button>
-                  )}
-                </div>
-              )}
             </div>
           )}
 
