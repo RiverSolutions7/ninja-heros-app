@@ -13,7 +13,7 @@ import { notFound } from 'next/navigation'
 import { fetchPlan } from '@/app/lib/planQueries'
 import type { Metadata } from 'next'
 import type { PlanItem, PlanRow } from '@/app/lib/database.types'
-import ComponentCard from '@/app/components/library/ComponentCard'
+import ShareItem from './ShareItem'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -122,25 +122,10 @@ export default async function SharePlanPage({ params }: Props) {
 
       {/* ── Items ──────────────────────────────────────────────── */}
       {items.length > 0 && (
-        <div className="mt-9 px-4 max-w-2xl mx-auto flex flex-col gap-3">
-          {items.map((item) => {
-            // Prefer the plan-session duration (what this class actually runs)
-            // over the library default — outsiders need to see today's timing.
-            const displayComponent = {
-              ...item.component,
-              duration_minutes: item.durationMinutes ?? item.component.duration_minutes,
-            }
-            return (
-              <div key={item.localId} className="flex flex-col">
-                <ComponentCard component={displayComponent} />
-                {item.coachNote && (
-                  <p className="text-[14px] text-text-primary/85 leading-[1.7] whitespace-pre-line mt-3 px-4 italic">
-                    {item.coachNote}
-                  </p>
-                )}
-              </div>
-            )
-          })}
+        <div className="mt-9 px-4 max-w-2xl mx-auto flex flex-col gap-4">
+          {items.map((item) => (
+            <ShareItem key={item.localId} item={item} />
+          ))}
         </div>
       )}
 
