@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { PlanRow } from '@/app/lib/database.types'
 import { fetchPlansForDate } from '@/app/lib/planQueries'
+import SavedPlanRow from './SavedPlanRow'
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -52,22 +53,7 @@ function formatWeekRange(weekStart: Date): string {
   return `${startStr} – ${endStr}`
 }
 
-function formatSavedAt(ts: string): string {
-  return new Date(ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-}
-
-/** Auto-generate a readable label from component types when plan has no title. */
-function autoLabel(plan: PlanRow): string {
-  if (plan.title) return plan.title
-  const items = plan.items ?? []
-  const stations = items.filter(i => i.component.type === 'station').length
-  const games = items.filter(i => i.component.type === 'game').length
-  const parts = [
-    stations > 0 && `${stations} station${stations > 1 ? 's' : ''}`,
-    games > 0 && `${games} game${games > 1 ? 's' : ''}`,
-  ].filter(Boolean) as string[]
-  return parts.length > 0 ? parts.join(' · ') : 'Class Plan'
-}
+// formatSavedAt + autoLabel now live in SavedPlanRow (shared with dashboard)
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -99,32 +85,9 @@ interface PlanCalendarSheetProps {
 
 type ViewMode = 'week' | 'month'
 
-// ── Plan card used in both week and month browse views ────────────────────────
-
-function PlanCard({ plan, onLoad }: { plan: PlanRow; onLoad: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onLoad}
-      className="w-full text-left bg-accent-fire/10 border border-accent-fire/25 rounded-2xl px-4 py-3.5 active:bg-accent-fire/20 transition-colors"
-    >
-      <div className="flex items-center justify-between gap-2">
-        <p className="font-heading text-sm text-text-primary leading-snug truncate flex-1">
-          {autoLabel(plan)}
-        </p>
-        <svg className="w-4 h-4 text-accent-fire flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
-      </div>
-      <p className="text-[11px] text-text-dim mt-0.5">
-        {(plan.items ?? []).length} component{(plan.items ?? []).length !== 1 ? 's' : ''}
-        {plan.updated_at && (
-          <span className="text-text-dim/50"> · saved {formatSavedAt(plan.updated_at)}</span>
-        )}
-      </p>
-    </button>
-  )
-}
+// Calendar-browse list uses the shared SavedPlanRow (imported at top).
+// Keeping the one-place-for-everything card grammar in lockstep with the
+// dashboard so the same conceptual object doesn't render two ways.
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -399,7 +362,7 @@ export function PlanCalendarSheet({
                     </p>
                   )}
                   {weekPlans.map(plan => (
-                    <PlanCard key={plan.id} plan={plan} onLoad={() => handleLoadPlan(plan)} />
+                    <SavedPlanRow key={plan.id} plan={plan} onOpen={() => handleLoadPlan(plan)} />
                   ))}
                 </div>
               )}
@@ -550,10 +513,10 @@ export function PlanCalendarSheet({
                   </p>
                   <div className="space-y-2">
                     {browsePlans.map(plan => (
-                      <PlanCard
+                      <SavedPlanRow
                         key={plan.id}
                         plan={plan}
-                        onLoad={() => { onLoadPlan(plan); setVisible(false); setTimeout(onClose, 300) }}
+                        onOpen={() => { onLoadPlan(plan); setVisible(false); setTimeout(onClose, 300) }}
                       />
                     ))}
                   </div>

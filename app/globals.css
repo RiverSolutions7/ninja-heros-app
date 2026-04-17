@@ -58,6 +58,23 @@
 }
 
 @layer components {
+  /* ─── Typography utilities ─────────────────────────────────────────────
+   * Repeat-offender text patterns extracted so a coach's eye sees the
+   * SAME metadata treatment everywhere (SAVED · 45 MIN · 3 ITEMS) and the
+   * SAME section label style everywhere (PHOTOS, DESCRIPTION, SKILLS).
+   * Use .meta-row for inline metadata strips above a title; use the
+   * nested .sep span for the dot separator so spacing stays consistent.
+   */
+  .meta-row {
+    @apply flex flex-wrap items-center gap-1.5 text-[10px] font-heading uppercase tracking-wide;
+  }
+  .meta-row .sep {
+    @apply text-text-dim/40;
+  }
+  .section-label {
+    @apply text-[11px] font-heading uppercase tracking-[0.14em] text-text-dim;
+  }
+
   /* Card base — elevated with subtle shadow */
   .card {
     @apply bg-bg-card rounded-2xl border border-bg-border shadow-card;

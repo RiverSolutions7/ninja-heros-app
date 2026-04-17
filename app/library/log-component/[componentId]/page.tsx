@@ -25,7 +25,7 @@ function XIcon() {
 
 function SectionLabel({ label, className = '' }: { label: string; className?: string }) {
   return (
-    <p className={['text-[11px] font-heading uppercase tracking-[0.14em] text-text-dim mt-7 mb-2', className].join(' ')}>
+    <p className={['section-label mt-7 mb-2', className].join(' ')}>
       {label}
     </p>
   )
@@ -304,7 +304,7 @@ export default function EditComponentPage() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
         </Link>
-        <p className="text-[11px] font-heading uppercase tracking-[0.14em] text-text-dim mb-1">Editing</p>
+        <p className="section-label mb-1">Editing</p>
         <h1 className="font-heading text-2xl text-text-primary leading-tight truncate">
           {title || typeLabel}
         </h1>

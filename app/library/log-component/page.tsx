@@ -28,7 +28,7 @@ function XIcon() {
 
 function SectionLabel({ label, className = '' }: { label: string; className?: string }) {
   return (
-    <p className={['text-[11px] font-heading uppercase tracking-[0.14em] text-text-dim mt-7 mb-2', className].join(' ')}>
+    <p className={['section-label mt-7 mb-2', className].join(' ')}>
       {label}
     </p>
   )
