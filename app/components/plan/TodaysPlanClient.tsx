@@ -751,6 +751,13 @@ export default function TodaysPlanClient() {
         await updatePlanById(planId, currentItems)
         // Successful commit — these items are now in sync with the DB.
         dirtyRef.current = false
+        // Keep the dashboard's cached plan list in sync. Without this, the
+        // saved card on the dashboard still holds the pre-edit items, so
+        // re-tapping it loads stale data and the coach's changes look like
+        // they were lost.
+        setSelectedDayPlans(prev =>
+          prev.map(p => (p.id === planId ? { ...p, items: currentItems } : p))
+        )
         setSaveStatus('saved')
         if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
         savedTimerRef.current = setTimeout(() => setSaveStatus('idle'), 1800)
@@ -883,17 +890,28 @@ export default function TodaysPlanClient() {
   async function handleBackToDashboard() {
     // If a debounced save is still pending for an existing plan, flush it
     // now before navigating away so the coach can trust the back action.
-    if (saveTimer.current && editingPlanId && items.length > 0) {
+    const planId = editingPlanId
+    const snapshot = items
+    if (saveTimer.current && planId && snapshot.length > 0) {
       clearTimeout(saveTimer.current)
       saveTimer.current = null
       try {
         setSaveStatus('saving')
-        await updatePlanById(editingPlanId, items)
+        await updatePlanById(planId, snapshot)
       } catch (err) {
         console.error('Flush-on-back failed:', err)
       } finally {
         setSaveStatus('idle')
       }
+    }
+    // Even if no flush was needed, keep the dashboard cache in sync — the
+    // last committed auto-save already updated selectedDayPlans, but this is
+    // a cheap guard against any skew if the in-flight state differs from what
+    // was most recently saved.
+    if (planId && snapshot.length > 0) {
+      setSelectedDayPlans(prev =>
+        prev.map(p => (p.id === planId ? { ...p, items: snapshot } : p))
+      )
     }
     setViewMode('dashboard')
   }
