@@ -25,6 +25,7 @@ import ComponentPickerModal from './ComponentPickerModal'
 import { PhotoLightbox } from '@/app/components/ui/PhotoLightbox'
 import BottomSheet from '@/app/components/ui/BottomSheet'
 import ConfirmSheet from '@/app/components/ui/ConfirmSheet'
+import { useToast } from '@/app/components/ui/Toast'
 import { PlanItemSheet } from './PlanItemSheet'
 import { PlanCalendarSheet } from './PlanCalendarSheet'
 import SavedPlanRow from './SavedPlanRow'
@@ -442,7 +443,9 @@ export default function TodaysPlanClient() {
 
   // ── Calendar ─────────────────────────────────────────────────────────────────
   const [datesWithPlans, setDatesWithPlans] = useState<Set<string>>(new Set())
-  const [calendarAddedTo, setCalendarAddedTo] = useState<string | null>(null)
+
+  // ── Toast (shared provider at app root) ─────────────────────────────────────
+  const toast = useToast()
 
   // ── UI ───────────────────────────────────────────────────────────────────────
   const [showPicker, setShowPicker] = useState(false)
@@ -750,9 +753,8 @@ export default function TodaysPlanClient() {
       setWeekStart(getWeekStart(date))
       setViewMode('dashboard')
 
-      // Floating confirmation toast — shown regardless of view
-      setCalendarAddedTo(formatDisplayDate(date))
-      setTimeout(() => setCalendarAddedTo(null), 3500)
+      // Floating confirmation toast (rendered by the app-root ToastProvider)
+      toast.success(`Added to ${formatDisplayDate(date)}`, 3500)
     } catch (err) {
       console.error('Add to calendar failed:', err)
       setSaveStatus('idle')
@@ -769,7 +771,6 @@ export default function TodaysPlanClient() {
     // Freshly-loaded from DB — no pending edits to save.
     dirtyRef.current = false
     setSaveStatus('idle')
-    setCalendarAddedTo(null)
     setLastAddedPlanId(null)
 
     try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
@@ -825,7 +826,6 @@ export default function TodaysPlanClient() {
     setEditingPlanLabel(null)
     setLastAddedPlanId(null)
     setSaveStatus('idle')
-    setCalendarAddedTo(null)
     dirtyRef.current = false
 
     try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
@@ -1291,19 +1291,7 @@ export default function TodaysPlanClient() {
         </>
       )}
 
-      {/* ── Save-to-calendar confirmation toast (top-level, any view) ── */}
-      {calendarAddedTo && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 animate-slide-up">
-          <div className="flex items-center gap-2.5 bg-bg-card border border-accent-green/30 shadow-card rounded-xl px-4 py-2.5">
-            <svg className="w-4 h-4 text-accent-green flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-            <span className="text-sm text-text-primary">
-              Added to <span className="font-heading">{calendarAddedTo}</span>
-            </span>
-          </div>
-        </div>
-      )}
+      {/* Save-to-calendar confirmation toast lives in the app-root ToastProvider */}
 
       {/* ── Undo toast (recently-removed plan item) ── */}
       {removedItem && (

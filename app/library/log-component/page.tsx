@@ -13,6 +13,7 @@ import SkillChip from '@/app/components/skills/SkillChip'
 import Toast from '@/app/components/ui/Toast'
 import MediaStrip, { type MediaItem } from '@/app/components/ui/MediaStrip'
 import MediaAddSheet from '@/app/components/ui/MediaAddSheet'
+import Button from '@/app/components/ui/Button'
 import ComponentDetailSheet from '@/app/components/library/ComponentDetailSheet'
 import { useVoiceNote } from '@/app/hooks/useVoiceNote'
 
@@ -657,18 +658,9 @@ export default function LogComponentPage() {
 
       {/* Save */}
       <div className="mt-8">
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full inline-flex items-center justify-center gap-2 bg-accent-fire text-white font-heading text-base py-4 rounded-2xl shadow-glow-fire active:scale-[0.98] transition-all min-h-[56px] disabled:opacity-50"
-        >
-          {submitting ? (
-            <>
-              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              Saving…
-            </>
-          ) : 'Save Component'}
-        </button>
+        <Button type="submit" variant="primary" size="lg" block loading={submitting}>
+          {submitting ? 'Saving…' : 'Save Component'}
+        </Button>
       </div>
 
       {/* Media add sheet */}

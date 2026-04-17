@@ -3,6 +3,7 @@ import { Russo_One, Nunito } from 'next/font/google'
 import './globals.css'
 import TabNav from './components/layout/TabNav'
 import DevErrorForwarder from './components/DevErrorForwarder'
+import { ToastProvider } from './components/ui/Toast'
 
 const russoOne = Russo_One({
   weight: '400',
@@ -42,10 +43,12 @@ export default function RootLayout({
     >
       <body className="bg-bg-primary font-body text-text-primary min-h-screen">
         {process.env.NODE_ENV !== 'production' && <DevErrorForwarder />}
-        <div className="max-w-2xl mx-auto px-4 pb-24 pt-4">
-          {children}
-        </div>
-        <TabNav />
+        <ToastProvider>
+          <div className="max-w-2xl mx-auto px-4 pb-24 pt-4">
+            {children}
+          </div>
+          <TabNav />
+        </ToastProvider>
       </body>
     </html>
   )

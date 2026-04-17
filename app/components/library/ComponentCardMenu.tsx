@@ -8,6 +8,7 @@ import type { ComponentRow } from '@/app/lib/database.types'
 import BottomSheet from '@/app/components/ui/BottomSheet'
 import ConfirmSheet from '@/app/components/ui/ConfirmSheet'
 import MenuList, { type MenuItem } from '@/app/components/ui/MenuList'
+import { useToast } from '@/app/components/ui/Toast'
 import useIsMobile from '@/app/hooks/useIsMobile'
 
 interface ComponentCardMenuProps {
@@ -40,8 +41,8 @@ const TRASH_ICON = (
 export default function ComponentCardMenu({ component }: ComponentCardMenuProps) {
   const router = useRouter()
   const isMobile = useIsMobile()
+  const toast = useToast()
   const [open, setOpen] = useState(false)
-  const [toast, setToast] = useState<string | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -93,8 +94,7 @@ export default function ComponentCardMenu({ component }: ComponentCardMenuProps)
     }
     try {
       await navigator.clipboard.writeText(url)
-      setToast('Link copied')
-      setTimeout(() => setToast(null), 2200)
+      toast.success('Link copied')
     } catch {
       /* silent fail */
     }
@@ -192,15 +192,7 @@ export default function ComponentCardMenu({ component }: ComponentCardMenuProps)
         onClose={() => setShowDeleteConfirm(false)}
       />
 
-      {toast && typeof window !== 'undefined' && createPortal(
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-2 bg-bg-card border border-bg-border rounded-xl px-4 py-2.5 shadow-2xl text-sm text-text-primary whitespace-nowrap pointer-events-none">
-          <svg className="w-4 h-4 text-accent-green flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-          </svg>
-          {toast}
-        </div>,
-        document.body
-      )}
+      {/* Toast is rendered by the app-root ToastProvider (useToast above). */}
     </>
   )
 }
