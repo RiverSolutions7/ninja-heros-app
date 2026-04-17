@@ -26,7 +26,7 @@ import { PhotoLightbox } from '@/app/components/ui/PhotoLightbox'
 import BottomSheet from '@/app/components/ui/BottomSheet'
 import ConfirmSheet from '@/app/components/ui/ConfirmSheet'
 import { useToast } from '@/app/components/ui/Toast'
-import useSwipeReveal, { SWIPE_ROW_STYLE } from '@/app/hooks/useSwipeReveal'
+import useLongPress, { LONG_PRESS_STYLE } from '@/app/hooks/useLongPress'
 import { PlanItemSheet } from './PlanItemSheet'
 import { PlanCalendarSheet } from './PlanCalendarSheet'
 import SavedPlanRow from './SavedPlanRow'
@@ -155,7 +155,6 @@ function TypePlaceholder({ type, className }: { type: ComponentType; className?:
 // ── Sortable plan item (card design — matches Library Phase 2A) ─────────────
 
 const PLAN_THUMB = 72
-const REVEAL_WIDTH = 88          // width of the delete panel behind the row
 
 function SortablePlanItem({
   item,
@@ -180,19 +179,17 @@ function SortablePlanItem({
     opacity: isDragging ? 0.5 : 1,
   }
 
-  // Shared iOS-grade swipe gesture. `shouldSkip` lets dnd-kit's drag handle
-  // still steal the gesture — otherwise the row swipes instead of reordering.
-  const swipe = useSwipeReveal({
-    revealWidth: REVEAL_WIDTH,
+  // Long-press → confirmation sheet. `shouldSkip` lets dnd-kit's drag handle
+  // keep its own gesture without our long-press timer interfering.
+  const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false)
+  const longPress = useLongPress({
+    onLongPress: () => setRemoveConfirmOpen(true),
     shouldSkip: (target) => !!target.closest('[data-drag-handle]'),
   })
 
-  function handleDeleteTap() {
-    // Animate the row fully off-screen, then fire onRemove. The parent shows
-    // an undo toast — the coach can never lose a component accidentally.
-    swipe.close() // kick the animation into motion
-    // (use the hook's animating state; the parent triggers real removal after)
-    setTimeout(() => onRemove(item.localId), 180)
+  function commitRemove() {
+    setRemoveConfirmOpen(false)
+    onRemove(item.localId)
   }
 
   return (
@@ -201,49 +198,10 @@ function SortablePlanItem({
       style={style}
       className="relative rounded-xl overflow-hidden group"
     >
-      {/* ─── Delete button (revealed behind the row) ─────────────────────── */}
-      <button
-        type="button"
-        onClick={handleDeleteTap}
-        style={{ width: REVEAL_WIDTH }}
-        className={[
-          'absolute inset-y-0 right-0 flex flex-col items-center justify-center gap-1',
-          'bg-accent-fire text-white font-heading text-[10px] uppercase tracking-wider',
-          'active:bg-accent-fire/90 transition-colors',
-          swipe.isRevealed ? 'pointer-events-auto' : 'pointer-events-none',
-        ].join(' ')}
-        aria-label={`Delete ${item.component.title}`}
-        tabIndex={swipe.isRevealed ? 0 : -1}
-      >
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" />
-        </svg>
-        Delete
-      </button>
-
-      {/* ─── Foreground row (translates with swipe) ─────────────────────── */}
+      {/* ─── Foreground row ─────────────────────────────────────────── */}
       <div
-        {...swipe.handlers}
-        onClickCapture={(e) => {
-          // Swallow the click that fires at the end of a claimed swipe gesture.
-          if (swipe.consumeClickIfSwiped()) {
-            e.stopPropagation()
-            e.preventDefault()
-            return
-          }
-          // When revealed, a tap on the foreground closes the swipe instead
-          // of firing child handlers (don't open the detail sheet).
-          if (swipe.isRevealed) {
-            e.stopPropagation()
-            e.preventDefault()
-            swipe.close()
-          }
-        }}
-        style={{
-          ...SWIPE_ROW_STYLE,
-          transform: `translateX(${swipe.swipeDx}px)`,
-          transition: swipe.swipeAnimating ? 'transform 220ms cubic-bezier(0.32, 0.72, 0, 1)' : 'none',
-        }}
+        {...longPress}
+        style={LONG_PRESS_STYLE}
         className={[
           'relative flex items-center gap-3 px-3 py-2.5 rounded-xl bg-bg-card',
           'border-l-4',
@@ -338,7 +296,7 @@ function SortablePlanItem({
               <circle cx="13" cy="15" r="1.25" />
             </svg>
           </span>
-          {/* Remove (visible on desktop-hover only; mobile uses swipe) */}
+          {/* Remove (visible on desktop-hover only; mobile uses long-press) */}
           <button
             type="button"
             onClick={() => onRemove(item.localId)}
@@ -351,6 +309,19 @@ function SortablePlanItem({
           </button>
         </div>
       </div>
+
+      {/* Long-press → confirm removal (mobile pattern). Desktop uses the
+          hover × button above. */}
+      <ConfirmSheet
+        visible={removeConfirmOpen}
+        title={`Remove "${item.component.title}"?`}
+        body="You can undo this from the toast that appears after."
+        confirmLabel="Remove"
+        workingLabel="Removing…"
+        destructive
+        onConfirm={commitRemove}
+        onClose={() => setRemoveConfirmOpen(false)}
+      />
     </div>
   )
 }
@@ -728,6 +699,27 @@ export default function TodaysPlanClient() {
     setShowPlanOptions(true)
   }
 
+  // Flat action handlers used by the long-press menu on SavedPlanRow.
+  // Each one stashes the plan ID + sets the right downstream sheet so the
+  // existing handleMovePlan / handleAddToCalendar / handleDeletePlan
+  // handlers keep working untouched.
+
+  function handleMoveFromDashboard(plan: PlanRow) {
+    setEditingPlanId(plan.id)
+    setEditingPlanLabel(plan.plan_date ? formatDisplayDate(plan.plan_date) : null)
+    optionsFromDashboardRef.current = true
+    setShowMoveCalendar(true)
+  }
+
+  function handleDuplicateFromDashboard(plan: PlanRow) {
+    setEditingPlanId(plan.id)
+    setEditingPlanLabel(plan.plan_date ? formatDisplayDate(plan.plan_date) : null)
+    // Seed items so the duplicate save-to-calendar picks up the plan's content.
+    setItems(plan.items ?? [])
+    optionsFromDashboardRef.current = true
+    setShowDatePicker(true)
+  }
+
   function handleDeleteFromDashboard(plan: PlanRow) {
     setEditingPlanId(plan.id)
     setEditingPlanLabel(plan.plan_date ? formatDisplayDate(plan.plan_date) : null)
@@ -1066,8 +1058,9 @@ export default function TodaysPlanClient() {
                     key={plan.id}
                     plan={plan}
                     onOpen={() => handleLoadPlan(plan)}
-                    swipeActions={{
-                      onOptions: () => handleOptionsFromDashboard(plan),
+                    actions={{
+                      onMove: () => handleMoveFromDashboard(plan),
+                      onDuplicate: () => handleDuplicateFromDashboard(plan),
                       onDelete: () => handleDeleteFromDashboard(plan),
                     }}
                   />

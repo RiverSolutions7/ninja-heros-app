@@ -1,20 +1,26 @@
 // ============================================================
-// SavedPlanRow — the single canonical visual for a saved plan.
+// SavedPlanRow — canonical visual for a saved plan.
 // ------------------------------------------------------------
-// Previously this same object rendered two ways: the dashboard's
-// swipe-revealing green-stripe card and the calendar-browse
-// fire-tinted pill. Design inconsistency is the product's
-// largest "AI-toy" tell — one source of truth now.
+// Tap → open the plan for editing.
+// Long-press → bottom sheet of contextual actions.
 //
-// Swipe-to-reveal actions are opt-in via the `swipeActions`
-// prop. When present → iOS-Mail pattern via useSwipeReveal().
-// When absent → static card that just dispatches onOpen on tap.
+// We replaced swipe-to-reveal with long-press because:
+//   1. Swipe-gesture recognition on the web is fragile —
+//      thresholds, timing, iOS Safari quirks — and it was
+//      mis-firing on tap-and-hold.
+//   2. iOS 17+ apps (Photos, Notes, Messages, Reminders) use
+//      long-press context menus as the primary "more actions"
+//      gesture. Matching that pattern = zero gesture-recognizer
+//      bugs and a familiar UX.
 // ============================================================
 
 'use client'
 
+import { useState } from 'react'
 import type { PlanRow } from '@/app/lib/database.types'
-import useSwipeReveal, { SWIPE_ROW_STYLE } from '@/app/hooks/useSwipeReveal'
+import BottomSheet from '@/app/components/ui/BottomSheet'
+import MenuList, { type MenuItem } from '@/app/components/ui/MenuList'
+import useLongPress, { LONG_PRESS_STYLE } from '@/app/hooks/useLongPress'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -33,112 +39,63 @@ function autoLabel(plan: PlanRow): string {
   return parts.length > 0 ? parts.join(' · ') : 'Class Plan'
 }
 
+// ── Icons for menu ───────────────────────────────────────────────────────────
+
+const MOVE_ICON = (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+  </svg>
+)
+const DUPLICATE_ICON = (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+  </svg>
+)
+const DELETE_ICON = (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+  </svg>
+)
+
 // ── Props ────────────────────────────────────────────────────────────────────
 
 interface SavedPlanRowProps {
   plan: PlanRow
   onOpen: () => void
-  swipeActions?: {
-    onOptions: () => void
+  /** Opt-in contextual actions. When provided, long-press reveals them. */
+  actions?: {
+    onMove: () => void
+    onDuplicate: () => void
     onDelete: () => void
   }
 }
 
-const REVEAL_WIDTH = 144 // 72 × 2 buttons
-
 // ── Component ────────────────────────────────────────────────────────────────
 
-export default function SavedPlanRow({ plan, onOpen, swipeActions }: SavedPlanRowProps) {
-  const swipeable = Boolean(swipeActions)
-  const swipe = useSwipeReveal({ revealWidth: REVEAL_WIDTH })
+export default function SavedPlanRow({ plan, onOpen, actions }: SavedPlanRowProps) {
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  const longPress = useLongPress({
+    onLongPress: () => { if (actions) setMenuOpen(true) },
+  })
 
   const planItems = plan.items ?? []
   const itemCount = planItems.length
   const totalMin = planItems.reduce((s, i) => s + (i.durationMinutes ?? 0), 0)
 
-  function handleOptionsTap() {
-    swipe.close()
-    swipeActions?.onOptions()
-  }
-
-  function handleDeleteTap() {
-    swipe.close()
-    swipeActions?.onDelete()
-  }
+  const menuItems: MenuItem[] = actions ? [
+    { icon: MOVE_ICON,      label: 'Move to another date',     onClick: () => { setMenuOpen(false); actions.onMove() } },
+    { icon: DUPLICATE_ICON, label: 'Duplicate to another date', onClick: () => { setMenuOpen(false); actions.onDuplicate() } },
+    { icon: DELETE_ICON,    label: 'Delete plan',               onClick: () => { setMenuOpen(false); actions.onDelete() }, destructive: true, dividerAbove: true },
+  ] : []
 
   return (
-    <div className="relative rounded-xl overflow-hidden">
-      {/* Revealed action panel (behind the row) — only when swipeable */}
-      {swipeable && (
-        <div className="absolute inset-y-0 right-0 flex" style={{ width: REVEAL_WIDTH }}>
-          <button
-            type="button"
-            onClick={handleOptionsTap}
-            className={[
-              'flex-1 flex flex-col items-center justify-center gap-1',
-              'bg-white/10 text-text-muted font-heading text-[10px] uppercase tracking-wider',
-              'active:bg-white/15 transition-colors',
-              swipe.isRevealed ? 'pointer-events-auto' : 'pointer-events-none',
-            ].join(' ')}
-            aria-label="Plan options"
-            tabIndex={swipe.isRevealed ? 0 : -1}
-          >
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-              <circle cx="5" cy="12" r="2" />
-              <circle cx="12" cy="12" r="2" />
-              <circle cx="19" cy="12" r="2" />
-            </svg>
-            Options
-          </button>
-          <button
-            type="button"
-            onClick={handleDeleteTap}
-            className={[
-              'flex-1 flex flex-col items-center justify-center gap-1',
-              'bg-accent-fire text-white font-heading text-[10px] uppercase tracking-wider',
-              'active:bg-accent-fire/90 transition-colors',
-              swipe.isRevealed ? 'pointer-events-auto' : 'pointer-events-none',
-            ].join(' ')}
-            aria-label="Delete plan"
-            tabIndex={swipe.isRevealed ? 0 : -1}
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" />
-            </svg>
-            Delete
-          </button>
-        </div>
-      )}
-
-      {/* Foreground card (translates with swipe when swipeable) */}
+    <>
       <div
-        {...(swipeable ? swipe.handlers : {})}
-        onClick={(e) => {
-          // A click right after a claimed swipe gesture is always spurious.
-          if (swipe.consumeClickIfSwiped()) {
-            e.stopPropagation()
-            e.preventDefault()
-            return
-          }
-          // When revealed, a tap on the foreground closes the swipe rather
-          // than opening the plan.
-          if (swipe.isRevealed) {
-            e.stopPropagation()
-            e.preventDefault()
-            swipe.close()
-            return
-          }
-          onOpen()
-        }}
-        style={swipeable ? {
-          ...SWIPE_ROW_STYLE,
-          transform: `translateX(${swipe.swipeDx}px)`,
-          transition: swipe.swipeAnimating ? 'transform 220ms cubic-bezier(0.32, 0.72, 0, 1)' : 'none',
-        } : undefined}
-        className={[
-          'relative w-full text-left bg-bg-card border border-bg-border border-l-4 border-l-accent-green rounded-xl pl-4 pr-10 py-3 transition-colors cursor-pointer',
-          swipe.isRevealed ? '' : 'active:bg-white/5',
-        ].join(' ')}
+        {...(actions ? longPress : {})}
+        onClick={() => onOpen()}
+        style={actions ? LONG_PRESS_STYLE : undefined}
+        className="relative w-full text-left bg-bg-card border border-bg-border border-l-4 border-l-accent-green rounded-xl pl-4 pr-10 py-3 transition-colors cursor-pointer active:bg-white/5"
       >
         <div className="meta-row">
           <span className="text-accent-green">Saved</span>
@@ -168,6 +125,14 @@ export default function SavedPlanRow({ plan, onOpen, swipeActions }: SavedPlanRo
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
         </svg>
       </div>
-    </div>
+
+      {actions && (
+        <BottomSheet visible={menuOpen} onClose={() => setMenuOpen(false)} title={autoLabel(plan)}>
+          <div className="pb-4">
+            <MenuList items={menuItems} ariaLabel={`Actions for ${autoLabel(plan)}`} />
+          </div>
+        </BottomSheet>
+      )}
+    </>
   )
 }
