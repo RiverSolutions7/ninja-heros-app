@@ -6,19 +6,12 @@ import ComponentListClient from '@/app/components/library/ComponentListClient'
 
 interface LibraryPageProps {
   searchParams: Promise<{
-    ctype?: string
     ccurriculum?: string
     dismiss?: string
   }>
 }
 
-async function ComponentList({
-  activeType,
-  activeCurriculum,
-}: {
-  activeType: string
-  activeCurriculum: string
-}) {
+async function ComponentList({ activeCurriculum }: { activeCurriculum: string }) {
   let components = []
 
   try {
@@ -37,7 +30,7 @@ async function ComponentList({
       <div className="text-center py-16">
         <p className="font-heading text-text-muted text-lg">No components yet</p>
         <p className="text-text-dim text-sm mt-2">
-          Tap &quot;+ Log Component&quot; to add your first game, warmup, or station
+          Tap &quot;+ Log Component&quot; to add your first game or station
         </p>
       </div>
     )
@@ -48,7 +41,6 @@ async function ComponentList({
 
 export default async function LibraryPage({ searchParams }: LibraryPageProps) {
   const params = await searchParams
-  const activeType = params.ctype ?? ''
   const activeCurriculum = params.ccurriculum ?? ''
 
   // Welcome screen for first-run (no components yet)
@@ -79,7 +71,7 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
                 </div>
                 <div>
                   <p className="font-heading text-sm text-text-primary">Log Components</p>
-                  <p className="text-xs text-text-dim mt-0.5">Add games, warmups, and stations</p>
+                  <p className="text-xs text-text-dim mt-0.5">Add games and stations</p>
                 </div>
               </div>
 
@@ -169,7 +161,7 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
           </div>
         }
       >
-        <ComponentList activeType={activeType} activeCurriculum={activeCurriculum} />
+        <ComponentList activeCurriculum={activeCurriculum} />
       </Suspense>
     </div>
   )
