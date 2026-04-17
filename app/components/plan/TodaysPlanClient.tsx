@@ -1304,6 +1304,8 @@ export default function TodaysPlanClient() {
           mode="save"
           todayIso={todayIso}
           datesWithPlans={datesWithPlans}
+          /* Pre-select the day the coach started planning for — one-tap save */
+          initialSelectedDate={selectedDayIso}
           onSaveToCal={async (date, title) => {
             setShowDatePicker(false)
             await handleAddToCalendar(date, title)

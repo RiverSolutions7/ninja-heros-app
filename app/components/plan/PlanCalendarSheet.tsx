@@ -88,6 +88,13 @@ interface PlanCalendarSheetProps {
   defaultView?: ViewMode
   /** Pre-fill the plan title field with a value the coach already typed. */
   initialTitle?: string
+  /**
+   * Pre-select a date on open (save mode only). The calendar jumps to that
+   * month and the confirm button ("Add to {date}") is immediately active —
+   * one tap to save when the coach already signaled which date they're
+   * planning for (e.g. by tapping "Plan for Sat, Apr 18" on the dashboard).
+   */
+  initialSelectedDate?: string
 }
 
 type ViewMode = 'week' | 'month'
@@ -130,17 +137,24 @@ export function PlanCalendarSheet({
   onClose,
   defaultView,
   initialTitle = '',
+  initialSelectedDate,
 }: PlanCalendarSheetProps) {
   const today = new Date(todayIso + 'T00:00:00')
+
+  // If the caller pre-seeded a date (save mode only), anchor the month view
+  // to that date and start with it selected so the coach can confirm in one
+  // tap without scrolling.
+  const seededIso = mode === 'save' && initialSelectedDate ? initialSelectedDate : null
+  const seededDate = seededIso ? new Date(seededIso + 'T00:00:00') : today
 
   // Shared
   const [viewMode, setViewMode] = useState<ViewMode>(defaultView ?? (mode === 'browse' ? 'week' : 'month'))
   const [visible, setVisible] = useState(false)
 
   // Month view
-  const [viewYear, setViewYear] = useState(today.getFullYear())
-  const [viewMonth, setViewMonth] = useState(today.getMonth())
-  const [selectedIso, setSelectedIso] = useState<string | null>(null)
+  const [viewYear, setViewYear] = useState(seededDate.getFullYear())
+  const [viewMonth, setViewMonth] = useState(seededDate.getMonth())
+  const [selectedIso, setSelectedIso] = useState<string | null>(seededIso)
   const [planTitle, setPlanTitle] = useState(initialTitle)
   const [browsePlans, setBrowsePlans] = useState<PlanRow[]>([])
   const [browseLoading, setBrowseLoading] = useState(false)
