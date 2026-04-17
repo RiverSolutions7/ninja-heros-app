@@ -52,6 +52,35 @@ export default function ComponentCardMenu({ component }: ComponentCardMenuProps)
     setOpen((v) => !v)
   }
 
+  /**
+   * Share: prefer native share sheet on mobile, fall back to clipboard on
+   * desktop / when declined. Confirmation flashes via the toast primitive.
+   */
+  async function handleShare() {
+    setOpen(false)
+    const url = `${window.location.origin}/component/${component.id}`
+    const shareData: ShareData = {
+      title: component.title,
+      text: `${component.title} — Ninja H.E.R.O.S.`,
+      url,
+    }
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      try {
+        await navigator.share(shareData)
+        return
+      } catch {
+        /* user dismissed or share threw — fall through to clipboard */
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url)
+      setToast('Link copied')
+      setTimeout(() => setToast(null), 2200)
+    } catch {
+      /* silent fail — clipboard denied */
+    }
+  }
+
   async function handleDelete() {
     setOpen(false)
     if (!window.confirm('Delete this component from the library? This cannot be undone.')) return
@@ -119,6 +148,16 @@ export default function ComponentCardMenu({ component }: ComponentCardMenuProps)
                 <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
               </svg>
               Edit
+            </button>
+
+            <button
+              onClick={handleShare}
+              className="w-full flex items-center gap-2.5 px-4 py-3.5 text-sm text-text-primary hover:bg-white/5 transition-colors"
+            >
+              <svg className="w-4 h-4 text-text-dim flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+              </svg>
+              Share
             </button>
 
             <div className="h-px bg-bg-border mx-3" />

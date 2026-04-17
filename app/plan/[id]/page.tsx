@@ -1,19 +1,21 @@
 // ============================================================
 // Share view — public plan link.
 // ------------------------------------------------------------
-// The only face outsiders (parents, visiting coaches, front
-// desk) see of the app. Leans fully into the editorial voice:
-// masthead lockup, big type, one hot color (fire red), no UI
-// chrome that reads as "dashboard." Uses the same ComponentCard
-// the library + picker do so the visual grammar stays unified
-// across the whole product.
+// The face outsiders (parents, visiting coaches, front desk)
+// see of the app. Leans fully into the editorial voice: shared
+// masthead, big type, one hot color (fire red), no UI chrome
+// that reads as "dashboard." Each plan item renders as a
+// ComponentArticle — same primitive /component/[id] uses — so
+// the visual grammar stays unified across share surfaces.
 // ============================================================
 
 import { notFound } from 'next/navigation'
 import { fetchPlan } from '@/app/lib/planQueries'
 import type { Metadata } from 'next'
 import type { PlanItem, PlanRow } from '@/app/lib/database.types'
-import ShareItem from './ShareItem'
+import ShareMasthead from '@/app/components/share/ShareMasthead'
+import ShareFooter from '@/app/components/share/ShareFooter'
+import ComponentArticle from '@/app/components/share/ComponentArticle'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -68,29 +70,7 @@ export default async function SharePlanPage({ params }: Props) {
 
   return (
     <div className="-mx-4 -mt-4 min-h-screen bg-bg-primary pb-20">
-      {/* ── Editorial masthead ──────────────────────────────────── */}
-      {/* Fire-red aura behind the brand lockup; quiet on small phones,
-          unmistakable on tablet. */}
-      <div className="relative overflow-hidden">
-        <div
-          aria-hidden="true"
-          className="absolute inset-x-0 -top-24 h-72 bg-gradient-to-b from-accent-fire/[0.16] via-accent-fire/[0.04] to-transparent pointer-events-none"
-        />
-        <div className="relative px-6 pt-14 pb-9 max-w-2xl mx-auto">
-          <p className="text-accent-fire text-[10px] font-heading tracking-[0.34em] uppercase mb-3">
-            Just Tumble
-          </p>
-          <h1
-            className="font-heading text-text-primary leading-[0.95]"
-            style={{ fontSize: 'clamp(32px, 9vw, 48px)' }}
-          >
-            Ninja H.E.R.O.S.
-          </h1>
-          <p className="text-text-dim text-[11px] font-heading uppercase tracking-[0.24em] mt-3">
-            Class Plan
-          </p>
-        </div>
-      </div>
+      <ShareMasthead subtitle="Class Plan" />
 
       {/* ── Plan title block ────────────────────────────────────── */}
       <div className="px-6 max-w-2xl mx-auto">
@@ -124,7 +104,12 @@ export default async function SharePlanPage({ params }: Props) {
       {items.length > 0 && (
         <div className="mt-9 px-4 max-w-2xl mx-auto flex flex-col gap-4">
           {items.map((item) => (
-            <ShareItem key={item.localId} item={item} />
+            <ComponentArticle
+              key={item.localId}
+              component={item.component}
+              sessionDuration={item.durationMinutes}
+              coachNote={item.coachNote}
+            />
           ))}
         </div>
       )}
@@ -135,16 +120,7 @@ export default async function SharePlanPage({ params }: Props) {
         </div>
       )}
 
-      {/* ── Masthead echo ──────────────────────────────────────── */}
-      {/* Pair of fire-red dots + kerning-out brandmark. Signals end of
-          document and closes the editorial bracket opened by the masthead. */}
-      <div className="mt-20 text-center px-6">
-        <div className="inline-flex items-center gap-2.5 text-[10px] font-heading text-text-dim/50 tracking-[0.28em]">
-          <span className="w-1 h-1 rounded-full bg-accent-fire/60" />
-          <span>NINJA H.E.R.O.S. · JUST TUMBLE</span>
-          <span className="w-1 h-1 rounded-full bg-accent-fire/60" />
-        </div>
-      </div>
+      <ShareFooter />
     </div>
   )
 }

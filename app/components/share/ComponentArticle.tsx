@@ -1,22 +1,23 @@
 // ============================================================
-// Share-view item — one component rendered as an editorial
-// "article." Outsiders opening the shared plan need enough
-// context to actually run (or understand) the activity, so
-// this card shows:
+// Component article — one component rendered as an editorial
+// "article" for share pages. Used by both /plan/[id] (one per
+// plan item) and /component/[id] (standalone share of a single
+// library component). Plain ComponentCard is too compact — a
+// stranger can't run a station from just a title and thumbnail.
+//
+// What it shows:
 //   • tappable hero photo (+ lightbox for all photos)
 //   • type / curriculum / duration meta
 //   • title
 //   • "How it runs" prose (the library description)
 //   • Setup (equipment), Skills, video
-//   • Coach's session-specific note at the foot
-// Plain ComponentCard was too compact — stranger can't run a
-// station from just a title and thumbnail.
+//   • Optional session-specific coach note at the foot
 // ============================================================
 
 'use client'
 
 import { useState } from 'react'
-import type { PlanItem, ComponentType } from '@/app/lib/database.types'
+import type { ComponentRow, ComponentType } from '@/app/lib/database.types'
 import { PhotoLightbox } from '@/app/components/ui/PhotoLightbox'
 
 const TYPE_META: Record<ComponentType, { label: string; accent: string; border: string }> = {
@@ -24,16 +25,26 @@ const TYPE_META: Record<ComponentType, { label: string; accent: string; border: 
   game: { label: 'GAME', accent: 'text-accent-green', border: 'border-l-accent-green' },
 }
 
-export default function ShareItem({ item }: { item: PlanItem }) {
+interface ComponentArticleProps {
+  component: ComponentRow
+  /**
+   * Override the library's default duration (e.g. the plan-session
+   * duration — what this class actually runs). Omit for the
+   * standalone /component/[id] share.
+   */
+  sessionDuration?: number | null
+  /** Session-specific coach annotation. Omit on standalone component shares. */
+  coachNote?: string | null
+}
+
+export default function ComponentArticle({ component, sessionDuration, coachNote }: ComponentArticleProps) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
 
-  const c = item.component
+  const c = component
   const meta = TYPE_META[c.type]
   const photos = (c.photos ?? []).filter(Boolean)
   const skills = c.skills ?? []
-  // Prefer the plan-session duration (what this class actually runs) over
-  // the library default — share view reflects today's timing.
-  const duration = item.durationMinutes ?? c.duration_minutes
+  const duration = sessionDuration ?? c.duration_minutes
 
   return (
     <>
@@ -174,13 +185,13 @@ export default function ShareItem({ item }: { item: PlanItem }) {
           )}
 
           {/* Coach's session note — italic, offset by a thin divider */}
-          {item.coachNote && (
+          {coachNote && (
             <div className="mt-6 pt-5 border-t border-bg-border/60">
               <p className="text-[10px] font-heading uppercase tracking-[0.2em] text-text-dim mb-2">
                 Coach&apos;s note
               </p>
               <p className="text-[14px] italic text-text-primary/88 leading-[1.7] whitespace-pre-line">
-                {item.coachNote}
+                {coachNote}
               </p>
             </div>
           )}
