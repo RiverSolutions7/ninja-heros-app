@@ -27,6 +27,16 @@ export function PlanItemSheet({ item, onSaveNote, onDurationChange, onClose }: P
   const [localDuration, setLocalDuration] = useState<number | null>(item.durationMinutes ?? null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
+  // Duration stepper hold-to-accelerate state. Tap = 1-min step via onClick.
+  // Hold ≥ 450ms = rapid-fire, accelerating from slow to very fast as the
+  // user keeps their finger down, so going 0 → 45 is a second of holding
+  // rather than 9 taps.
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const heldRef = useRef(false)
+  // Latest duration value visible to the hold ticks — updated via ref so the
+  // rapid-fire callback doesn't close over a stale state value.
+  const durationRef = useRef<number | null>(item.durationMinutes ?? null)
+
   const {
     voiceState,
     transcript,
@@ -68,17 +78,68 @@ export function PlanItemSheet({ item, onSaveNote, onDurationChange, onClose }: P
     }
   }
 
-  function handleDurationStep(delta: number) {
-    const current = localDuration ?? 0
+  /** Single step of the duration stepper. 1-minute granularity. */
+  function stepDuration(delta: number) {
+    const current = durationRef.current ?? 0
     let next: number | null
     if (delta < 0) {
-      next = current <= 5 ? null : Math.max(5, Math.round(current / 5) * 5 + delta)
+      next = current + delta <= 0 ? null : current + delta
     } else {
-      next = current === 0 ? 5 : Math.min(120, Math.round(current / 5) * 5 + delta)
+      next = Math.min(120, current + delta)
     }
+    if (next === durationRef.current) return // clamped — no-op
+    durationRef.current = next
     setLocalDuration(next)
     onDurationChange(item.localId, next === null ? '' : String(next))
   }
+
+  /**
+   * Start a press-and-hold on a stepper button. After 450ms the rapid-fire
+   * kicks in and accelerates: first few ticks are paced (110ms), then faster
+   * (55ms), then very fast (30ms) — so going 0 → 45 takes ~1.5s of holding.
+   * Short taps don't enter rapid-fire; the onClick handler does the single step.
+   */
+  function startDurationHold(delta: number) {
+    heldRef.current = false
+    if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
+    let ticks = 0
+    const tick = () => {
+      heldRef.current = true
+      stepDuration(delta)
+      ticks += 1
+      const delay = ticks < 5 ? 110 : ticks < 12 ? 55 : 30
+      holdTimerRef.current = setTimeout(tick, delay)
+    }
+    holdTimerRef.current = setTimeout(tick, 450)
+  }
+
+  function stopDurationHold() {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current)
+      holdTimerRef.current = null
+    }
+  }
+
+  /**
+   * Click handler — fires after pointerup. If the user was holding, we've
+   * already rapid-fire-stepped; skip the extra step from this click. Otherwise
+   * (plain tap) this is the single step.
+   */
+  function handleDurationClick(delta: number) {
+    if (heldRef.current) {
+      heldRef.current = false
+      return
+    }
+    stepDuration(delta)
+  }
+
+  // Clear any running hold timer on unmount — guards against the sheet closing
+  // mid-hold (e.g. backdrop tap).
+  useEffect(() => {
+    return () => {
+      if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
+    }
+  }, [])
 
   const micIcon = () => {
     if (voiceState === 'recording') {
@@ -190,13 +251,17 @@ export function PlanItemSheet({ item, onSaveNote, onDurationChange, onClose }: P
             </div>
           )}
 
-          {/* Duration stepper */}
+          {/* Duration stepper — 1-min steps, hold-to-accelerate */}
           <div className="px-4 mt-3 flex items-center justify-between">
             <span className="text-xs text-text-dim font-heading">Duration</span>
-            <div className="flex items-center">
+            <div className="flex items-center select-none" style={{ touchAction: 'manipulation' }}>
               <button
                 type="button"
-                onClick={() => handleDurationStep(-5)}
+                onClick={() => handleDurationClick(-1)}
+                onPointerDown={() => startDurationHold(-1)}
+                onPointerUp={stopDurationHold}
+                onPointerLeave={stopDurationHold}
+                onPointerCancel={stopDurationHold}
                 disabled={!localDuration}
                 className="w-9 h-9 flex items-center justify-center rounded-l-lg border border-bg-border bg-bg-input text-text-muted active:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                 aria-label="Decrease duration"
@@ -207,7 +272,7 @@ export function PlanItemSheet({ item, onSaveNote, onDurationChange, onClose }: P
               </button>
               <div className="h-9 px-4 flex items-center justify-center border-t border-b border-bg-border bg-bg-input min-w-[72px]">
                 <span className={[
-                  'font-heading whitespace-nowrap',
+                  'font-heading whitespace-nowrap tabular-nums',
                   localDuration ? 'text-text-primary text-sm' : 'text-text-dim text-sm',
                 ].join(' ')}>
                   {localDuration ? `${localDuration} min` : '—'}
@@ -215,7 +280,11 @@ export function PlanItemSheet({ item, onSaveNote, onDurationChange, onClose }: P
               </div>
               <button
                 type="button"
-                onClick={() => handleDurationStep(5)}
+                onClick={() => handleDurationClick(1)}
+                onPointerDown={() => startDurationHold(1)}
+                onPointerUp={stopDurationHold}
+                onPointerLeave={stopDurationHold}
+                onPointerCancel={stopDurationHold}
                 disabled={!!localDuration && localDuration >= 120}
                 className="w-9 h-9 flex items-center justify-center rounded-r-lg border border-bg-border bg-bg-input text-text-muted active:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                 aria-label="Increase duration"
