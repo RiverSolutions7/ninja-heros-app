@@ -1,31 +1,23 @@
 // ============================================================
 // useSwipeReveal — iOS-grade swipe-to-reveal gesture hook.
 // ------------------------------------------------------------
-// Single shared implementation for every swipe row in the app.
-// Previously SortablePlanItem and SavedPlanRow each rolled their
-// own, with subtle differences and sloppy thresholds that let
-// tap-and-hold accidentally trigger the reveal.
+// Models Apple's UIPanGestureRecognizer for list-row swipe:
+// a gesture is a *quick, horizontally-dominant* finger motion
+// started soon after touchdown. A stationary tap-and-hold, a
+// slow drift, or a diagonal motion cannot qualify — full stop.
 //
-// Gesture contract (models Apple's list-swipe gesture):
-//   1. Pointer down arms the gesture but does NOT claim.
-//   2. Claim requires ALL of:
-//        a. ≥ 18 px of displacement (CLAIM_DISTANCE)
-//        b. horizontal dominance: |dx| ≥ |dy| * 2.5 (HORIZONTAL_BIAS)
-//        c. claim decision made within 600 ms of pointer down
-//           (CLAIM_WINDOW_MS) — after that, treat as long-press
-//        d. ≥ 2 pointer-move events observed (MIN_MOVES) — a
-//           single jittery sample can't claim
-//   3. Once claimed, the row translates with the pointer,
-//      rubber-banding past the revealed position and past zero.
-//   4. On release: if swipeDx < -OPEN_THRESHOLD, snap open;
-//      otherwise snap closed. Never auto-commit the destructive
-//      action — the coach must tap the revealed button.
+// State machine:
+//   (idle) ── pointerdown ──▶ (armed, t0 = now)
+//   (armed) ── no movement ≥ 5 px within FIRST_MOVE_WINDOW ──▶ (dead)
+//   (armed) ── vertical movement dominates ──▶ (dead) [browser scrolls]
+//   (armed) ── quick horizontal motion satisfies all thresholds
+//              within CLAIM_WINDOW ──▶ (claimed) [pointer captured]
+//   (claimed) ── finger tracks row until pointerup
+//   (*) ── pointerup ──▶ snap open or closed
 //
-// CSS hardening applied by the consumer:
-//   - touch-action: pan-y  (vertical scroll still works)
-//   - user-select: none    (no text selection on long-press)
-//   - -webkit-touch-callout: none  (no iOS context popup)
-//   - -webkit-tap-highlight-color: transparent  (no tap flash)
+// Thresholds are deliberately strict. A swipe that feels
+// "intentional" on a 6-inch phone moves ≥ 30 px in the first
+// half-second. Everything shorter or slower is rejected.
 // ============================================================
 
 'use client'
@@ -34,24 +26,19 @@ import { useCallback, useRef, useState } from 'react'
 
 // ── Tuning constants ────────────────────────────────────────────────────────
 
-const CLAIM_DISTANCE = 18        // px of horizontal travel before we claim
-const HORIZONTAL_BIAS = 2.5      // |dx| must be this multiple of |dy|
-const CLAIM_WINDOW_MS = 600      // after this many ms of press, no more claim
-const MIN_MOVES = 2              // consecutive move events before claiming
-const VERTICAL_ABANDON = 10      // vertical movement that's enough to bail
+const CLAIM_DISTANCE = 30         // px of horizontal travel before we claim
+const HORIZONTAL_BIAS = 3         // |dx| must be ≥ this × |dy| (≈ 18° cone)
+const FIRST_MOVE_WINDOW_MS = 250  // finger must move ≥ 5px within this window
+const FIRST_MOVE_EPSILON = 5      // minimum displacement that counts as "moving"
+const CLAIM_WINDOW_MS = 500       // after this many ms of press, no claim allowed
+const MIN_MOVES = 3               // number of pointermove events before claim
+const VERTICAL_ABANDON = 8        // vertical movement that defeats the swipe
 
-// ── Hook ────────────────────────────────────────────────────────────────────
+// ── Types ───────────────────────────────────────────────────────────────────
 
 interface UseSwipeRevealOptions {
-  /** Width of the action panel behind the row (px). */
   revealWidth: number
-  /** How far the row must be dragged to snap open on release (px). */
   openThreshold?: number
-  /**
-   * Called when a pointerdown fires; return true to bail (e.g. the target
-   * is a drag handle). Passed the DOM target so the consumer can sniff
-   * data attributes. Return false / void to proceed normally.
-   */
   shouldSkip?: (target: HTMLElement) => boolean
 }
 
@@ -66,6 +53,7 @@ export interface SwipeRevealHandlers {
   onPointerMove: (e: React.PointerEvent) => void
   onPointerUp: (e: React.PointerEvent) => void
   onPointerCancel: (e: React.PointerEvent) => void
+  onContextMenu: (e: React.SyntheticEvent) => void
   onTransitionEnd: () => void
 }
 
@@ -73,13 +61,24 @@ export interface SwipeRevealControls extends SwipeRevealState {
   handlers: SwipeRevealHandlers
   close: () => void
   /**
-   * Call at the top of the row's onClick. If a swipe gesture just ended,
-   * this returns true (and swallows the latch) — the caller should
-   * preventDefault + stopPropagation + return early so the click doesn't
-   * also fire the row's default tap handler. Returns false on a real tap.
+   * Call at the top of the row's onClick. Returns true if a swipe gesture
+   * just ended — caller should preventDefault + stopPropagation + return.
    */
   consumeClickIfSwiped: () => boolean
 }
+
+// ── Internal gesture record ─────────────────────────────────────────────────
+
+interface GestureStart {
+  x: number
+  y: number
+  t: number
+  baseDx: number
+  moveCount: number
+  hasMoved: boolean // crossed FIRST_MOVE_EPSILON at least once
+}
+
+// ── Hook ────────────────────────────────────────────────────────────────────
 
 export default function useSwipeReveal({
   revealWidth,
@@ -90,15 +89,13 @@ export default function useSwipeReveal({
   const [isRevealed, setIsRevealed] = useState(false)
   const [swipeAnimating, setSwipeAnimating] = useState(false)
 
-  const startRef = useRef<{
-    x: number
-    y: number
-    t: number
-    baseDx: number
-    moveCount: number
-  } | null>(null)
+  const startRef = useRef<GestureStart | null>(null)
   const claimedRef = useRef(false)
   const ignoreNextClickRef = useRef(false)
+
+  const abandon = useCallback(() => {
+    startRef.current = null
+  }, [])
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     if (shouldSkip && shouldSkip(e.target as HTMLElement)) return
@@ -108,6 +105,7 @@ export default function useSwipeReveal({
       t: Date.now(),
       baseDx: swipeDx,
       moveCount: 0,
+      hasMoved: false,
     }
     claimedRef.current = false
     setSwipeAnimating(false)
@@ -116,28 +114,42 @@ export default function useSwipeReveal({
   const onPointerMove = useCallback((e: React.PointerEvent) => {
     const start = startRef.current
     if (!start) return
+
     const dx = e.clientX - start.x
     const dy = e.clientY - start.y
+    const elapsed = Date.now() - start.t
     start.moveCount += 1
 
     if (!claimedRef.current) {
-      // Time-window guard: a slow "press and then drift" shouldn't claim —
-      // that's a long-press, not a swipe.
-      if (Date.now() - start.t > CLAIM_WINDOW_MS) {
-        startRef.current = null
+      // Register when the finger first actually moves (>5px Manhattan).
+      // If this never happens within FIRST_MOVE_WINDOW_MS, it's a press.
+      if (!start.hasMoved) {
+        if (Math.abs(dx) > FIRST_MOVE_EPSILON || Math.abs(dy) > FIRST_MOVE_EPSILON) {
+          start.hasMoved = true
+        } else if (elapsed > FIRST_MOVE_WINDOW_MS) {
+          // Too slow to be a swipe — abandon. Further finger motion is a
+          // drift on an already-pressing finger, not an intentional swipe.
+          abandon()
+          return
+        }
+      }
+
+      // Hard time ceiling: claim cannot happen after this window.
+      if (elapsed > CLAIM_WINDOW_MS) {
+        abandon()
         return
       }
-      // Require multiple pointermove samples so a single stale jump can't
-      // claim. Real swipes produce many consecutive moves.
+
+      // Need enough samples to reject a single stale/coalesced event.
       if (start.moveCount < MIN_MOVES) return
 
-      // Vertical dominance → let the page scroll, abandon swipe.
-      if (Math.abs(dy) > VERTICAL_ABANDON && Math.abs(dy) > Math.abs(dx)) {
-        startRef.current = null
+      // Vertical movement defeats the swipe immediately — let the page scroll.
+      if (Math.abs(dy) >= VERTICAL_ABANDON && Math.abs(dy) > Math.abs(dx)) {
+        abandon()
         return
       }
 
-      // Claim only if horizontal displacement AND strong horizontal bias.
+      // Claim only on strong horizontal intent: distance + narrow angle cone.
       if (Math.abs(dx) >= CLAIM_DISTANCE && Math.abs(dx) >= Math.abs(dy) * HORIZONTAL_BIAS) {
         claimedRef.current = true
         try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId) } catch { /* ignore */ }
@@ -145,22 +157,17 @@ export default function useSwipeReveal({
     }
 
     if (claimedRef.current) {
-      // Prevent scrolling from fighting us once we've claimed.
+      // Prevent the browser from also scrolling once we own the gesture.
       try { e.preventDefault() } catch { /* passive listeners can throw */ }
 
       const raw = start.baseDx + dx
-      // Clamp between -revealWidth and 0, with gentle rubber-band at both bounds.
       let clamped: number
-      if (raw > 0) {
-        clamped = Math.min(raw * 0.25, 8)
-      } else if (raw < -revealWidth) {
-        clamped = -revealWidth + (raw + revealWidth) * 0.2
-      } else {
-        clamped = raw
-      }
+      if (raw > 0) clamped = Math.min(raw * 0.25, 8)
+      else if (raw < -revealWidth) clamped = -revealWidth + (raw + revealWidth) * 0.2
+      else clamped = raw
       setSwipeDx(clamped)
     }
-  }, [revealWidth])
+  }, [revealWidth, abandon])
 
   const onPointerEnd = useCallback(() => {
     if (claimedRef.current) {
@@ -184,14 +191,19 @@ export default function useSwipeReveal({
     setIsRevealed(false)
   }, [])
 
-  // Reads the ref at call time (inside the click handler), so it's never
-  // stale — unlike reading ignoreNextClickRef.current at render time.
   const consumeClickIfSwiped = useCallback((): boolean => {
     if (ignoreNextClickRef.current) {
       ignoreNextClickRef.current = false
       return true
     }
     return false
+  }, [])
+
+  // Block the iOS long-press context menu that fires at ~500 ms. Otherwise
+  // the system UI interferes with our gesture and can make the row feel
+  // "possessed" during a hold.
+  const onContextMenu = useCallback((e: React.SyntheticEvent) => {
+    e.preventDefault()
   }, [])
 
   return {
@@ -203,6 +215,7 @@ export default function useSwipeReveal({
       onPointerMove,
       onPointerUp: onPointerEnd,
       onPointerCancel: onPointerEnd,
+      onContextMenu,
       onTransitionEnd: () => setSwipeAnimating(false),
     },
     close,
@@ -210,15 +223,16 @@ export default function useSwipeReveal({
   }
 }
 
-// ── Shared CSS to apply to the draggable foreground row ─────────────────────
+// ── Shared CSS for every swipeable row ──────────────────────────────────────
 
 /**
- * Inline style fragment consumers should spread onto the swipeable element.
- * Locks iOS behaviors that otherwise make the row feel "glitchy":
- *   - pan-y: browser handles vertical scroll; we own horizontal
- *   - user-select: no text-selection callout on long-press
- *   - touch-callout: no iOS "copy/share" menu bubble
- *   - tap-highlight: no grey flash box
+ * Inline styles the consumer MUST spread onto the draggable foreground.
+ * Locks iOS default gestures that otherwise fight the swipe recognizer:
+ *   - pan-y:          browser handles vertical scroll; we own horizontal
+ *   - user-select:    no text-selection callout on long press
+ *   - touch-callout:  no iOS "copy/share" bubble
+ *   - tap-highlight:  no grey flash on tap
+ *   - user-drag:      no native drag-and-drop initiation
  */
 export const SWIPE_ROW_STYLE: React.CSSProperties = {
   touchAction: 'pan-y',
@@ -226,4 +240,5 @@ export const SWIPE_ROW_STYLE: React.CSSProperties = {
   WebkitUserSelect: 'none',
   WebkitTouchCallout: 'none',
   WebkitTapHighlightColor: 'transparent',
-}
+  WebkitUserDrag: 'none',
+} as React.CSSProperties
