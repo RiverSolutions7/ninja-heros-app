@@ -52,10 +52,18 @@ const config: Config = {
           '0%': { opacity: '0', transform: 'translateY(8px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
+        // Post-voice field highlight — green ring pulses out then fades.
+        // Signals to the coach "this was just filled in" without moving layout.
+        'fill-pulse': {
+          '0%':   { boxShadow: '0 0 0 0 rgba(34, 197, 94, 0.55)' },
+          '40%':  { boxShadow: '0 0 0 6px rgba(34, 197, 94, 0.28)' },
+          '100%': { boxShadow: '0 0 0 0 rgba(34, 197, 94, 0)' },
+        },
       },
       animation: {
         'fade-in': 'fade-in 0.2s ease-out',
         'slide-up': 'slide-up 0.25s ease-out',
+        'fill-pulse': 'fill-pulse 1.2s ease-out',
       },
       transitionTimingFunction: {
         'spring': 'cubic-bezier(0.34, 1.56, 0.64, 1)',
