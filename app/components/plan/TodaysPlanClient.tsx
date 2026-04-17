@@ -26,6 +26,7 @@ import { PhotoLightbox } from '@/app/components/ui/PhotoLightbox'
 import BottomSheet from '@/app/components/ui/BottomSheet'
 import ConfirmSheet from '@/app/components/ui/ConfirmSheet'
 import { useToast } from '@/app/components/ui/Toast'
+import useSwipeReveal, { SWIPE_ROW_STYLE } from '@/app/hooks/useSwipeReveal'
 import { PlanItemSheet } from './PlanItemSheet'
 import { PlanCalendarSheet } from './PlanCalendarSheet'
 import SavedPlanRow from './SavedPlanRow'
@@ -155,7 +156,6 @@ function TypePlaceholder({ type, className }: { type: ComponentType; className?:
 
 const PLAN_THUMB = 72
 const REVEAL_WIDTH = 88          // width of the delete panel behind the row
-const OPEN_THRESHOLD = 30        // drag past this → snap to revealed
 
 function SortablePlanItem({
   item,
@@ -180,80 +180,18 @@ function SortablePlanItem({
     opacity: isDragging ? 0.5 : 1,
   }
 
-  // ── Swipe-to-reveal delete (iOS Mail pattern) ──────────────────────────────
-  // Swipe reveals a Delete button. Coach must TAP Delete to commit.
-  // No commit-on-release — protects against accidental swipes.
-  const swipeStartRef = useRef<{ x: number; y: number; baseDx: number } | null>(null)
-  const swipeClaimedRef = useRef(false)
-  const ignoreNextClickRef = useRef(false)
-  const [swipeDx, setSwipeDx] = useState(0)
-  const [isRevealed, setIsRevealed] = useState(false)
-  const [swipeAnimating, setSwipeAnimating] = useState(false)
-
-  function onRowPointerDown(e: React.PointerEvent) {
-    // Don't interfere with the drag-reorder handle.
-    if ((e.target as HTMLElement).closest('[data-drag-handle]')) return
-    swipeStartRef.current = { x: e.clientX, y: e.clientY, baseDx: swipeDx }
-    swipeClaimedRef.current = false
-    setSwipeAnimating(false)
-  }
-
-  function onRowPointerMove(e: React.PointerEvent) {
-    if (!swipeStartRef.current) return
-    const dx = e.clientX - swipeStartRef.current.x
-    const dy = e.clientY - swipeStartRef.current.y
-    if (!swipeClaimedRef.current) {
-      // Claim only if clearly horizontal-dominant.
-      if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-        swipeClaimedRef.current = true
-        try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId) } catch { /* ignore */ }
-      } else if (Math.abs(dy) > 10) {
-        // Vertical movement wins — abandon swipe so the page can scroll.
-        swipeStartRef.current = null
-        return
-      }
-    }
-    if (swipeClaimedRef.current) {
-      // Add drag to the starting offset so re-swiping a revealed row feels natural.
-      const raw = swipeStartRef.current.baseDx + dx
-      // Clamp between -REVEAL_WIDTH and 0, with gentle rubber-band beyond.
-      let clamped: number
-      if (raw > 0) clamped = Math.min(raw * 0.25, 8)
-      else if (raw < -REVEAL_WIDTH) clamped = -REVEAL_WIDTH + (raw + REVEAL_WIDTH) * 0.2
-      else clamped = raw
-      setSwipeDx(clamped)
-    }
-  }
-
-  function onRowPointerUp() {
-    if (swipeClaimedRef.current) {
-      // Any claim-swipe should eat the subsequent click so the row doesn't
-      // also open the detail sheet.
-      ignoreNextClickRef.current = true
-      setSwipeAnimating(true)
-      if (swipeDx < -OPEN_THRESHOLD) {
-        setSwipeDx(-REVEAL_WIDTH)
-        setIsRevealed(true)
-      } else {
-        setSwipeDx(0)
-        setIsRevealed(false)
-      }
-    }
-    swipeStartRef.current = null
-    swipeClaimedRef.current = false
-  }
-
-  function closeSwipe() {
-    setSwipeAnimating(true)
-    setSwipeDx(0)
-    setIsRevealed(false)
-  }
+  // Shared iOS-grade swipe gesture. `shouldSkip` lets dnd-kit's drag handle
+  // still steal the gesture — otherwise the row swipes instead of reordering.
+  const swipe = useSwipeReveal({
+    revealWidth: REVEAL_WIDTH,
+    shouldSkip: (target) => !!target.closest('[data-drag-handle]'),
+  })
 
   function handleDeleteTap() {
     // Animate the row fully off-screen, then fire onRemove. The parent shows
     // an undo toast — the coach can never lose a component accidentally.
-    setSwipeAnimating(true)
-    setSwipeDx(-1000)
+    swipe.close() // kick the animation into motion
+    // (use the hook's animating state; the parent triggers real removal after)
     setTimeout(() => onRemove(item.localId), 180)
   }
 
@@ -272,10 +210,10 @@ function SortablePlanItem({
           'absolute inset-y-0 right-0 flex flex-col items-center justify-center gap-1',
           'bg-accent-fire text-white font-heading text-[10px] uppercase tracking-wider',
           'active:bg-accent-fire/90 transition-colors',
-          isRevealed ? 'pointer-events-auto' : 'pointer-events-none',
+          swipe.isRevealed ? 'pointer-events-auto' : 'pointer-events-none',
         ].join(' ')}
         aria-label={`Delete ${item.component.title}`}
-        tabIndex={isRevealed ? 0 : -1}
+        tabIndex={swipe.isRevealed ? 0 : -1}
       >
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" />
@@ -285,31 +223,27 @@ function SortablePlanItem({
 
       {/* ─── Foreground row (translates with swipe) ─────────────────────── */}
       <div
-        onPointerDown={onRowPointerDown}
-        onPointerMove={onRowPointerMove}
-        onPointerUp={onRowPointerUp}
-        onPointerCancel={onRowPointerUp}
+        {...swipe.handlers}
         onClickCapture={(e) => {
-          // Swallow the click from a swipe gesture.
-          if (ignoreNextClickRef.current) {
-            ignoreNextClickRef.current = false
+          // Swallow the click that fires at the end of a claimed swipe gesture.
+          if (swipe.consumeClickIfSwiped()) {
             e.stopPropagation()
             e.preventDefault()
             return
           }
-          // When revealed, a tap on the row closes the swipe instead of
-          // firing child handlers (so tapping the row doesn't open the sheet).
-          if (isRevealed) {
+          // When revealed, a tap on the foreground closes the swipe instead
+          // of firing child handlers (don't open the detail sheet).
+          if (swipe.isRevealed) {
             e.stopPropagation()
             e.preventDefault()
-            closeSwipe()
+            swipe.close()
           }
         }}
         style={{
-          transform: `translateX(${swipeDx}px)`,
-          transition: swipeAnimating ? 'transform 180ms ease-out' : 'none',
+          ...SWIPE_ROW_STYLE,
+          transform: `translateX(${swipe.swipeDx}px)`,
+          transition: swipe.swipeAnimating ? 'transform 220ms cubic-bezier(0.32, 0.72, 0, 1)' : 'none',
         }}
-        onTransitionEnd={() => setSwipeAnimating(false)}
         className={[
           'relative flex items-center gap-3 px-3 py-2.5 rounded-xl bg-bg-card',
           'border-l-4',
