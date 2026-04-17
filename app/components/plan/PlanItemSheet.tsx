@@ -1,9 +1,9 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import type { PlanItem, ComponentType } from '@/app/lib/database.types'
 import { PhotoLightbox } from '@/app/components/ui/PhotoLightbox'
+import BottomSheet from '@/app/components/ui/BottomSheet'
 import { useVoiceNote } from '@/app/hooks/useVoiceNote'
 
 const TYPE_META: Record<ComponentType, { label: string; accent: string; placeholderBg: string }> = {
@@ -19,7 +19,9 @@ interface PlanItemSheetProps {
 }
 
 export function PlanItemSheet({ item, onSaveNote, onDurationChange, onClose }: PlanItemSheetProps) {
-  const [visible, setVisible] = useState(false)
+  // Starts true so BottomSheet animates in on mount; handleClose flips it false
+  // to trigger the 300ms exit before the parent unmounts us.
+  const [visible, setVisible] = useState(true)
   // Pre-fill with existing coach note, or fall back to library description as a starting point
   const [noteText, setNoteText] = useState(item.coachNote ?? item.component.description ?? '')
   const [lightbox, setLightbox] = useState<{ photos: string[]; index: number } | null>(null)
@@ -50,12 +52,6 @@ export function PlanItemSheet({ item, onSaveNote, onDurationChange, onClose }: P
 
   const meta = TYPE_META[item.component.type]
   const photos = (item.component.photos ?? []).filter(Boolean)
-
-  // Slide-up animation
-  useEffect(() => {
-    const t = requestAnimationFrame(() => setVisible(true))
-    return () => cancelAnimationFrame(t)
-  }, [])
 
   function handleClose() {
     // Auto-save note when closing — no explicit Save button needed
@@ -181,30 +177,10 @@ export function PlanItemSheet({ item, onSaveNote, onDurationChange, onClose }: P
     error: 'bg-red-900/30 border border-red-500/40 text-red-400',
   }
 
-  const sheet = (
+  return (
     <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-black/60 transition-opacity duration-300"
-        style={{ zIndex: 9999, opacity: visible ? 1 : 0 }}
-        onClick={handleClose}
-      />
-
-      {/* Sheet */}
-      <div
-        className="fixed inset-x-0 bottom-0 bg-bg-card rounded-t-2xl flex flex-col transition-transform duration-300 ease-out"
-        style={{
-          zIndex: 10000,
-          maxHeight: '90vh',
-          transform: visible ? 'translateY(0)' : 'translateY(100%)',
-        }}
-      >
-        {/* Drag handle */}
-        <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
-          <div className="w-10 h-1 rounded-full bg-white/20" />
-        </div>
-
-        <div className="overflow-y-auto flex-1 pb-safe">
+      <BottomSheet visible={visible} onClose={handleClose} maxHeight="90vh">
+        <div>
           {/* Photos row */}
           {photos.length > 0 && (
             <div className="flex gap-2 px-4 pt-3 overflow-x-auto scrollbar-hide" style={{ scrollbarWidth: 'none' }}>
@@ -369,7 +345,7 @@ export function PlanItemSheet({ item, onSaveNote, onDurationChange, onClose }: P
             </button>
           </div>
         </div>
-      </div>
+      </BottomSheet>
 
       {/* Photo lightbox — above sheet */}
       {lightbox && (
@@ -382,6 +358,4 @@ export function PlanItemSheet({ item, onSaveNote, onDurationChange, onClose }: P
       )}
     </>
   )
-
-  return createPortal(sheet, document.body)
 }

@@ -23,6 +23,7 @@ import { addPlanToCalendar, updatePlanById, fetchDatesWithPlans, fetchPlansForDa
 import { randomId } from '@/app/lib/uuid'
 import ComponentPickerModal from './ComponentPickerModal'
 import { PhotoLightbox } from '@/app/components/ui/PhotoLightbox'
+import BottomSheet from '@/app/components/ui/BottomSheet'
 import ConfirmSheet from '@/app/components/ui/ConfirmSheet'
 import { PlanItemSheet } from './PlanItemSheet'
 import { PlanCalendarSheet } from './PlanCalendarSheet'
@@ -1403,44 +1404,38 @@ export default function TodaysPlanClient() {
       )}
 
       {/* ── Plan Options sheet ── */}
-      {showPlanOptions && createPortal(
-        <div className="fixed inset-0 z-50 flex flex-col justify-end">
-          <div className="fixed inset-0 bg-black/60" onClick={handleCancelPlanOptions} />
-          <div className="relative bg-bg-card rounded-t-2xl p-6 pb-10 flex flex-col gap-3">
-            <div className="w-10 h-1 bg-bg-border rounded-full mx-auto mb-1" />
-            <p className="font-heading text-base text-text-primary text-center mb-1">Plan Options</p>
-            <button
-              type="button"
-              onClick={() => { setShowPlanOptions(false); setShowMoveCalendar(true) }}
-              className="w-full py-3.5 rounded-xl border border-bg-border font-heading text-sm text-text-muted hover:bg-white/5 active:scale-[0.98] transition-all text-left px-4 min-h-[52px]"
-            >
-              Move to a different date
-            </button>
-            <button
-              type="button"
-              onClick={() => { setShowPlanOptions(false); setShowDatePicker(true) }}
-              className="w-full py-3.5 rounded-xl border border-bg-border font-heading text-sm text-text-muted hover:bg-white/5 active:scale-[0.98] transition-all text-left px-4 min-h-[52px]"
-            >
-              Duplicate to another date
-            </button>
-            <button
-              type="button"
-              onClick={() => { setShowPlanOptions(false); setShowDeleteConfirm(true) }}
-              className="w-full py-3.5 rounded-xl border border-red-500/30 font-heading text-sm text-red-400 hover:bg-red-500/10 active:scale-[0.98] transition-all text-left px-4 min-h-[52px]"
-            >
-              Delete this plan
-            </button>
-            <button
-              type="button"
-              onClick={handleCancelPlanOptions}
-              className="w-full py-3.5 rounded-xl border border-bg-border font-heading text-sm text-text-dim hover:bg-white/5 active:scale-[0.98] transition-all min-h-[48px] mt-1"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>,
-        document.body
-      )}
+      <BottomSheet visible={showPlanOptions} onClose={handleCancelPlanOptions} title="Plan Options">
+        <div className="px-6 pb-10 flex flex-col gap-3">
+          <button
+            type="button"
+            onClick={() => { setShowPlanOptions(false); setShowMoveCalendar(true) }}
+            className="w-full py-3.5 rounded-xl border border-bg-border font-heading text-sm text-text-muted hover:bg-white/5 active:scale-[0.98] transition-all text-left px-4 min-h-[52px]"
+          >
+            Move to a different date
+          </button>
+          <button
+            type="button"
+            onClick={() => { setShowPlanOptions(false); setShowDatePicker(true) }}
+            className="w-full py-3.5 rounded-xl border border-bg-border font-heading text-sm text-text-muted hover:bg-white/5 active:scale-[0.98] transition-all text-left px-4 min-h-[52px]"
+          >
+            Duplicate to another date
+          </button>
+          <button
+            type="button"
+            onClick={() => { setShowPlanOptions(false); setShowDeleteConfirm(true) }}
+            className="w-full py-3.5 rounded-xl border border-red-500/30 font-heading text-sm text-red-400 hover:bg-red-500/10 active:scale-[0.98] transition-all text-left px-4 min-h-[52px]"
+          >
+            Delete this plan
+          </button>
+          <button
+            type="button"
+            onClick={handleCancelPlanOptions}
+            className="w-full py-3.5 rounded-xl border border-bg-border font-heading text-sm text-text-dim hover:bg-white/5 active:scale-[0.98] transition-all min-h-[48px] mt-1"
+          >
+            Cancel
+          </button>
+        </div>
+      </BottomSheet>
 
       {/* ── Delete confirmation — shared ConfirmSheet primitive ── */}
       <ConfirmSheet

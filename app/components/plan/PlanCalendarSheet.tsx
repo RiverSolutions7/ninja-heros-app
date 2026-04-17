@@ -1,9 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createPortal } from 'react-dom'
 import type { PlanRow } from '@/app/lib/database.types'
 import { fetchPlansForDate } from '@/app/lib/planQueries'
+import BottomSheet from '@/app/components/ui/BottomSheet'
 import SavedPlanRow from './SavedPlanRow'
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
@@ -112,7 +112,8 @@ export function PlanCalendarSheet({
 
   // Shared
   const [viewMode, setViewMode] = useState<ViewMode>(defaultView ?? (mode === 'browse' ? 'week' : 'month'))
-  const [visible, setVisible] = useState(false)
+  // Starts true so BottomSheet animates in immediately on mount.
+  const [visible, setVisible] = useState(true)
 
   // Month view
   const [viewYear, setViewYear] = useState(seededDate.getFullYear())
@@ -128,10 +129,6 @@ export function PlanCalendarSheet({
   const [weekPlans, setWeekPlans] = useState<PlanRow[]>([])
   const [weekLoading, setWeekLoading] = useState(false)
 
-  useEffect(() => {
-    const t = requestAnimationFrame(() => setVisible(true))
-    return () => cancelAnimationFrame(t)
-  }, [])
 
   // Load plans when a week day is selected (browse + week view)
   // Always list plans as cards — never auto-load on passive selection. The week
@@ -240,25 +237,11 @@ export function PlanCalendarSheet({
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  const sheet = (
-    <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-black/60 transition-opacity duration-300"
-        style={{ zIndex: 9999, opacity: visible ? 1 : 0 }}
-        onClick={handleClose}
-      />
-
-      {/* Sheet */}
-      <div
-        className="fixed inset-x-0 bottom-0 bg-bg-card rounded-t-2xl flex flex-col transition-transform duration-300 ease-out"
-        style={{ zIndex: 10000, maxHeight: '92vh', transform: visible ? 'translateY(0)' : 'translateY(100%)' }}
-      >
-        {/* Drag handle */}
-        <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
-          <div className="w-10 h-1 rounded-full bg-white/20" />
-        </div>
-
+  // Swipe-dismiss is disabled so the nested calendar-grid scroll doesn't fight
+  // the sheet's drag handle. Re-enable in a follow-up after mobile QA.
+  return (
+    <BottomSheet visible={visible} onClose={handleClose} maxHeight="92vh" disableSwipeDismiss>
+      <div className="flex flex-col h-full">
         {/* Header */}
         <div className="flex items-center justify-between px-4 pb-3 flex-shrink-0">
           <p className="text-[11px] font-heading uppercase tracking-wider text-text-dim">
@@ -544,8 +527,6 @@ export function PlanCalendarSheet({
 
         </div>
       </div>
-    </>
+    </BottomSheet>
   )
-
-  return createPortal(sheet, document.body)
 }
