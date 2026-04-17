@@ -451,6 +451,10 @@ export default function TodaysPlanClient() {
   const [lightbox, setLightbox] = useState<{ photos: string[] } | null>(null)
   const [activeSheet, setActiveSheet] = useState<PlanItem | null>(null)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  // Tracks whether `items` contains user-originated edits (vs items that were
+  // just loaded from the DB). Gates auto-save so tapping a saved plan doesn't
+  // trigger a reflexive "Saving… ✓ Saved" flash on data that wasn't edited.
+  const dirtyRef = useRef(false)
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Recently-removed plan item (for undo toast)
   const [removedItem, setRemovedItem] = useState<{ item: PlanItem; index: number } | null>(null)
@@ -546,6 +550,8 @@ export default function TodaysPlanClient() {
       setSaveStatus('saving')
       try {
         await updatePlanById(planId, currentItems)
+        // Successful commit — these items are now in sync with the DB.
+        dirtyRef.current = false
         setSaveStatus('saved')
         if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
         savedTimerRef.current = setTimeout(() => setSaveStatus('idle'), 1800)
@@ -560,6 +566,10 @@ export default function TodaysPlanClient() {
     if (!mounted || loading) return
     if (!editingPlanId) return
     if (items.length === 0) return
+    // Skip auto-save for items that came from the DB (just-loaded plans) —
+    // only write when the coach actually edits. Prevents the "✓ Saved" flash
+    // on plan-tap.
+    if (!dirtyRef.current) return
     debouncedSave(items, editingPlanId)
   }, [items, mounted, loading, editingPlanId, debouncedSave]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -576,6 +586,7 @@ export default function TodaysPlanClient() {
   // ── Handlers ──────────────────────────────────────────────────────────────────
 
   function handleSelect(component: ComponentRow) {
+    dirtyRef.current = true
     setItems(prev => [
       ...prev,
       { localId: randomId(), component, durationMinutes: component.duration_minutes ?? null, coachNote: null },
@@ -583,6 +594,7 @@ export default function TodaysPlanClient() {
   }
 
   function handleAdHocSelect(title: string, description?: string, durationMinutes?: number) {
+    dirtyRef.current = true
     setItems(prev => [
       ...prev,
       {
@@ -613,6 +625,7 @@ export default function TodaysPlanClient() {
   function handleRemove(localId: string) {
     const idx = items.findIndex(i => i.localId === localId)
     if (idx === -1) return
+    dirtyRef.current = true
     const snapshot = items[idx]
     setItems(prev => prev.filter(i => i.localId !== localId))
     setRemovedItem({ item: snapshot, index: idx })
@@ -622,6 +635,7 @@ export default function TodaysPlanClient() {
 
   function handleUndoRemove() {
     if (!removedItem) return
+    dirtyRef.current = true
     const { item, index } = removedItem
     setItems(prev => {
       const next = [...prev]
@@ -633,6 +647,7 @@ export default function TodaysPlanClient() {
   }
 
   function handleDurationChange(localId: string, value: string) {
+    dirtyRef.current = true
     const num = value === '' ? null : parseInt(value, 10)
     setItems(prev =>
       prev.map(i => i.localId === localId ? { ...i, durationMinutes: isNaN(num as number) ? null : num } : i)
@@ -640,6 +655,7 @@ export default function TodaysPlanClient() {
   }
 
   function handleNoteChange(localId: string, note: string) {
+    dirtyRef.current = true
     setItems(prev =>
       prev.map(i => i.localId === localId ? { ...i, coachNote: note || null } : i)
     )
@@ -730,6 +746,8 @@ export default function TodaysPlanClient() {
     const datePart = plan.plan_date ? formatDisplayDate(plan.plan_date) : null
     setEditingPlanLabel([titlePart, datePart].filter(Boolean).join(' · '))
     setItems(plan.items ?? [])
+    // Freshly-loaded from DB — no pending edits to save.
+    dirtyRef.current = false
     setSaveStatus('idle')
     setCalendarAddedTo(null)
     setLastAddedPlanId(null)
@@ -746,6 +764,7 @@ export default function TodaysPlanClient() {
     setLastAddedPlanId(null)
     setSaveStatus('idle')
     setCalendarAddedTo(null)
+    dirtyRef.current = false
 
     try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
     setViewMode('dashboard')
@@ -756,6 +775,7 @@ export default function TodaysPlanClient() {
     setItems([])
     setEditingPlanId(null)
     setEditingPlanLabel(null)
+    dirtyRef.current = false
     try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
     setViewMode('editing')
     setShowPicker(true)
@@ -806,6 +826,7 @@ export default function TodaysPlanClient() {
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
     if (!over || active.id === over.id) return
+    dirtyRef.current = true
     setItems(prev => {
       const fromIndex = prev.findIndex(i => i.localId === active.id)
       const toIndex = prev.findIndex(i => i.localId === over.id)
