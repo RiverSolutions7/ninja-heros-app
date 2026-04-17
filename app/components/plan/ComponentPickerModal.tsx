@@ -222,12 +222,12 @@ export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose,
           <button
             type="button"
             onClick={() => setCurriculumSheetOpen(true)}
-            className="inline-flex items-center gap-1.5 flex-shrink-0 bg-bg-input border border-bg-border rounded-xl pl-3 pr-2 py-2 text-sm text-text-muted hover:border-accent-fire/40 hover:text-text-primary transition-colors"
+            className="inline-flex items-center gap-1.5 flex-shrink-0 bg-bg-input border border-bg-border rounded-xl pl-3 pr-2.5 py-2 text-sm text-text-muted hover:border-accent-fire/40 hover:text-text-primary transition-colors"
             aria-haspopup="dialog"
             aria-expanded={curriculumSheetOpen}
           >
-            <span>{curriculums.find((c) => c.age_group === curriculumFilter)?.label ?? 'All'}</span>
-            <svg className="w-3.5 h-3.5 text-text-dim" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <span className="whitespace-nowrap">{curriculums.find((c) => c.age_group === curriculumFilter)?.label ?? 'All'}</span>
+            <svg className="w-3.5 h-3.5 text-text-dim flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
             </svg>
           </button>

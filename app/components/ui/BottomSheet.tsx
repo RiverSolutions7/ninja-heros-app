@@ -125,7 +125,7 @@ export default function BottomSheet({
         </div>
 
         {title && (
-          <p className="text-center text-[11px] font-heading uppercase tracking-wider text-text-dim pb-3 flex-shrink-0">
+          <p className="text-center text-[11px] font-heading uppercase tracking-wide text-text-dim pb-3 px-6 flex-shrink-0 break-words">
             {title}
           </p>
         )}
