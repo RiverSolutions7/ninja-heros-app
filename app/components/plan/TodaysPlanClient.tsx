@@ -417,6 +417,205 @@ function SortablePlanItem({
   )
 }
 
+// ── Saved plan card — dashboard row with swipe-to-reveal actions ────────────
+// iOS Mail pattern: swipe left reveals [Options] + [Delete]. Tap the revealed
+// button to commit the action (no swipe-past-threshold auto-commit — coaches
+// shouldn't lose plans from an accidental gesture). Tapping the foreground
+// while closed opens the plan for editing. Tapping while revealed closes the
+// swipe instead.
+
+const SAVED_REVEAL_WIDTH = 144   // 72px × 2 buttons
+const SAVED_OPEN_THRESHOLD = 40  // drag past this → snap open
+
+function SavedPlanCard({
+  plan,
+  onOpen,
+  onOptions,
+  onDelete,
+}: {
+  plan: PlanRow
+  onOpen: () => void
+  onOptions: () => void
+  onDelete: () => void
+}) {
+  const swipeStartRef = useRef<{ x: number; y: number; baseDx: number } | null>(null)
+  const swipeClaimedRef = useRef(false)
+  const ignoreNextClickRef = useRef(false)
+  const [swipeDx, setSwipeDx] = useState(0)
+  const [isRevealed, setIsRevealed] = useState(false)
+  const [swipeAnimating, setSwipeAnimating] = useState(false)
+
+  const planItems = plan.items ?? []
+  const itemCount = planItems.length
+  const totalMin = planItems.reduce((s, i) => s + (i.durationMinutes ?? 0), 0)
+
+  function onRowPointerDown(e: React.PointerEvent) {
+    swipeStartRef.current = { x: e.clientX, y: e.clientY, baseDx: swipeDx }
+    swipeClaimedRef.current = false
+    setSwipeAnimating(false)
+  }
+
+  function onRowPointerMove(e: React.PointerEvent) {
+    if (!swipeStartRef.current) return
+    const dx = e.clientX - swipeStartRef.current.x
+    const dy = e.clientY - swipeStartRef.current.y
+    if (!swipeClaimedRef.current) {
+      // Claim only if clearly horizontal — lets vertical scroll win otherwise.
+      if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        swipeClaimedRef.current = true
+        try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId) } catch { /* ignore */ }
+      } else if (Math.abs(dy) > 10) {
+        swipeStartRef.current = null
+        return
+      }
+    }
+    if (swipeClaimedRef.current) {
+      const raw = swipeStartRef.current.baseDx + dx
+      let clamped: number
+      if (raw > 0) clamped = Math.min(raw * 0.25, 8)                                           // rubber-band right
+      else if (raw < -SAVED_REVEAL_WIDTH) clamped = -SAVED_REVEAL_WIDTH + (raw + SAVED_REVEAL_WIDTH) * 0.2 // rubber-band past open
+      else clamped = raw
+      setSwipeDx(clamped)
+    }
+  }
+
+  function onRowPointerUp() {
+    if (swipeClaimedRef.current) {
+      ignoreNextClickRef.current = true
+      setSwipeAnimating(true)
+      if (swipeDx < -SAVED_OPEN_THRESHOLD) {
+        setSwipeDx(-SAVED_REVEAL_WIDTH)
+        setIsRevealed(true)
+      } else {
+        setSwipeDx(0)
+        setIsRevealed(false)
+      }
+    }
+    swipeStartRef.current = null
+    swipeClaimedRef.current = false
+  }
+
+  function closeSwipe() {
+    setSwipeAnimating(true)
+    setSwipeDx(0)
+    setIsRevealed(false)
+  }
+
+  function handleOptionsTap() {
+    closeSwipe()
+    onOptions()
+  }
+
+  function handleDeleteTap() {
+    closeSwipe()
+    onDelete()
+  }
+
+  return (
+    <div className="relative rounded-xl overflow-hidden">
+      {/* ── Revealed action panel (behind the row) ─────────────────────── */}
+      <div className="absolute inset-y-0 right-0 flex" style={{ width: SAVED_REVEAL_WIDTH }}>
+        <button
+          type="button"
+          onClick={handleOptionsTap}
+          className={[
+            'flex-1 flex flex-col items-center justify-center gap-1',
+            'bg-white/10 text-text-muted font-heading text-[10px] uppercase tracking-wider',
+            'active:bg-white/15 transition-colors',
+            isRevealed ? 'pointer-events-auto' : 'pointer-events-none',
+          ].join(' ')}
+          aria-label="Plan options"
+          tabIndex={isRevealed ? 0 : -1}
+        >
+          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+            <circle cx="5" cy="12" r="2" />
+            <circle cx="12" cy="12" r="2" />
+            <circle cx="19" cy="12" r="2" />
+          </svg>
+          Options
+        </button>
+        <button
+          type="button"
+          onClick={handleDeleteTap}
+          className={[
+            'flex-1 flex flex-col items-center justify-center gap-1',
+            'bg-accent-fire text-white font-heading text-[10px] uppercase tracking-wider',
+            'active:bg-accent-fire/90 transition-colors',
+            isRevealed ? 'pointer-events-auto' : 'pointer-events-none',
+          ].join(' ')}
+          aria-label="Delete plan"
+          tabIndex={isRevealed ? 0 : -1}
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" />
+          </svg>
+          Delete
+        </button>
+      </div>
+
+      {/* ── Foreground card (translates with swipe) ─────────────────────── */}
+      <div
+        onPointerDown={onRowPointerDown}
+        onPointerMove={onRowPointerMove}
+        onPointerUp={onRowPointerUp}
+        onPointerCancel={onRowPointerUp}
+        onClick={(e) => {
+          if (ignoreNextClickRef.current) {
+            ignoreNextClickRef.current = false
+            e.stopPropagation()
+            e.preventDefault()
+            return
+          }
+          if (isRevealed) {
+            e.stopPropagation()
+            e.preventDefault()
+            closeSwipe()
+            return
+          }
+          onOpen()
+        }}
+        style={{
+          transform: `translateX(${swipeDx}px)`,
+          transition: swipeAnimating ? 'transform 180ms ease-out' : 'none',
+        }}
+        onTransitionEnd={() => setSwipeAnimating(false)}
+        className={[
+          'relative w-full text-left bg-bg-card border border-bg-border border-l-4 border-l-accent-green rounded-xl pl-4 pr-10 py-3 transition-colors cursor-pointer select-none',
+          isRevealed ? '' : 'active:bg-white/5',
+        ].join(' ')}
+      >
+        <div className="flex items-center gap-1.5 text-[10px] font-heading uppercase tracking-wide">
+          <span className="text-accent-green">Saved</span>
+          {totalMin > 0 && (
+            <>
+              <span className="text-text-dim/40">·</span>
+              <span className="text-text-dim">{totalMin} min</span>
+            </>
+          )}
+          {itemCount > 0 && (
+            <>
+              <span className="text-text-dim/40">·</span>
+              <span className="text-text-dim">{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
+            </>
+          )}
+          {plan.updated_at && (
+            <>
+              <span className="text-text-dim/40">·</span>
+              <span className="text-text-dim/60 normal-case tracking-normal">{formatSavedAt(plan.updated_at)}</span>
+            </>
+          )}
+        </div>
+        <p className="font-heading text-[15px] text-text-primary leading-tight mt-0.5 truncate">
+          {autoLabel(plan)}
+        </p>
+        <svg className="absolute top-1/2 -translate-y-1/2 right-3 w-4 h-4 text-text-dim/40 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+      </div>
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function TodaysPlanClient() {
@@ -756,6 +955,48 @@ export default function TodaysPlanClient() {
     setViewMode('editing')
   }
 
+  // ── Dashboard swipe actions ──────────────────────────────────────────────────
+  // Coach swipes left on a saved-plan card → two buttons revealed:
+  // [Options] opens the options sheet for that plan, and [Delete] opens the
+  // confirm sheet. Both stash the plan ID on editingPlanId so the existing
+  // sheet handlers (handleMovePlan / handleDeletePlan / etc.) work untouched.
+  // We stay in dashboard view — the sheets overlay on top via portal.
+  // optionsFromDashboardRef tracks context so we can clean up editingPlanId
+  // on paths that don't naturally clear it (Cancel + Move).
+  const optionsFromDashboardRef = useRef(false)
+
+  function handleOptionsFromDashboard(plan: PlanRow) {
+    setEditingPlanId(plan.id)
+    setEditingPlanLabel(plan.plan_date ? formatDisplayDate(plan.plan_date) : null)
+    optionsFromDashboardRef.current = true
+    setShowPlanOptions(true)
+  }
+
+  function handleDeleteFromDashboard(plan: PlanRow) {
+    setEditingPlanId(plan.id)
+    setEditingPlanLabel(plan.plan_date ? formatDisplayDate(plan.plan_date) : null)
+    optionsFromDashboardRef.current = true
+    setShowDeleteConfirm(true)
+  }
+
+  function handleCancelPlanOptions() {
+    setShowPlanOptions(false)
+    if (optionsFromDashboardRef.current) {
+      setEditingPlanId(null)
+      setEditingPlanLabel(null)
+      optionsFromDashboardRef.current = false
+    }
+  }
+
+  function handleCancelDeleteConfirm() {
+    setShowDeleteConfirm(false)
+    if (optionsFromDashboardRef.current) {
+      setEditingPlanId(null)
+      setEditingPlanLabel(null)
+      optionsFromDashboardRef.current = false
+    }
+  }
+
   function handleClearPlan() {
     if (saveTimer.current) clearTimeout(saveTimer.current)
     setItems([])
@@ -797,7 +1038,10 @@ export default function TodaysPlanClient() {
       setEditingPlanLabel(null)
       setItems([])
       setSaveStatus('idle')
-      setViewMode('dashboard')
+      optionsFromDashboardRef.current = false
+      // If the coach was in edit view, return them to dashboard. If they
+      // triggered this from the dashboard swipe, they're already there.
+      if (viewMode !== 'dashboard') setViewMode('dashboard')
     } catch (err) {
       console.error('Delete failed:', err)
     } finally {
@@ -818,6 +1062,13 @@ export default function TodaysPlanClient() {
       setSelectedDayIso(newDate)
       setShowMoveCalendar(false)
       setShowPlanOptions(false)
+      // If the options sheet was opened from the dashboard, clear the
+      // temporary editingPlanId so subsequent state isn't stale.
+      if (optionsFromDashboardRef.current) {
+        setEditingPlanId(null)
+        setEditingPlanLabel(null)
+        optionsFromDashboardRef.current = false
+      }
     } catch (err) {
       console.error('Move failed:', err)
     }
@@ -1060,47 +1311,15 @@ export default function TodaysPlanClient() {
 
             {!selectedDayLoading && selectedDayPlans.length > 0 && (
               <div className="flex flex-col gap-2">
-                {selectedDayPlans.map(plan => {
-                  const planItems = plan.items ?? []
-                  const itemCount = planItems.length
-                  const totalMin = planItems.reduce((s, i) => s + (i.durationMinutes ?? 0), 0)
-                  return (
-                    <button
-                      key={plan.id}
-                      type="button"
-                      onClick={() => handleLoadPlan(plan)}
-                      className="w-full text-left bg-bg-card border border-bg-border border-l-4 border-l-accent-green rounded-xl pl-4 pr-10 py-3 active:bg-white/5 transition-colors relative"
-                    >
-                      <div className="flex items-center gap-1.5 text-[10px] font-heading uppercase tracking-wide">
-                        <span className="text-accent-green">Saved</span>
-                        {totalMin > 0 && (
-                          <>
-                            <span className="text-text-dim/40">·</span>
-                            <span className="text-text-dim">{totalMin} min</span>
-                          </>
-                        )}
-                        {itemCount > 0 && (
-                          <>
-                            <span className="text-text-dim/40">·</span>
-                            <span className="text-text-dim">{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
-                          </>
-                        )}
-                        {plan.updated_at && (
-                          <>
-                            <span className="text-text-dim/40">·</span>
-                            <span className="text-text-dim/60 normal-case tracking-normal">{formatSavedAt(plan.updated_at)}</span>
-                          </>
-                        )}
-                      </div>
-                      <p className="font-heading text-[15px] text-text-primary leading-tight mt-0.5 truncate">
-                        {autoLabel(plan)}
-                      </p>
-                      <svg className="absolute top-1/2 -translate-y-1/2 right-3 w-4 h-4 text-text-dim/40 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                      </svg>
-                    </button>
-                  )
-                })}
+                {selectedDayPlans.map(plan => (
+                  <SavedPlanCard
+                    key={plan.id}
+                    plan={plan}
+                    onOpen={() => handleLoadPlan(plan)}
+                    onOptions={() => handleOptionsFromDashboard(plan)}
+                    onDelete={() => handleDeleteFromDashboard(plan)}
+                  />
+                ))}
               </div>
             )}
 
@@ -1369,7 +1588,7 @@ export default function TodaysPlanClient() {
       {/* ── Plan Options sheet ── */}
       {showPlanOptions && createPortal(
         <div className="fixed inset-0 z-50 flex flex-col justify-end">
-          <div className="fixed inset-0 bg-black/60" onClick={() => setShowPlanOptions(false)} />
+          <div className="fixed inset-0 bg-black/60" onClick={handleCancelPlanOptions} />
           <div className="relative bg-bg-card rounded-t-2xl p-6 pb-10 flex flex-col gap-3">
             <div className="w-10 h-1 bg-bg-border rounded-full mx-auto mb-1" />
             <p className="font-heading text-base text-text-primary text-center mb-1">Plan Options</p>
@@ -1396,7 +1615,7 @@ export default function TodaysPlanClient() {
             </button>
             <button
               type="button"
-              onClick={() => setShowPlanOptions(false)}
+              onClick={handleCancelPlanOptions}
               className="w-full py-3.5 rounded-xl border border-bg-border font-heading text-sm text-text-dim hover:bg-white/5 active:scale-[0.98] transition-all min-h-[48px] mt-1"
             >
               Cancel
@@ -1411,7 +1630,7 @@ export default function TodaysPlanClient() {
         <div className="fixed inset-0 z-50 flex flex-col justify-end">
           <div
             className="fixed inset-0 bg-black/60"
-            onClick={() => !deleteLoading && setShowDeleteConfirm(false)}
+            onClick={() => !deleteLoading && handleCancelDeleteConfirm()}
           />
           <div className="relative bg-bg-card rounded-t-2xl p-6 pb-10 flex flex-col gap-4">
             <div className="w-10 h-1 bg-bg-border rounded-full mx-auto mb-1" />
@@ -1429,7 +1648,7 @@ export default function TodaysPlanClient() {
             </button>
             <button
               type="button"
-              onClick={() => setShowDeleteConfirm(false)}
+              onClick={handleCancelDeleteConfirm}
               disabled={deleteLoading}
               className="w-full py-3.5 rounded-xl border border-bg-border font-heading text-sm text-text-muted hover:bg-white/5 active:scale-[0.98] transition-all min-h-[48px]"
             >
