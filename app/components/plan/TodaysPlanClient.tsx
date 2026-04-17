@@ -23,6 +23,7 @@ import { addPlanToCalendar, updatePlanById, fetchDatesWithPlans, fetchPlansForDa
 import { randomId } from '@/app/lib/uuid'
 import ComponentPickerModal from './ComponentPickerModal'
 import { PhotoLightbox } from '@/app/components/ui/PhotoLightbox'
+import ConfirmSheet from '@/app/components/ui/ConfirmSheet'
 import { PlanItemSheet } from './PlanItemSheet'
 import { PlanCalendarSheet } from './PlanCalendarSheet'
 
@@ -659,7 +660,6 @@ export default function TodaysPlanClient() {
   const [removedItem, setRemovedItem] = useState<{ item: PlanItem; index: number } | null>(null)
   const removedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [deleteLoading, setDeleteLoading] = useState(false)
   const [showPlanOptions, setShowPlanOptions] = useState(false)
   const [showMoveCalendar, setShowMoveCalendar] = useState(false)
 
@@ -1041,30 +1041,25 @@ export default function TodaysPlanClient() {
   }
 
   async function handleDeletePlan() {
+    // ConfirmSheet manages its own loading state; this handler only needs to
+    // perform the work and throw on failure so the sheet releases its lock.
     if (!editingPlanId) return
     if (saveTimer.current) clearTimeout(saveTimer.current)
-    setDeleteLoading(true)
-    try {
-      await deletePlanById(editingPlanId)
-      const from = offsetDate(todayIso, -180)
-      const to = offsetDate(todayIso, 180)
-      const dates = await fetchDatesWithPlans(from, to)
-      setDatesWithPlans(new Set(dates))
-      setSelectedDayPlans(prev => prev.filter(p => p.id !== editingPlanId))
-      setShowDeleteConfirm(false)
-      setEditingPlanId(null)
-      setEditingPlanLabel(null)
-      setItems([])
-      setSaveStatus('idle')
-      optionsFromDashboardRef.current = false
-      // If the coach was in edit view, return them to dashboard. If they
-      // triggered this from the dashboard swipe, they're already there.
-      if (viewMode !== 'dashboard') setViewMode('dashboard')
-    } catch (err) {
-      console.error('Delete failed:', err)
-    } finally {
-      setDeleteLoading(false)
-    }
+    await deletePlanById(editingPlanId)
+    const from = offsetDate(todayIso, -180)
+    const to = offsetDate(todayIso, 180)
+    const dates = await fetchDatesWithPlans(from, to)
+    setDatesWithPlans(new Set(dates))
+    setSelectedDayPlans(prev => prev.filter(p => p.id !== editingPlanId))
+    setShowDeleteConfirm(false)
+    setEditingPlanId(null)
+    setEditingPlanLabel(null)
+    setItems([])
+    setSaveStatus('idle')
+    optionsFromDashboardRef.current = false
+    // If the coach was in edit view, return them to dashboard. If they
+    // triggered this from the dashboard swipe, they're already there.
+    if (viewMode !== 'dashboard') setViewMode('dashboard')
   }
 
   async function handleMovePlan(newDate: string) {
@@ -1643,39 +1638,17 @@ export default function TodaysPlanClient() {
         document.body
       )}
 
-      {/* ── Delete confirmation sheet ── */}
-      {showDeleteConfirm && createPortal(
-        <div className="fixed inset-0 z-50 flex flex-col justify-end">
-          <div
-            className="fixed inset-0 bg-black/60"
-            onClick={() => !deleteLoading && handleCancelDeleteConfirm()}
-          />
-          <div className="relative bg-bg-card rounded-t-2xl p-6 pb-10 flex flex-col gap-4">
-            <div className="w-10 h-1 bg-bg-border rounded-full mx-auto mb-1" />
-            <p className="font-heading text-lg text-text-primary text-center">Delete this plan?</p>
-            <p className="text-sm text-text-dim text-center leading-relaxed">
-              This can&apos;t be undone. All components and coach notes will be removed.
-            </p>
-            <button
-              type="button"
-              onClick={handleDeletePlan}
-              disabled={deleteLoading}
-              className="w-full py-3.5 rounded-xl bg-red-500 text-white font-heading text-base active:scale-[0.98] transition-all disabled:opacity-60 min-h-[52px]"
-            >
-              {deleteLoading ? 'Deleting…' : 'Delete Plan'}
-            </button>
-            <button
-              type="button"
-              onClick={handleCancelDeleteConfirm}
-              disabled={deleteLoading}
-              className="w-full py-3.5 rounded-xl border border-bg-border font-heading text-sm text-text-muted hover:bg-white/5 active:scale-[0.98] transition-all min-h-[48px]"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>,
-        document.body
-      )}
+      {/* ── Delete confirmation — shared ConfirmSheet primitive ── */}
+      <ConfirmSheet
+        visible={showDeleteConfirm}
+        title="Delete this plan?"
+        body="This can't be undone. All components and coach notes will be removed."
+        confirmLabel="Delete plan"
+        workingLabel="Deleting…"
+        destructive
+        onConfirm={handleDeletePlan}
+        onClose={handleCancelDeleteConfirm}
+      />
 
     </div>
   )

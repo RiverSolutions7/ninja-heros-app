@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/app/lib/supabase'
 import type { ComponentRow } from '@/app/lib/database.types'
+import ConfirmSheet from '@/app/components/ui/ConfirmSheet'
 
 interface ComponentCardMenuProps {
   component: ComponentRow
@@ -20,7 +21,7 @@ export default function ComponentCardMenu({ component }: ComponentCardMenuProps)
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
-  const [deleting, setDeleting] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const [menuPos, setMenuPos] = useState({ bottom: 0, right: 0 })
@@ -81,35 +82,37 @@ export default function ComponentCardMenu({ component }: ComponentCardMenuProps)
     }
   }
 
-  async function handleDelete() {
+  function handleDeleteTap() {
     setOpen(false)
-    if (!window.confirm('Delete this component from the library? This cannot be undone.')) return
+    setShowDeleteConfirm(true)
+  }
 
-    setDeleting(true)
-    try {
-      const photoPaths = (component.photos ?? [])
-        .map((u) => extractPath(u, 'station-photos'))
-        .filter(Boolean) as string[]
+  /**
+   * Destructive work — runs once the coach confirms in the sheet.
+   * ConfirmSheet manages its own loading state; this function just needs
+   * to throw on failure so the sheet releases its lock and the parent
+   * can surface an error toast.
+   */
+  async function handleDeleteConfirmed() {
+    const photoPaths = (component.photos ?? [])
+      .map((u) => extractPath(u, 'station-photos'))
+      .filter(Boolean) as string[]
 
-      if (photoPaths.length > 0) {
-        await supabase.storage.from('station-photos').remove(photoPaths)
-      }
-      if (component.video_url) {
-        const videoPath = extractPath(component.video_url, 'lane-videos')
-        if (videoPath) {
-          await supabase.storage.from('lane-videos').remove([videoPath])
-        }
-      }
-
-      const { error } = await supabase.from('components').delete().eq('id', component.id)
-      if (error) throw error
-
-      router.refresh()
-    } catch (err) {
-      console.error('Failed to delete component:', err)
-      alert('Failed to delete component. Please try again.')
-      setDeleting(false)
+    if (photoPaths.length > 0) {
+      await supabase.storage.from('station-photos').remove(photoPaths)
     }
+    if (component.video_url) {
+      const videoPath = extractPath(component.video_url, 'lane-videos')
+      if (videoPath) {
+        await supabase.storage.from('lane-videos').remove([videoPath])
+      }
+    }
+
+    const { error } = await supabase.from('components').delete().eq('id', component.id)
+    if (error) throw error
+
+    setShowDeleteConfirm(false)
+    router.refresh()
   }
 
   return (
@@ -117,19 +120,14 @@ export default function ComponentCardMenu({ component }: ComponentCardMenuProps)
       <button
         ref={buttonRef}
         onClick={handleToggle}
-        disabled={deleting}
         aria-label="Component actions"
-        className="flex items-center justify-center w-8 h-8 rounded-lg text-text-dim hover:text-text-primary hover:bg-white/5 transition-colors disabled:opacity-40 flex-shrink-0"
+        className="flex items-center justify-center w-8 h-8 rounded-lg text-text-dim hover:text-text-primary hover:bg-white/5 transition-colors flex-shrink-0"
       >
-        {deleting ? (
-          <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-        ) : (
-          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-            <circle cx="12" cy="5" r="2" />
-            <circle cx="12" cy="12" r="2" />
-            <circle cx="12" cy="19" r="2" />
-          </svg>
-        )}
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="5" r="2" />
+          <circle cx="12" cy="12" r="2" />
+          <circle cx="12" cy="19" r="2" />
+        </svg>
       </button>
 
       {open && typeof window !== 'undefined' && createPortal(
@@ -163,7 +161,7 @@ export default function ComponentCardMenu({ component }: ComponentCardMenuProps)
             <div className="h-px bg-bg-border mx-3" />
 
             <button
-              onClick={handleDelete}
+              onClick={handleDeleteTap}
               className="w-full flex items-center gap-2.5 px-4 py-3.5 text-sm text-accent-fire hover:bg-accent-fire/10 transition-colors"
             >
               <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -175,6 +173,18 @@ export default function ComponentCardMenu({ component }: ComponentCardMenuProps)
         </>,
         document.body
       )}
+
+      {/* Delete confirmation — styled sheet, matches plan-delete */}
+      <ConfirmSheet
+        visible={showDeleteConfirm}
+        title={`Delete “${component.title}”?`}
+        body="This can't be undone. Saved plans using this component will keep their copy."
+        confirmLabel="Delete component"
+        workingLabel="Deleting…"
+        destructive
+        onConfirm={handleDeleteConfirmed}
+        onClose={() => setShowDeleteConfirm(false)}
+      />
 
       {toast && typeof window !== 'undefined' && createPortal(
         <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-2 bg-bg-card border border-bg-border rounded-xl px-4 py-2.5 shadow-2xl text-sm text-text-primary whitespace-nowrap pointer-events-none">
