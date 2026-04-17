@@ -690,17 +690,33 @@ export default function TodaysPlanClient() {
     setSaveStatus('saving')
     try {
       const plan = await addPlanToCalendar(date, items, title || undefined)
-      setLastAddedPlanId(plan.id)
-      setEditingPlanId(plan.id)
-      setEditingPlanLabel(formatDisplayDate(date))
+
+      // Refresh calendar dots so the saved date lights up in the week strip
       const from = offsetDate(todayIso, -180)
       const to = offsetDate(todayIso, 180)
       const dates = await fetchDatesWithPlans(from, to)
       setDatesWithPlans(new Set(dates))
-      setSaveStatus('idle')
-      setCalendarAddedTo(formatDisplayDate(date))
-      setTimeout(() => setCalendarAddedTo(null), 3000)
+
+      // Clear edit state — the save is a completion, not a transition to
+      // "now editing an existing plan." Coach can tap the saved card on the
+      // dashboard to re-open if they want to keep working.
       try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
+      setItems([])
+      setEditingPlanId(null)
+      setEditingPlanLabel(null)
+      setLastAddedPlanId(plan.id)
+      setSaveStatus('idle')
+
+      // Return to dashboard with the saved date focused so the new plan card
+      // appears right there under "Planned." Jump the week strip too if the
+      // saved date falls outside the currently-displayed week.
+      setSelectedDayIso(date)
+      setWeekStart(getWeekStart(date))
+      setViewMode('dashboard')
+
+      // Floating confirmation toast — shown regardless of view
+      setCalendarAddedTo(formatDisplayDate(date))
+      setTimeout(() => setCalendarAddedTo(null), 3500)
     } catch (err) {
       console.error('Add to calendar failed:', err)
       setSaveStatus('idle')
@@ -1202,13 +1218,6 @@ export default function TodaysPlanClient() {
             </div>
           )}
 
-          {/* ── Transient confirmation ── */}
-          {calendarAddedTo && (
-            <p className="text-center text-xs text-accent-green px-4 pb-2">
-              ✓ Added to {calendarAddedTo}
-            </p>
-          )}
-
           {/* ── Clear & start over (new plan only) ── */}
           {items.length > 0 && !editingPlanId && (
             <div className="px-4 pb-4 flex justify-center gap-4">
@@ -1222,6 +1231,20 @@ export default function TodaysPlanClient() {
             </div>
           )}
         </>
+      )}
+
+      {/* ── Save-to-calendar confirmation toast (top-level, any view) ── */}
+      {calendarAddedTo && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 animate-slide-up">
+          <div className="flex items-center gap-2.5 bg-bg-card border border-accent-green/30 shadow-card rounded-xl px-4 py-2.5">
+            <svg className="w-4 h-4 text-accent-green flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            <span className="text-sm text-text-primary">
+              Added to <span className="font-heading">{calendarAddedTo}</span>
+            </span>
+          </div>
+        </div>
       )}
 
       {/* ── Undo toast (recently-removed plan item) ── */}
