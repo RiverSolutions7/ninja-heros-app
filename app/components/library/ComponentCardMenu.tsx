@@ -5,7 +5,10 @@ import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/app/lib/supabase'
 import type { ComponentRow } from '@/app/lib/database.types'
+import BottomSheet from '@/app/components/ui/BottomSheet'
 import ConfirmSheet from '@/app/components/ui/ConfirmSheet'
+import MenuList, { type MenuItem } from '@/app/components/ui/MenuList'
+import useIsMobile from '@/app/hooks/useIsMobile'
 
 interface ComponentCardMenuProps {
   component: ComponentRow
@@ -17,8 +20,26 @@ function extractPath(url: string, bucket: string): string | null {
   return idx >= 0 ? url.slice(idx + marker.length) : null
 }
 
+// Icons — extracted so the popover + sheet render the same glyphs
+const EDIT_ICON = (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+  </svg>
+)
+const SHARE_ICON = (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+  </svg>
+)
+const TRASH_ICON = (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+  </svg>
+)
+
 export default function ComponentCardMenu({ component }: ComponentCardMenuProps) {
   const router = useRouter()
+  const isMobile = useIsMobile()
   const [open, setOpen] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -26,8 +47,9 @@ export default function ComponentCardMenu({ component }: ComponentCardMenuProps)
   const menuRef = useRef<HTMLDivElement>(null)
   const [menuPos, setMenuPos] = useState({ bottom: 0, right: 0 })
 
+  // Popover (desktop) dismiss on outside click / scroll
   useEffect(() => {
-    if (!open) return
+    if (!open || isMobile) return
     function onMouseDown(e: MouseEvent) {
       const target = e.target as Node
       if (buttonRef.current?.contains(target) || menuRef.current?.contains(target)) return
@@ -35,28 +57,24 @@ export default function ComponentCardMenu({ component }: ComponentCardMenuProps)
     }
     document.addEventListener('mousedown', onMouseDown)
     return () => document.removeEventListener('mousedown', onMouseDown)
-  }, [open])
+  }, [open, isMobile])
 
   useEffect(() => {
-    if (!open) return
+    if (!open || isMobile) return
     const close = () => setOpen(false)
     window.addEventListener('scroll', close, { passive: true, capture: true })
     return () => window.removeEventListener('scroll', close, true)
-  }, [open])
+  }, [open, isMobile])
 
   function handleToggle(e: React.MouseEvent) {
     e.stopPropagation()
-    if (buttonRef.current) {
+    if (buttonRef.current && !isMobile) {
       const rect = buttonRef.current.getBoundingClientRect()
       setMenuPos({ bottom: window.innerHeight - rect.top + 6, right: window.innerWidth - rect.right })
     }
     setOpen((v) => !v)
   }
 
-  /**
-   * Share: prefer native share sheet on mobile, fall back to clipboard on
-   * desktop / when declined. Confirmation flashes via the toast primitive.
-   */
   async function handleShare() {
     setOpen(false)
     const url = `${window.location.origin}/component/${component.id}`
@@ -70,7 +88,7 @@ export default function ComponentCardMenu({ component }: ComponentCardMenuProps)
         await navigator.share(shareData)
         return
       } catch {
-        /* user dismissed or share threw — fall through to clipboard */
+        /* user dismissed — fall through to clipboard */
       }
     }
     try {
@@ -78,8 +96,13 @@ export default function ComponentCardMenu({ component }: ComponentCardMenuProps)
       setToast('Link copied')
       setTimeout(() => setToast(null), 2200)
     } catch {
-      /* silent fail — clipboard denied */
+      /* silent fail */
     }
+  }
+
+  function handleEdit() {
+    setOpen(false)
+    router.push(`/library/log-component/${component.id}`)
   }
 
   function handleDeleteTap() {
@@ -87,12 +110,6 @@ export default function ComponentCardMenu({ component }: ComponentCardMenuProps)
     setShowDeleteConfirm(true)
   }
 
-  /**
-   * Destructive work — runs once the coach confirms in the sheet.
-   * ConfirmSheet manages its own loading state; this function just needs
-   * to throw on failure so the sheet releases its lock and the parent
-   * can surface an error toast.
-   */
   async function handleDeleteConfirmed() {
     const photoPaths = (component.photos ?? [])
       .map((u) => extractPath(u, 'station-photos'))
@@ -115,6 +132,14 @@ export default function ComponentCardMenu({ component }: ComponentCardMenuProps)
     router.refresh()
   }
 
+  // Single source of truth for the menu rows — rendered inside both the
+  // desktop popover and the mobile bottom sheet, so they look identical.
+  const menuItems: MenuItem[] = [
+    { icon: EDIT_ICON, label: 'Edit', onClick: handleEdit },
+    { icon: SHARE_ICON, label: 'Share', onClick: handleShare },
+    { icon: TRASH_ICON, label: 'Delete', onClick: handleDeleteTap, destructive: true, dividerAbove: true },
+  ]
+
   return (
     <>
       <button
@@ -130,7 +155,18 @@ export default function ComponentCardMenu({ component }: ComponentCardMenuProps)
         </svg>
       </button>
 
-      {open && typeof window !== 'undefined' && createPortal(
+      {/* Mobile: bottom sheet. Title interpolates the component so the sheet
+          feels contextual instead of generic. */}
+      {isMobile && (
+        <BottomSheet visible={open} onClose={() => setOpen(false)} title={component.title}>
+          <div className="pb-4">
+            <MenuList items={menuItems} ariaLabel={`Actions for ${component.title}`} />
+          </div>
+        </BottomSheet>
+      )}
+
+      {/* Desktop: portal-anchored popover near the kebab button. */}
+      {!isMobile && open && typeof window !== 'undefined' && createPortal(
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div
@@ -138,37 +174,7 @@ export default function ComponentCardMenu({ component }: ComponentCardMenuProps)
             className="fixed z-50 min-w-[160px] bg-bg-card border border-bg-border rounded-xl shadow-2xl overflow-hidden"
             style={{ bottom: menuPos.bottom, right: menuPos.right }}
           >
-            <button
-              onClick={() => { setOpen(false); router.push(`/library/log-component/${component.id}`) }}
-              className="w-full flex items-center gap-2.5 px-4 py-3.5 text-sm text-text-primary hover:bg-white/5 transition-colors"
-            >
-              <svg className="w-4 h-4 text-text-dim flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-              Edit
-            </button>
-
-            <button
-              onClick={handleShare}
-              className="w-full flex items-center gap-2.5 px-4 py-3.5 text-sm text-text-primary hover:bg-white/5 transition-colors"
-            >
-              <svg className="w-4 h-4 text-text-dim flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-              </svg>
-              Share
-            </button>
-
-            <div className="h-px bg-bg-border mx-3" />
-
-            <button
-              onClick={handleDeleteTap}
-              className="w-full flex items-center gap-2.5 px-4 py-3.5 text-sm text-accent-fire hover:bg-accent-fire/10 transition-colors"
-            >
-              <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-              Delete
-            </button>
+            <MenuList items={menuItems} ariaLabel={`Actions for ${component.title}`} />
           </div>
         </>,
         document.body

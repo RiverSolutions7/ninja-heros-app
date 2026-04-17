@@ -247,22 +247,27 @@ export function PlanCalendarSheet({
           <p className="text-[11px] font-heading uppercase tracking-wider text-text-dim">
             {mode === 'save' ? 'Add to Calendar' : 'View Calendar'}
           </p>
-          {/* Week / Month toggle — browse mode only */}
+          {/* Week / Month toggle — browse mode only. Underline tab style
+              matches ComponentPickerModal so tab treatments are identical
+              across the whole app. */}
           {mode === 'browse' && (
-            <div className="flex items-center bg-bg-input border border-bg-border rounded-lg p-0.5">
+            <div className="flex items-center gap-4">
               {(['week', 'month'] as ViewMode[]).map(v => (
                 <button
                   key={v}
                   type="button"
                   onClick={() => setViewMode(v)}
                   className={[
-                    'px-3 py-1 rounded-md text-[11px] font-heading capitalize transition-colors',
+                    'relative py-2 text-[11px] font-heading uppercase tracking-wider transition-colors',
                     viewMode === v
-                      ? 'bg-accent-fire text-white'
+                      ? 'text-accent-fire'
                       : 'text-text-dim hover:text-text-muted',
                   ].join(' ')}
                 >
                   {v}
+                  {viewMode === v && (
+                    <span className="absolute inset-x-0 -bottom-px h-0.5 bg-accent-fire rounded-full" />
+                  )}
                 </button>
               ))}
             </div>
