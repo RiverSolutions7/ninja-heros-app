@@ -42,6 +42,9 @@ export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose,
   const [adHocTitle, setAdHocTitle] = useState('')
   const [adHocDescription, setAdHocDescription] = useState('')
   const [adHocDuration, setAdHocDuration] = useState<number | null>(null)
+  // Transient confirmation: flips the CTA to a green "Added to plan" panel
+  // for ~1.8s after an add, then resets so the coach can dictate the next.
+  const [adHocAddState, setAdHocAddState] = useState<'idle' | 'added'>('idle')
   const { voiceState, transcript, startRecording, stopRecording, parseComponent, reset: resetVoice, isSupported, errorMessage } = useVoiceNote()
 
   useEffect(() => {
@@ -93,6 +96,10 @@ export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose,
     setAdHocDescription('')
     setAdHocDuration(null)
     resetVoice()
+    // Flip CTA to the green "Added to plan" confirmation — mirrors the library
+    // path's ComponentDetailSheet so all three add flows feel the same.
+    setAdHocAddState('added')
+    setTimeout(() => setAdHocAddState('idle'), 1800)
   }
 
   let filtered = components
@@ -318,20 +325,39 @@ export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose,
             </div>
           )}
 
-          {/* Add to Plan button */}
-          <button
-            type="button"
-            onClick={handleAdHocAdd}
-            disabled={!adHocTitle.trim()}
-            className={[
-              'mt-1 w-full py-3.5 rounded-xl font-heading text-base transition-all min-h-[52px]',
-              adHocTitle.trim()
-                ? 'bg-accent-fire text-white shadow-glow-fire active:scale-[0.98]'
-                : 'bg-bg-card text-text-dim border border-bg-border cursor-not-allowed',
-            ].join(' ')}
-          >
-            Add to plan
-          </button>
+          {/* Add-to-plan CTA — flips to green confirmation after tap, mirrors
+              the library path (ComponentDetailSheet) so every add flow in the
+              app confirms the same way. */}
+          {adHocAddState === 'added' ? (
+            <div className="mt-1 w-full flex items-center gap-2.5 py-3.5 px-5 rounded-xl bg-accent-green/15 border border-accent-green/30 min-h-[52px]">
+              <svg
+                className="w-5 h-5 text-accent-green flex-shrink-0"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2.5}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              <span className="flex-1 font-heading text-[14px] text-accent-green tracking-wide">
+                Added to plan
+              </span>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handleAdHocAdd}
+              disabled={!adHocTitle.trim()}
+              className={[
+                'mt-1 w-full py-3.5 rounded-xl font-heading text-base transition-all min-h-[52px]',
+                adHocTitle.trim()
+                  ? 'bg-accent-fire text-white shadow-glow-fire active:scale-[0.98]'
+                  : 'bg-bg-card text-text-dim border border-bg-border cursor-not-allowed',
+              ].join(' ')}
+            >
+              Add to plan
+            </button>
+          )}
         </div>
       ) : (
         /* ═══════════════════════════════════════════════════════════ */

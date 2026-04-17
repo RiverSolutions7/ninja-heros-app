@@ -549,7 +549,7 @@ export default function ComponentDetailSheet({
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
               <span className="flex-1 font-heading text-[14px] text-accent-green tracking-wide">
-                Added to today&apos;s plan
+                Added to plan
               </span>
               {!onAdd && (
                 <button
@@ -575,7 +575,7 @@ export default function ComponentDetailSheet({
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
               <span className="flex-1 font-heading text-[14px] text-text-muted tracking-wide">
-                Already in today&apos;s plan
+                Already in plan
               </span>
               {!onAdd && (
                 <button
@@ -606,7 +606,7 @@ export default function ComponentDetailSheet({
                   Adding…
                 </span>
               ) : (
-                <>Add to Today&apos;s Plan</>
+                <>Add to plan</>
               )}
             </button>
           )}
