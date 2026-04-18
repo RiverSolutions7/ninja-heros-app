@@ -24,6 +24,16 @@ import { useCallback, useEffect, useRef } from 'react'
 const DEFAULT_DELAY_MS = 500
 const MOVEMENT_CANCEL_PX = 12 // finger drift that cancels the press
 
+// Dev-mode grepable logs. Fire on every state transition so inspect.dev
+// has receipts when we're debugging a misbehaving long-press on iPhone.
+// Format: [gesture:longpress] event=... key=value
+function devLog(event: string, extras: Record<string, string | number | boolean> = {}) {
+  if (process.env.NODE_ENV !== 'development') return
+  const parts = Object.entries(extras).map(([k, v]) => `${k}=${v}`).join(' ')
+  // eslint-disable-next-line no-console
+  console.log(`[gesture:longpress] event=${event}${parts ? ' ' + parts : ''}`)
+}
+
 interface UseLongPressOptions {
   /** Called when the press completes without being cancelled. */
   onLongPress: () => void
@@ -50,21 +60,28 @@ export default function useLongPress({
   const startRef = useRef<{ x: number; y: number } | null>(null)
 
   const cancel = useCallback(() => {
+    const hadTimer = timerRef.current !== null
     if (timerRef.current) {
       clearTimeout(timerRef.current)
       timerRef.current = null
     }
     startRef.current = null
+    if (hadTimer) devLog('cancel', { reason: 'manual-or-movement' })
   }, [])
 
   // Cleanup on unmount
   useEffect(() => cancel, [cancel])
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
-    if (shouldSkip && shouldSkip(e.target as HTMLElement)) return
+    if (shouldSkip && shouldSkip(e.target as HTMLElement)) {
+      devLog('pointerdown-skip', { x: e.clientX, y: e.clientY })
+      return
+    }
     startRef.current = { x: e.clientX, y: e.clientY }
     if (timerRef.current) clearTimeout(timerRef.current)
+    devLog('pointerdown', { x: e.clientX, y: e.clientY, delay: delayMs, pointerType: e.pointerType })
     timerRef.current = setTimeout(() => {
+      devLog('fire', { delay: delayMs })
       onLongPress()
       // Clear immediately so a subsequent pointerup doesn't also fire a click.
       startRef.current = null
@@ -77,21 +94,25 @@ export default function useLongPress({
     if (!start) return
     const dx = e.clientX - start.x
     const dy = e.clientY - start.y
+    const dist = Math.sqrt(dx * dx + dy * dy)
     // If the finger drifts meaningfully before the timer fires, it's not a
     // long-press — it's either a scroll or a swipe. Cancel so the page/native
     // gesture can handle it normally.
-    if (Math.sqrt(dx * dx + dy * dy) > MOVEMENT_CANCEL_PX) {
+    if (dist > MOVEMENT_CANCEL_PX) {
+      devLog('pointermove-cancel', { dist: Math.round(dist), threshold: MOVEMENT_CANCEL_PX })
       cancel()
     }
   }, [cancel])
 
-  const onPointerEnd = useCallback(() => {
+  const onPointerEnd = useCallback((e: React.PointerEvent) => {
+    devLog(e.type, { claimed: timerRef.current === null })
     cancel()
   }, [cancel])
 
   // Block the iOS ~500ms long-press system context menu (copy/share bubble).
   // Our own onLongPress fires at the same time and we want our UI, not iOS's.
   const onContextMenu = useCallback((e: React.SyntheticEvent) => {
+    devLog('contextmenu-prevent')
     e.preventDefault()
   }, [])
 
