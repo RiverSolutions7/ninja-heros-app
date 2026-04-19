@@ -209,9 +209,7 @@ The app uses a strict automated quality gate:
 
 ### Claude Design project link
 
-_To be pasted once the user creates the project:_
-
-> `<paste Claude Design project URL here>`
+[Ninja H.E.R.O.S. Coach Hub — Claude Design](https://claude.ai/design/p/fee76c2f-33f2-4cb7-af0e-b9c1818ec888)
 
 ---
 
