@@ -6,19 +6,18 @@ import Link from 'next/link'
 import { supabase } from '@/app/lib/supabase'
 import { uploadStationPhoto } from '@/app/lib/uploadPhoto'
 import { uploadComponentVideo } from '@/app/lib/uploadVideo'
-import type { ComponentType, CurriculumRow } from '@/app/lib/database.types'
+import { countComponents } from '@/app/lib/queries'
+import { randomId } from '@/app/lib/uuid'
+import type { ComponentRow, ComponentType, CurriculumRow } from '@/app/lib/database.types'
 import SkillChip from '@/app/components/skills/SkillChip'
 import Toast from '@/app/components/ui/Toast'
-import VideoCapture from '@/app/components/ui/VideoCapture'
+import MediaStrip, { type MediaItem } from '@/app/components/ui/MediaStrip'
+import MediaAddSheet from '@/app/components/ui/MediaAddSheet'
+import Button from '@/app/components/ui/Button'
+import ComponentDetailSheet from '@/app/components/library/ComponentDetailSheet'
 import { useVoiceNote } from '@/app/hooks/useVoiceNote'
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
-
-interface PhotoDraft {
-  localId: string
-  file: File
-  preview: string
-}
 
 function XIcon() {
   return (
@@ -28,13 +27,11 @@ function XIcon() {
   )
 }
 
-function SectionDivider({ label }: { label: string }) {
+function SectionLabel({ label, className = '' }: { label: string; className?: string }) {
   return (
-    <div className="relative flex items-center gap-3 my-5">
-      <div className="flex-1 h-px bg-bg-border" />
-      <span className="text-[11px] font-heading uppercase tracking-wider text-text-dim">{label}</span>
-      <div className="flex-1 h-px bg-bg-border" />
-    </div>
+    <p className={['section-label mt-7 mb-2', className].join(' ')}>
+      {label}
+    </p>
   )
 }
 
@@ -74,18 +71,6 @@ const TYPE_GATE_CONFIG: Record<ComponentType, {
   },
 }
 
-const TYPE_BADGE: Record<ComponentType, string> = {
-  game:    'bg-accent-green/10 text-accent-green border-accent-green/25',
-  station: 'bg-accent-blue/10 text-accent-blue border-accent-blue/25',
-}
-
-// ── Voice labels ───────────────────────────────────────────────────────────────
-
-const MIC_IDLE_LABEL       = 'Tap to name and describe this component'
-const MIC_RECORDING_LABEL  = 'Listening… tap again to stop'
-const MIC_PROCESSING_LABEL = 'Processing…'
-const MIC_DONE_LABEL       = 'Name, description & skills filled ✓'
-
 // ── Gate step type ─────────────────────────────────────────────────────────────
 
 type GateStep = 'loading' | 'curriculum' | 'type' | 'form'
@@ -108,16 +93,12 @@ export default function LogComponentPage() {
   const [description, setDescription] = useState('')
   const [durationMinutes, setDurationMinutes] = useState<number | null>(null)
   const [skills, setSkills] = useState<string[]>([])
-  const [photos, setPhotos] = useState<PhotoDraft[]>([])
 
-  // Video
-  const [showVideo, setShowVideo] = useState(false)
-  const [videoFile, setVideoFile] = useState<File | null>(null)
-  const [videoPreview, setVideoPreview] = useState<string | null>(null)
-
-  // Optional video link
-  const [showVideoLink, setShowVideoLink] = useState(false)
-  const [videoLink, setVideoLink] = useState('')
+  // Unified media — photos + video + video link all in one array. Single-video
+  // and single-link slots are enforced by handleAddMedia (new video/link
+  // replaces any existing one).
+  const [media, setMedia] = useState<MediaItem[]>([])
+  const [showMediaSheet, setShowMediaSheet] = useState(false)
 
   // Skills
   const [availableSkills, setAvailableSkills] = useState<string[]>([])
@@ -126,14 +107,20 @@ export default function LogComponentPage() {
   const [addSkillSaving, setAddSkillSaving] = useState(false)
   const [addSkillError, setAddSkillError] = useState<string | null>(null)
 
+  // Post-voice green-pulse tracking: set of field keys that just got filled
+  // via voice; cleared after the animation class runs (~1.2s).
+  const [justFilled, setJustFilled] = useState<Set<string>>(new Set())
+
   // Submit
   const [submitting, setSubmitting] = useState(false)
   const [titleError, setTitleError] = useState<string | null>(null)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
 
+  // After-save reward screen.
+  const [savedComponent, setSavedComponent] = useState<ComponentRow | null>(null)
+  const [libraryRank, setLibraryRank] = useState<number | null>(null)
+
   const newSkillInputRef = useRef<HTMLInputElement>(null)
-  const cameraRef = useRef<HTMLInputElement>(null)
-  const libraryRef = useRef<HTMLInputElement>(null)
 
   const {
     voiceState,
@@ -145,6 +132,11 @@ export default function LogComponentPage() {
     parseComponent,
     reset: resetVoice,
   } = useVoiceNote()
+
+  // ── Derived media flags ─────────────────────────────────────────────────────
+
+  const hasVideo = media.some((m) => m.kind === 'video')
+  const hasLink = media.some((m) => m.kind === 'link')
 
   // ── Load curricula ───────────────────────────────────────────────────────────
 
@@ -158,11 +150,9 @@ export default function LogComponentPage() {
         const rows = (data as CurriculumRow[]) ?? []
         setCurriculums(rows)
         if (rows.length === 1) {
-          // Auto-select single curriculum, skip to type gate
           setCurriculum(rows[0].age_group)
           setGateStep('type')
         } else if (rows.length === 0) {
-          // No curricula configured — skip to type gate
           setGateStep('type')
         } else {
           setGateStep('curriculum')
@@ -220,22 +210,40 @@ export default function LogComponentPage() {
     if (voiceState === 'idle' || voiceState === 'error' || voiceState === 'done') {
       resetVoice()
       startRecording()
-    } else if (voiceState === 'recording') {
+      return
+    }
+    if (voiceState === 'recording') {
       stopRecording()
       const result = await parseComponent(componentType!, componentType === 'station' ? availableSkills : [])
-      if (result.title) { setTitle(result.title); setTitleError(null) }
-      if (result.description) setDescription(result.description)
-      if (result.durationMinutes) setDurationMinutes(result.durationMinutes)
-      if (componentType === 'station' && result.skills.length > 0) setSkills(result.skills)
-    }
-  }
 
-  const micColors: Record<string, string> = {
-    idle:       'bg-bg-card border-2 border-bg-border text-text-muted hover:border-accent-fire/40 hover:text-accent-fire',
-    recording:  'bg-accent-fire text-white shadow-glow-fire',
-    processing: 'bg-bg-card border-2 border-bg-border text-text-dim',
-    done:       'bg-accent-green/15 border-2 border-accent-green/50 text-accent-green',
-    error:      'bg-red-900/20 border-2 border-red-500/40 text-red-400',
+      // Pushback on silent overwrite: if the coach has already typed a name,
+      // confirm before voice replaces it. Other fields overwrite freely since
+      // they're bulkier and less "theirs."
+      let shouldReplaceTitle = true
+      if (result.title && title.trim() && result.title.trim() !== title.trim()) {
+        shouldReplaceTitle = window.confirm(
+          `Replace the current name (“${title.trim()}”) with voice result “${result.title}”?`
+        )
+      }
+
+      const filled = new Set<string>()
+      if (result.title && shouldReplaceTitle) {
+        setTitle(result.title); setTitleError(null); filled.add('title')
+      }
+      if (result.description) { setDescription(result.description); filled.add('description') }
+      if (result.durationMinutes) { setDurationMinutes(result.durationMinutes); filled.add('duration') }
+      if (componentType === 'station' && result.skills.length > 0) {
+        setSkills(result.skills); filled.add('skills')
+      }
+
+      // Fire the post-voice highlight. Using key-based re-mount via justFilled
+      // ensures the CSS animation re-runs even if filled set is identical to a
+      // previous run.
+      if (filled.size > 0) {
+        setJustFilled(filled)
+        setTimeout(() => setJustFilled(new Set()), 1300)
+      }
+    }
   }
 
   // ── Skills ───────────────────────────────────────────────────────────────────
@@ -262,13 +270,18 @@ export default function LogComponentPage() {
     setAddSkillSaving(false)
   }
 
-  // ── Photos ───────────────────────────────────────────────────────────────────
+  // ── Media ────────────────────────────────────────────────────────────────────
 
-  function handleFileAdded(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setPhotos((prev) => [...prev, { localId: crypto.randomUUID(), file, preview: URL.createObjectURL(file) }])
-    e.target.value = ''
+  function handleAddMedia(item: MediaItem) {
+    setMedia((prev) => {
+      if (item.kind === 'video') return [...prev.filter((m) => m.kind !== 'video'), item]
+      if (item.kind === 'link') return [...prev.filter((m) => m.kind !== 'link'), item]
+      return [...prev, item] // photos are multi-valued
+    })
+  }
+
+  function handleRemoveMedia(localId: string) {
+    setMedia((prev) => prev.filter((m) => m.localId !== localId))
   }
 
   // ── Submit ───────────────────────────────────────────────────────────────────
@@ -279,41 +292,96 @@ export default function LogComponentPage() {
     if (!title.trim()) { setTitleError('Give this component a name'); return }
     setSubmitting(true)
     try {
+      // Partition unified media back into DB-shaped fields.
       const photoUrls: string[] = []
-      for (const photo of photos) {
-        try { photoUrls.push(await uploadStationPhoto(photo.file)) } catch { /* skip */ }
+      for (const m of media) {
+        if (m.kind !== 'photo') continue
+        if (m.file) {
+          try { photoUrls.push(await uploadStationPhoto(m.file)) } catch { /* skip */ }
+        } else if (!m.url.startsWith('blob:')) {
+          photoUrls.push(m.url)
+        }
       }
 
       let videoUrl: string | null = null
-      if (videoFile) {
-        try { videoUrl = await uploadComponentVideo(videoFile) } catch { /* skip */ }
+      const videoItem = media.find((m) => m.kind === 'video')
+      if (videoItem && videoItem.kind === 'video') {
+        if (videoItem.file) {
+          try { videoUrl = await uploadComponentVideo(videoItem.file) } catch { /* skip */ }
+        } else if (!videoItem.url.startsWith('blob:')) {
+          videoUrl = videoItem.url
+        }
       }
 
-      const { error: insertErr } = await supabase.from('components').insert({
-        type: componentType!,
-        title: title.trim(),
-        curriculum: curriculum || null,
-        description: description.trim() || null,
-        skills: skills.length > 0 ? skills : null,
-        photos: photoUrls.filter((u) => !u.startsWith('blob:')),
-        video_url: videoUrl,
-        video_link: showVideoLink ? (videoLink.trim() || null) : null,
-        duration_minutes: durationMinutes,
-      })
+      const linkItem = media.find((m) => m.kind === 'link')
+      const videoLinkUrl = linkItem && linkItem.kind === 'link' ? linkItem.url : null
+
+      const { data: inserted, error: insertErr } = await supabase
+        .from('components')
+        .insert({
+          type: componentType!,
+          title: title.trim(),
+          curriculum: curriculum || null,
+          description: description.trim() || null,
+          skills: skills.length > 0 ? skills : null,
+          photos: photoUrls.filter((u) => !u.startsWith('blob:')),
+          video_url: videoUrl,
+          video_link: videoLinkUrl,
+          duration_minutes: durationMinutes,
+        })
+        .select()
+        .single()
       if (insertErr) throw insertErr
-      setToast({ message: 'Component saved ✓', type: 'success' })
-      await new Promise((r) => setTimeout(r, 1500))
-      router.push('/library?view=components')
+
+      let totalCount: number
+      try { totalCount = await countComponents() } catch { totalCount = 0 }
+
+      setSavedComponent(inserted as ComponentRow)
+      setLibraryRank(totalCount)
     } catch {
       setToast({ message: 'Something went wrong. Please try again.', type: 'error' })
       setSubmitting(false)
     }
   }
 
+  function handleLogAnother() {
+    setSavedComponent(null)
+    setLibraryRank(null)
+    setComponentType(null)
+    setTitle('')
+    setTitleError(null)
+    setDescription('')
+    setDurationMinutes(null)
+    setSkills([])
+    setMedia([])
+    setAddingSkill(false)
+    setNewSkillName('')
+    setAddSkillError(null)
+    setSubmitting(false)
+    setToast(null)
+    setJustFilled(new Set())
+    resetVoice()
+    setGateStep('type')
+  }
+
   // ── Derived display values ────────────────────────────────────────────────────
 
   const curriculumLabel = curriculums.find((c) => c.age_group === curriculum)?.label ?? curriculum
   const typeConfig = componentType ? TYPE_GATE_CONFIG[componentType] : null
+
+  // ── Render: After-save reward screen ──────────────────────────────────────────
+
+  if (savedComponent && libraryRank !== null) {
+    return (
+      <ComponentDetailSheet
+        component={savedComponent}
+        mode="afterSave"
+        libraryRank={libraryRank}
+        onClose={() => router.push('/library?view=components')}
+        onLogAnother={handleLogAnother}
+      />
+    )
+  }
 
   // ── Render: Loading ───────────────────────────────────────────────────────────
 
@@ -437,224 +505,93 @@ export default function LogComponentPage() {
 
   // ── Render: Full form ─────────────────────────────────────────────────────────
 
-  // At this point componentType is guaranteed non-null (gateStep === 'form')
   const ct = componentType!
 
   return (
     <form onSubmit={handleSubmit} className="pb-6">
 
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-6 pt-2">
+      {/* ── Header ─────────────────────────────────────────── */}
+      <div className="pt-2 mb-6">
         <button
           type="button"
           onClick={changeType}
-          className="flex items-center justify-center w-8 h-8 rounded-lg text-text-dim hover:text-text-primary hover:bg-white/5 transition-colors -ml-1 flex-shrink-0"
+          className="flex items-center justify-center w-8 h-8 rounded-lg text-text-dim hover:text-text-primary hover:bg-white/5 transition-colors -ml-1 mb-3"
           aria-label="Back to type selection"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-        <h1 className="font-heading text-xl text-text-primary leading-none flex-shrink-0">Log Component</h1>
-
-        {/* Curriculum badge — tappable if multiple curricula */}
-        {curriculumLabel && (
-          <button
-            type="button"
-            onClick={changeCurriculum}
-            className="text-[10px] font-heading uppercase tracking-wide px-2 py-1 rounded-full bg-accent-fire/10 border border-accent-fire/25 text-accent-fire transition-colors hover:bg-accent-fire/20 flex-shrink-0"
-          >
-            {curriculumLabel}
-          </button>
-        )}
-
-        {/* Type badge — always tappable */}
-        <button
-          type="button"
-          onClick={changeType}
-          className={[
-            'text-[10px] font-heading uppercase tracking-wide px-2 py-1 rounded-full border transition-colors flex-shrink-0',
-            TYPE_BADGE[ct],
-          ].join(' ')}
-        >
-          {TYPE_GATE_CONFIG[ct].label}
-        </button>
-      </div>
-
-      {/* ── MIC HERO ──────────────────────────────────────── */}
-      <div className="flex flex-col items-center py-6 mb-2 rounded-2xl bg-bg-card border border-bg-border">
-        <button
-          type="button"
-          onClick={handleMicToggle}
-          disabled={voiceState === 'processing'}
-          className={[
-            'w-20 h-20 flex items-center justify-center rounded-full transition-all duration-200 mb-4',
-            micColors[voiceState],
-            voiceState === 'recording' ? 'scale-105' : 'active:scale-95',
-            voiceState === 'processing' ? 'cursor-not-allowed' : '',
-          ].join(' ')}
-          aria-label={voiceState === 'recording' ? 'Stop recording' : 'Start voice recording'}
-        >
-          {voiceState === 'recording' ? (
-            <svg className="w-8 h-8 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zM8 11a4 4 0 008 0h2a6 6 0 01-5 5.91V19h3v2H8v-2h3v-2.09A6 6 0 016 11h2z" />
-            </svg>
-          ) : voiceState === 'processing' ? (
-            <div className="w-8 h-8 border-2 border-current border-t-transparent rounded-full animate-spin" />
-          ) : voiceState === 'done' ? (
-            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-          ) : (
-            <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zM8 11a4 4 0 008 0h2a6 6 0 01-5 5.91V19h3v2H8v-2h3v-2.09A6 6 0 016 11h2z" />
-            </svg>
-          )}
-        </button>
-
-        <p className={`text-sm font-semibold text-center leading-snug ${
-          voiceState === 'recording'  ? 'text-accent-fire animate-pulse' :
-          voiceState === 'done'       ? 'text-accent-green' :
-          voiceState === 'error'      ? 'text-red-400' :
-          'text-text-muted'
-        }`}>
-          {voiceState === 'recording'  && MIC_RECORDING_LABEL}
-          {voiceState === 'processing' && MIC_PROCESSING_LABEL}
-          {voiceState === 'done'       && MIC_DONE_LABEL}
-          {voiceState === 'error'      && (errorMessage ?? 'Could not process. Try again.')}
-          {voiceState === 'idle'       && (voiceSupported ? MIC_IDLE_LABEL : 'Fill in the details below')}
-        </p>
-
-        {voiceState === 'recording' && transcript && (
-          <p className="text-xs text-text-dim italic text-center mt-3 px-6 leading-relaxed max-w-xs">
-            &ldquo;{transcript}&rdquo;
-          </p>
-        )}
-      </div>
-
-      {/* ── PHOTOS ────────────────────────────────────────── */}
-      <SectionDivider label="Photos" />
-
-      {photos.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto pb-2 mb-3" style={{ scrollSnapType: 'x mandatory' }}>
-          {photos.map((photo) => (
-            <div
-              key={photo.localId}
-              className="relative flex-shrink-0 rounded-xl overflow-hidden"
-              style={{ scrollSnapAlign: 'start', width: 120, height: 90 }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={photo.preview} alt="" className="w-full h-full object-cover" />
+        <h1 className="font-heading text-2xl text-text-primary leading-tight">
+          New {TYPE_GATE_CONFIG[ct].label}
+        </h1>
+        <div className="flex items-center gap-1.5 mt-1 text-[11px] font-heading uppercase tracking-[0.12em]">
+          {curriculumLabel && (
+            <>
               <button
                 type="button"
-                onClick={() => setPhotos((prev) => prev.filter((p) => p.localId !== photo.localId))}
-                className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 flex items-center justify-center text-white"
+                onClick={changeCurriculum}
+                className="text-text-dim hover:text-text-muted transition-colors"
               >
-                <XIcon />
+                {curriculumLabel}
               </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={() => cameraRef.current?.click()}
-          className="flex items-center gap-2 text-sm font-semibold text-accent-fire hover:text-accent-fire/80 transition-colors py-2 px-3 rounded-xl border border-accent-fire/30 hover:bg-accent-fire/5"
-        >
-          <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-          Take Photo
-        </button>
-        <button
-          type="button"
-          onClick={() => libraryRef.current?.click()}
-          className="flex items-center gap-2 text-sm font-semibold text-text-muted hover:text-text-primary transition-colors py-2 px-3 rounded-xl border border-bg-border hover:bg-white/5"
-        >
-          <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          From Library
-        </button>
-      </div>
-      <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={handleFileAdded} className="hidden" aria-label="Take photo" />
-      <input ref={libraryRef} type="file" accept="image/*" onChange={handleFileAdded} className="hidden" aria-label="Choose from library" />
-
-      {/* ── VIDEO ─────────────────────────────────────────── */}
-      {!showVideo ? (
-        <div className="mt-3">
+              <span className="text-text-dim/40">·</span>
+            </>
+          )}
           <button
             type="button"
-            onClick={() => setShowVideo(true)}
-            className="flex items-center gap-1.5 text-xs text-text-dim border border-dashed border-bg-border rounded-full px-3 py-1.5 hover:border-text-dim/40 hover:text-text-muted transition-colors"
+            onClick={changeType}
+            className={[TYPE_GATE_CONFIG[ct].textColor, 'hover:opacity-80 transition-opacity'].join(' ')}
           >
-            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-            Add Video
+            {TYPE_GATE_CONFIG[ct].label}
           </button>
         </div>
-      ) : (
-        <>
-          <SectionDivider label="Video" />
-          <VideoCapture
-            preview={videoPreview}
-            onFileSelected={(file, preview) => { setVideoFile(file); setVideoPreview(preview) }}
-          />
-          {videoPreview ? (
-            <button
-              type="button"
-              onClick={() => { setVideoFile(null); setVideoPreview(null) }}
-              className="flex items-center gap-1 text-xs text-red-400/70 hover:text-red-400 mt-2 transition-colors"
-            >
-              <XIcon /> Remove video
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowVideo(false)}
-              className="flex items-center gap-1 text-xs text-text-dim/50 hover:text-text-dim mt-2 transition-colors"
-            >
-              <XIcon /> Cancel
-            </button>
-          )}
-        </>
-      )}
+      </div>
 
-      {/* ── NAME ──────────────────────────────────────────── */}
-      <SectionDivider label="Name" />
+      {/* ── ZONE 1: Voice hero ─────────────────────────────── */}
+      <VoiceHero
+        voiceState={voiceState}
+        voiceSupported={voiceSupported}
+        transcript={transcript}
+        errorMessage={errorMessage}
+        onToggle={handleMicToggle}
+      />
 
+      {/* ── ZONE 2: Media strip ────────────────────────────── */}
+      <div className="mt-6">
+        <MediaStrip
+          items={media}
+          onAdd={() => setShowMediaSheet(true)}
+          onRemove={handleRemoveMedia}
+        />
+      </div>
+
+      {/* ── ZONE 3: Details (always visible) ───────────────── */}
+
+      <SectionLabel label="Name" />
       <input
         type="text"
         value={title}
         onChange={(e) => { setTitle(e.target.value); setTitleError(null) }}
         placeholder={
-          ct === 'game'    ? 'e.g. Cube Game, Ninja Tag…' :
-                             'e.g. Box Jump Progression…'
+          ct === 'game' ? 'e.g. Cube Game, Ninja Tag…' : 'e.g. Box Jump Progression…'
         }
-        className="field-input text-base"
+        className={['field-input text-base', justFilled.has('title') ? 'animate-fill-pulse' : ''].join(' ')}
       />
       {titleError && <p className="text-accent-fire text-xs mt-1.5">{titleError}</p>}
 
-      {/* ── DESCRIPTION ───────────────────────────────────── */}
-      <SectionDivider label="Description" />
-
+      <SectionLabel label="Description" />
       <textarea
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         placeholder={
-          ct === 'game'    ? 'Rules, setup, how to play…' :
-                             'What does the kid do? Any coaching tips?'
+          ct === 'game' ? 'Rules, setup, how to play…' : 'What does the kid do? Any coaching tips?'
         }
         rows={4}
-        className="field-textarea resize-none leading-relaxed"
+        className={['field-textarea resize-none leading-relaxed', justFilled.has('description') ? 'animate-fill-pulse' : ''].join(' ')}
       />
 
-      {/* ── DURATION ──────────────────────────────────────── */}
-      <SectionDivider label="Duration (optional)" />
+      <SectionLabel label="Duration" />
       <div className="flex items-center gap-3">
         <input
           type="number"
@@ -663,109 +600,189 @@ export default function LogComponentPage() {
           value={durationMinutes ?? ''}
           onChange={(e) => setDurationMinutes(e.target.value ? Number(e.target.value) : null)}
           placeholder="—"
-          className="w-20 field-input text-center"
+          className={['w-20 field-input text-center', justFilled.has('duration') ? 'animate-fill-pulse' : ''].join(' ')}
         />
         <span className="text-sm text-text-dim">minutes</span>
       </div>
 
-      {/* ── SKILLS (stations only) ────────────────────────── */}
       {ct === 'station' && (
-      <><SectionDivider label="Skills" />
-
-      <div className="flex flex-wrap gap-2">
-        {availableSkills.map((skill) => (
-          <SkillChip key={skill} skill={skill} selected={skills.includes(skill)} onToggle={toggleSkill} />
-        ))}
-        {addingSkill ? (
-          <div className="flex items-center gap-1.5 mt-0.5">
-            <input
-              ref={newSkillInputRef}
-              type="text"
-              value={newSkillName}
-              onChange={(e) => setNewSkillName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') { e.preventDefault(); handleAddSkill() }
-                if (e.key === 'Escape') { setAddingSkill(false); setNewSkillName('') }
-              }}
-              placeholder="Skill name…"
-              className="px-2.5 py-1 bg-bg-card border border-bg-border rounded-full text-sm text-text-primary placeholder:text-text-dim focus:outline-none focus:border-accent-green w-32"
-              autoFocus
-            />
-            <button type="button" onClick={handleAddSkill} disabled={!newSkillName.trim() || addSkillSaving} className="px-2.5 py-1 bg-accent-green text-white text-xs font-heading rounded-full disabled:opacity-50">
-              {addSkillSaving ? '…' : 'Add'}
-            </button>
-            <button type="button" onClick={() => { setAddingSkill(false); setNewSkillName(''); setAddSkillError(null) }} className="text-text-dim hover:text-text-primary p-1">
-              <XIcon />
-            </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => { setAddingSkill(true); setTimeout(() => newSkillInputRef.current?.focus(), 50) }}
-            className="flex items-center gap-1 px-2.5 py-1 border border-dashed border-accent-green/40 rounded-full text-xs text-accent-green hover:bg-accent-green/10 transition-colors"
-          >
-            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-            New Skill
-          </button>
-        )}
-      </div>
-      {addSkillError && <p className="text-xs text-red-400 mt-1">{addSkillError}</p>}
-      </>)}
-
-      {/* ── OPTIONAL: Video Link ───────────────────────────── */}
-      {!showVideoLink && (
-        <div className="flex gap-2 mt-6">
-          <button
-            type="button"
-            onClick={() => setShowVideoLink(true)}
-            className="flex items-center gap-1.5 text-xs text-text-dim border border-dashed border-bg-border rounded-full px-3 py-1.5 hover:border-text-dim/40 hover:text-text-muted transition-colors"
-          >
-            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-            Video Link
-          </button>
-        </div>
-      )}
-
-      {showVideoLink && (
         <>
-          <SectionDivider label="Video Link" />
-          <div className="flex items-center gap-2">
-            <input
-              type="url"
-              value={videoLink}
-              onChange={(e) => setVideoLink(e.target.value)}
-              placeholder="https://…"
-              className="field-input flex-1"
-              inputMode="url"
-            />
-            <button type="button" onClick={() => { setShowVideoLink(false); setVideoLink('') }} className="text-text-dim hover:text-red-400 transition-colors p-1.5">
-              <XIcon />
-            </button>
+          <SectionLabel label="Skills" />
+          <div
+            className={[
+              'flex flex-wrap gap-2 rounded-xl',
+              justFilled.has('skills') ? 'animate-fill-pulse p-1 -m-1' : '',
+            ].join(' ')}
+          >
+            {availableSkills.map((skill) => (
+              <SkillChip key={skill} skill={skill} selected={skills.includes(skill)} onToggle={toggleSkill} />
+            ))}
+            {addingSkill ? (
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <input
+                  ref={newSkillInputRef}
+                  type="text"
+                  value={newSkillName}
+                  onChange={(e) => setNewSkillName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); handleAddSkill() }
+                    if (e.key === 'Escape') { setAddingSkill(false); setNewSkillName('') }
+                  }}
+                  placeholder="Skill name…"
+                  className="px-2.5 py-1 bg-bg-card border border-bg-border rounded-full text-sm text-text-primary placeholder:text-text-dim focus:outline-none focus:border-accent-green w-32"
+                  autoFocus
+                />
+                <button type="button" onClick={handleAddSkill} disabled={!newSkillName.trim() || addSkillSaving} className="px-2.5 py-1 bg-accent-green text-white text-xs font-heading rounded-full disabled:opacity-50">
+                  {addSkillSaving ? '…' : 'Add'}
+                </button>
+                <button type="button" onClick={() => { setAddingSkill(false); setNewSkillName(''); setAddSkillError(null) }} className="text-text-dim hover:text-text-primary p-1">
+                  <XIcon />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => { setAddingSkill(true); setTimeout(() => newSkillInputRef.current?.focus(), 50) }}
+                className="flex items-center gap-1 px-2.5 py-1 border border-dashed border-accent-green/40 rounded-full text-xs text-accent-green hover:bg-accent-green/10 transition-colors"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                New Skill
+              </button>
+            )}
           </div>
+          {addSkillError && <p className="text-xs text-red-400 mt-1">{addSkillError}</p>}
         </>
       )}
 
       {/* Save */}
       <div className="mt-8">
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full inline-flex items-center justify-center gap-2 bg-accent-fire text-white font-heading text-base py-4 rounded-2xl shadow-glow-fire active:scale-[0.98] transition-all min-h-[56px] disabled:opacity-50"
-        >
-          {submitting ? (
-            <>
-              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              Saving…
-            </>
-          ) : 'Save Component'}
-        </button>
+        <Button type="submit" variant="primary" size="lg" block loading={submitting}>
+          {submitting ? 'Saving…' : 'Save Component'}
+        </Button>
       </div>
+
+      {/* Media add sheet */}
+      <MediaAddSheet
+        visible={showMediaSheet}
+        onClose={() => setShowMediaSheet(false)}
+        onAdd={handleAddMedia}
+        hasVideo={hasVideo}
+        hasLink={hasLink}
+      />
 
       {toast && <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
     </form>
+  )
+}
+
+// ── Voice hero — shared layout for the big mic card ────────────────────────────
+
+function VoiceHero({
+  voiceState,
+  voiceSupported,
+  transcript,
+  errorMessage,
+  onToggle,
+}: {
+  voiceState: 'idle' | 'recording' | 'processing' | 'done' | 'error'
+  voiceSupported: boolean
+  transcript: string
+  errorMessage: string | null
+  onToggle: () => void
+}) {
+  const title =
+    voiceState === 'recording'   ? 'Listening…' :
+    voiceState === 'processing'  ? 'Processing…' :
+    voiceState === 'done'        ? 'Filled ✓  Review below' :
+    voiceState === 'error'       ? 'Something went wrong' :
+    !voiceSupported              ? 'Voice unavailable' :
+                                   'Speak to fill the form'
+
+  const subtitle =
+    voiceState === 'recording'   ? 'Tap the mic again when you\'re done.' :
+    voiceState === 'processing'  ? 'Organizing what you said into fields…' :
+    voiceState === 'done'        ? 'Edit anything below before you save.' :
+    voiceState === 'error'       ? (errorMessage ?? 'Tap to try again.') :
+    !voiceSupported              ? 'Fill in the details below.' :
+                                   'Name, cues, duration, and skills fill in automatically.'
+
+  const disabled = voiceState === 'processing' || !voiceSupported
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onToggle}
+        disabled={disabled}
+        aria-label={voiceState === 'recording' ? 'Stop recording' : 'Start voice recording'}
+        className={[
+          'w-full flex items-center gap-4 p-5 rounded-2xl border transition-all text-left',
+          voiceState === 'recording'
+            ? 'bg-accent-fire/10 border-accent-fire/40'
+            : voiceState === 'done'
+              ? 'bg-accent-green/5 border-accent-green/30'
+              : voiceState === 'error'
+                ? 'bg-red-900/10 border-red-500/30'
+                : !voiceSupported
+                  ? 'bg-bg-card border-bg-border opacity-70'
+                  : 'bg-accent-fire/5 border-accent-fire/20 hover:border-accent-fire/40',
+          disabled ? 'cursor-not-allowed' : 'active:scale-[0.99]',
+        ].join(' ')}
+      >
+        {/* 72x72 mic (scaled up from the 44x44 used elsewhere) */}
+        <div
+          className={[
+            'w-[72px] h-[72px] rounded-full flex items-center justify-center flex-shrink-0 transition-all',
+            voiceState === 'recording'  ? 'bg-accent-fire text-white shadow-glow-fire' :
+            voiceState === 'processing' ? 'bg-bg-input text-text-dim' :
+            voiceState === 'done'       ? 'bg-accent-green/20 text-accent-green' :
+            voiceState === 'error'      ? 'bg-red-500/20 text-red-400' :
+            !voiceSupported             ? 'bg-bg-input text-text-dim/60' :
+                                          'bg-accent-fire text-white shadow-glow-fire',
+          ].join(' ')}
+        >
+          {voiceState === 'recording' ? (
+            <svg className="w-8 h-8 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zM8 11a4 4 0 008 0h2a6 6 0 01-5 5.91V19h3v2H8v-2h3v-2.09A6 6 0 016 11h2z" />
+            </svg>
+          ) : voiceState === 'processing' ? (
+            <div className="w-6 h-6 border-2 border-current border-t-transparent rounded-full animate-spin" />
+          ) : voiceState === 'done' ? (
+            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          ) : (
+            <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zM8 11a4 4 0 008 0h2a6 6 0 01-5 5.91V19h3v2H8v-2h3v-2.09A6 6 0 016 11h2z" />
+            </svg>
+          )}
+        </div>
+
+        {/* Title + subtitle stack */}
+        <div className="flex-1 min-w-0">
+          <p
+            className={[
+              'font-heading text-[17px] leading-tight',
+              voiceState === 'recording' ? 'text-accent-fire' :
+              voiceState === 'done'      ? 'text-accent-green' :
+              voiceState === 'error'     ? 'text-red-400' :
+              !voiceSupported            ? 'text-text-muted' :
+                                           'text-text-primary',
+            ].join(' ')}
+          >
+            {title}
+          </p>
+          <p className="text-xs text-text-dim leading-relaxed mt-1">{subtitle}</p>
+        </div>
+      </button>
+
+      {voiceState === 'recording' && transcript && (
+        <p className="text-xs text-text-dim italic mt-2 px-3 leading-relaxed">
+          &ldquo;{transcript}&rdquo;
+        </p>
+      )}
+    </div>
   )
 }

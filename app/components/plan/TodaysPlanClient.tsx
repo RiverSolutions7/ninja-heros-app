@@ -20,23 +20,22 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import type { ComponentRow, ComponentType, PlanItem, PlanRow } from '@/app/lib/database.types'
 import { addPlanToCalendar, updatePlanById, fetchDatesWithPlans, fetchPlansForDate, deletePlanById, movePlanToDate } from '@/app/lib/planQueries'
+import { randomId } from '@/app/lib/uuid'
 import ComponentPickerModal from './ComponentPickerModal'
 import { PhotoLightbox } from '@/app/components/ui/PhotoLightbox'
+import BottomSheet from '@/app/components/ui/BottomSheet'
+import ConfirmSheet from '@/app/components/ui/ConfirmSheet'
+import { useToast } from '@/app/components/ui/Toast'
+import useLongPress, { LONG_PRESS_STYLE } from '@/app/hooks/useLongPress'
 import { PlanItemSheet } from './PlanItemSheet'
 import { PlanCalendarSheet } from './PlanCalendarSheet'
+import SavedPlanRow from './SavedPlanRow'
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
 
-interface Draft {
-  id: string
-  name?: string
-  items: PlanItem[]
-  createdAt: string
-}
-
-const DRAFTS_KEY = 'ninja-plan-drafts'
+// sessionStorage key: silently persists an in-progress new plan across page
+// refreshes within the same tab. Invisible to the coach — pure protection.
 const SESSION_KEY = 'ninja-plan-session'
-const MAX_DRAFTS = 5
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -49,20 +48,6 @@ function offsetDate(isoDate: string, days: number): string {
 function formatDisplayDate(isoDate: string): string {
   const d = new Date(isoDate + 'T00:00:00')
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
-
-function formatDraftTime(isoString: string): string {
-  const d = new Date(isoString)
-  const now = new Date()
-  const isToday = d.toDateString() === now.toDateString()
-  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-  return isToday
-    ? `Today · ${time}`
-    : `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${time}`
-}
-
-function saveDraftsToStorage(drafts: Draft[]) {
-  try { localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts)) } catch { /* ignore */ }
 }
 
 // ── Week strip helpers ────────────────────────────────────────────────────────
@@ -167,17 +152,17 @@ function TypePlaceholder({ type, className }: { type: ComponentType; className?:
   )
 }
 
-// ── Sortable plan item ────────────────────────────────────────────────────────
+// ── Sortable plan item (card design — matches Library Phase 2A) ─────────────
+
+const PLAN_THUMB = 72
 
 function SortablePlanItem({
   item,
-  index,
   onRemove,
   onPhotoTap,
   onRowTap,
 }: {
   item: PlanItem
-  index: number
   onRemove: (localId: string) => void
   onPhotoTap: (photos: string[]) => void
   onRowTap: (item: PlanItem) => void
@@ -194,285 +179,149 @@ function SortablePlanItem({
     opacity: isDragging ? 0.5 : 1,
   }
 
+  // Long-press → confirmation sheet. `shouldSkip` lets dnd-kit's drag handle
+  // keep its own gesture without our long-press timer interfering.
+  const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false)
+  const longPress = useLongPress({
+    onLongPress: () => setRemoveConfirmOpen(true),
+    shouldSkip: (target) => !!target.closest('[data-drag-handle]'),
+  })
+
+  function commitRemove() {
+    setRemoveConfirmOpen(false)
+    onRemove(item.localId)
+  }
+
   return (
-    <li
+    <div
       ref={setNodeRef}
       style={style}
-      className={[
-        'flex items-center gap-3 px-4 py-3.5 border-b border-bg-border/50 last:border-b-0 border-l-4',
-        meta.border,
-      ].join(' ')}
+      className="relative rounded-xl overflow-hidden group"
     >
-      <span className="text-[11px] font-heading text-text-dim/40 w-4 text-right flex-shrink-0 tabular-nums">
-        {index + 1}
-      </span>
-      <span
-        className="text-text-dim/40 text-base leading-none select-none flex-shrink-0 cursor-grab active:cursor-grabbing p-1"
-        style={{ touchAction: 'none' }}
-        aria-label="Drag to reorder"
-        {...attributes}
-        {...listeners}
+      {/* ─── Foreground row ─────────────────────────────────────────── */}
+      <div
+        {...longPress}
+        style={LONG_PRESS_STYLE}
+        className={[
+          'relative flex items-center gap-3 px-3 py-2.5 rounded-xl bg-bg-card',
+          'border-l-4',
+          meta.border,
+        ].join(' ')}
       >
-        ⠿
-      </span>
-      <div className="relative flex-shrink-0">
-        <button
-          type="button"
-          onClick={() => !item.isAdHoc && photos.length > 0 && onPhotoTap(photos)}
-          className={[
-            'w-14 h-14 rounded-xl overflow-hidden block',
-            firstPhoto ? 'cursor-pointer active:opacity-80 transition-opacity' : 'cursor-default',
-          ].join(' ')}
-          tabIndex={firstPhoto ? 0 : -1}
-          aria-label={firstPhoto ? `View photos of ${item.component.title}` : undefined}
-        >
-          {item.isAdHoc ? (
-            <div className="w-full h-full flex items-center justify-center bg-accent-fire/15">
-              <span className="text-accent-fire">{CUSTOM_ICON}</span>
-            </div>
-          ) : firstPhoto ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={firstPhoto} alt={item.component.title} className="w-full h-full object-cover" />
-          ) : (
-            <TypePlaceholder type={item.component.type as ComponentType} className="w-full h-full rounded-xl" />
-          )}
-        </button>
-        {extraCount > 0 && (
-          <span className="absolute bottom-1 right-1 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">
-            +{extraCount}
-          </span>
-        )}
-      </div>
-      <button
-        type="button"
-        onClick={() => onRowTap(item)}
-        className="flex-1 min-w-0 text-left active:opacity-70 transition-opacity"
-      >
-        <div className="flex items-center gap-1.5">
-          <div className="flex-1 min-w-0">
-            <p className="font-heading text-[15px] text-text-primary leading-snug truncate">
-              {item.component.title}
-            </p>
-            <div className="flex items-center gap-1 mt-0.5">
-              <span className={['text-[10px] font-heading uppercase tracking-wide flex-shrink-0', meta.textColor].join(' ')}>
-                {meta.label}
-              </span>
-              {!item.isAdHoc && item.component.curriculum && (
-                <>
-                  <span className="text-text-dim/30 text-[10px] flex-shrink-0">·</span>
-                  <span className="text-[10px] text-text-dim truncate">{item.component.curriculum}</span>
-                </>
-              )}
-            </div>
-            {item.coachNote && (
-              <p className="text-[11px] text-accent-fire/70 mt-0.5 truncate">
-                {item.coachNote.split('\n')[0]}
-              </p>
+        {/* ─── Thumbnail slot ──────────────────────────────────── */}
+        <div className="relative shrink-0 rounded-lg overflow-hidden">
+          <button
+            type="button"
+            onClick={() => !item.isAdHoc && photos.length > 0 && onPhotoTap(photos)}
+            style={{ width: PLAN_THUMB, height: PLAN_THUMB }}
+            className={firstPhoto ? 'cursor-pointer active:opacity-80 transition-opacity block' : 'cursor-default block'}
+            tabIndex={firstPhoto ? 0 : -1}
+            aria-label={firstPhoto ? `View photos of ${item.component.title}` : undefined}
+          >
+            {firstPhoto ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={firstPhoto}
+                alt={item.component.title}
+                style={{ width: PLAN_THUMB, height: PLAN_THUMB }}
+                className="object-cover block"
+              />
+            ) : (
+              <div
+                style={{ width: PLAN_THUMB, height: PLAN_THUMB }}
+                className={['flex items-center justify-center', meta.textColor, 'opacity-50'].join(' ')}
+              >
+                {item.isAdHoc ? (
+                  <span className="w-7 h-7">{CUSTOM_ICON}</span>
+                ) : (
+                  <span className="w-7 h-7">{TYPE_ICONS[item.component.type as ComponentType]}</span>
+                )}
+              </div>
             )}
-          </div>
-          {item.durationMinutes ? (
-            <span className="text-[11px] text-text-dim font-heading flex-shrink-0">
-              {item.durationMinutes}m
+          </button>
+          {extraCount > 0 && (
+            <span className="absolute bottom-0.5 right-0.5 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">
+              +{extraCount}
             </span>
-          ) : null}
-          {!item.coachNote && (
-            <span className="text-[10px] text-text-dim/30 flex-shrink-0 font-heading">note</span>
           )}
         </div>
-      </button>
-      <button
-        type="button"
-        onClick={() => onRemove(item.localId)}
-        className="text-text-dim/30 hover:text-text-muted transition-colors flex-shrink-0 p-1 -mr-1"
-        aria-label="Remove"
-      >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
-    </li>
-  )
-}
 
-// ── View-mode plan item (read-only, no drag handle or remove button) ──────────
-
-function ViewPlanItem({
-  item,
-  index,
-  onPhotoTap,
-}: {
-  item: PlanItem
-  index: number
-  onPhotoTap: (photos: string[]) => void
-}) {
-  const meta = resolveMeta(item)
-  const photos = item.isAdHoc ? [] : (item.component.photos ?? []).filter(Boolean)
-  const hasCoachNote = !!item.coachNote
-  const descriptionText = item.coachNote ?? (!item.isAdHoc ? item.component.description : null) ?? null
-
-  return (
-    <li
-      className={[
-        'px-4 py-4 border-b border-bg-border/50 last:border-b-0 border-l-4',
-        meta.border,
-      ].join(' ')}
-    >
-      {/* Header row: index + title + duration */}
-      <div className="flex items-start gap-2 mb-2.5">
-        <span className="text-[11px] font-heading text-text-dim/40 w-4 text-right flex-shrink-0 tabular-nums mt-1">
-          {index + 1}
-        </span>
-        <div className="flex-1 min-w-0">
-          <p className="font-heading text-[15px] text-text-primary leading-snug">
-            {item.component.title}
-          </p>
-          <div className="flex items-center gap-1 mt-0.5">
-            <span className={['text-[10px] font-heading uppercase tracking-wide flex-shrink-0', meta.textColor].join(' ')}>
-              {meta.label}
-            </span>
+        {/* ─── Info stack ──────────────────────────────────────── */}
+        <button
+          type="button"
+          onClick={() => onRowTap(item)}
+          className="flex-1 min-w-0 text-left active:opacity-70 transition-opacity"
+        >
+          <div className="flex items-center gap-1.5 text-[10px] font-heading uppercase tracking-wide">
+            <span className={meta.textColor}>{meta.label}</span>
             {!item.isAdHoc && item.component.curriculum && (
               <>
-                <span className="text-text-dim/30 text-[10px] flex-shrink-0">·</span>
-                <span className="text-[10px] text-text-dim truncate">{item.component.curriculum}</span>
+                <span className="text-text-dim/40">·</span>
+                <span className="text-text-dim truncate">{item.component.curriculum}</span>
+              </>
+            )}
+            {item.durationMinutes != null && (
+              <>
+                <span className="text-text-dim/40">·</span>
+                <span className="text-text-dim">{item.durationMinutes} min</span>
               </>
             )}
           </div>
-        </div>
-        {item.durationMinutes ? (
-          <span className="text-[11px] text-text-dim font-heading flex-shrink-0 mt-1">
-            {item.durationMinutes}m
-          </span>
-        ) : null}
-      </div>
-
-      {/* Stacked body — full width below header */}
-      <div className="pl-6 space-y-2.5">
-        {/* Photo strip — horizontal scroll, all photos visible */}
-        {photos.length > 0 && (
-          <div className="flex gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-            {photos.map((url, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => onPhotoTap(photos)}
-                className="flex-shrink-0 rounded-xl overflow-hidden active:opacity-80 transition-opacity"
-                aria-label={`View photo ${i + 1} of ${item.component.title}`}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={url}
-                  alt={`${item.component.title} photo ${i + 1}`}
-                  className="w-[90px] h-[90px] object-cover"
-                />
-              </button>
-            ))}
-          </div>
-        )}
-
-
-        {/* Coach note — distinct highlighted block */}
-        {hasCoachNote && descriptionText && (
-          <div className="bg-accent-fire/8 border border-accent-fire/20 rounded-xl px-3 py-2.5">
-            <p className="text-[11px] font-heading uppercase tracking-wide text-accent-fire/60 mb-1">Coach Note</p>
-            <p className="text-[13px] text-text-primary leading-relaxed whitespace-pre-wrap">
-              {descriptionText}
-            </p>
-          </div>
-        )}
-
-        {/* Library description (no coach note) */}
-        {!hasCoachNote && descriptionText && (
-          <p className="text-[13px] text-text-dim leading-relaxed">
-            {descriptionText}
+          <p className="font-heading text-[15px] text-text-primary leading-tight truncate mt-0.5">
+            {item.component.title}
+          </p>
+          {item.coachNote && (
+            <p className="text-[11px] text-text-muted mt-0.5 truncate">
+              {item.coachNote.split('\n')[0]}
             </p>
           )}
-
-        {/* Equipment */}
-        {item.component.equipment && (
-          <p className="text-[12px] text-text-dim">
-            <span className="font-heading uppercase text-[9px] text-text-dim/50 tracking-wide mr-1">Gear</span>
-            {item.component.equipment}
-          </p>
-        )}
-      </div>
-    </li>
-  )
-}
-
-// ── Draft card ────────────────────────────────────────────────────────────────
-
-function DraftCard({
-  draft,
-  onContinue,
-  onDiscard,
-}: {
-  draft: Draft
-  onContinue: () => void
-  onDiscard: () => void
-}) {
-  const preview = draft.items.slice(0, 5)
-  const extra = draft.items.length - preview.length
-
-  return (
-    <div className="bg-bg-card rounded-2xl border border-bg-border p-4">
-      <div className="flex items-start justify-between gap-2 mb-3">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full bg-accent-fire/10 flex items-center justify-center flex-shrink-0">
-            <svg className="w-4 h-4 text-accent-fire" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
-          </div>
-          <div>
-            <p className="font-heading text-sm text-text-primary leading-snug">
-              {draft.name || 'Draft Plan'}
-            </p>
-            <p className="text-[11px] text-text-dim mt-0.5">
-              {draft.items.length} component{draft.items.length !== 1 ? 's' : ''} · {formatDraftTime(draft.createdAt)}
-            </p>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={onDiscard}
-          className="text-text-dim/40 hover:text-text-muted transition-colors flex-shrink-0 p-1 -mr-1 -mt-1"
-          aria-label="Discard draft"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
         </button>
+
+        {/* ─── Right-side controls ─────────────────────────────── */}
+        <div className="flex flex-col items-center gap-1.5 flex-shrink-0 -mr-1">
+          <span
+            data-drag-handle
+            className="text-text-dim/30 p-1 cursor-grab active:cursor-grabbing"
+            style={{ touchAction: 'none' }}
+            aria-label="Drag to reorder"
+            {...attributes}
+            {...listeners}
+          >
+            <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+              <circle cx="7" cy="5" r="1.25" />
+              <circle cx="13" cy="5" r="1.25" />
+              <circle cx="7" cy="10" r="1.25" />
+              <circle cx="13" cy="10" r="1.25" />
+              <circle cx="7" cy="15" r="1.25" />
+              <circle cx="13" cy="15" r="1.25" />
+            </svg>
+          </span>
+          {/* Remove (visible on desktop-hover only; mobile uses long-press) */}
+          <button
+            type="button"
+            onClick={() => onRemove(item.localId)}
+            className="text-text-dim/20 hover:text-accent-fire transition-all p-1 opacity-0 sm:group-hover:opacity-100 focus:opacity-100"
+            aria-label="Remove"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
       </div>
-      <div className="flex items-center gap-1.5 mb-4 flex-wrap">
-        {preview.map((item) => {
-          const meta = resolveMeta(item)
-          const photo = !item.isAdHoc ? (item.component.photos?.[0] ?? null) : null
-          const icon = item.isAdHoc ? CUSTOM_ICON : TYPE_ICONS[item.component.type as ComponentType]
-          return (
-            <div key={item.localId} className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0">
-              {photo ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={photo} alt={item.component.title} className="w-full h-full object-cover" />
-              ) : (
-                <div className={['w-full h-full flex items-center justify-center', meta.placeholderBg].join(' ')}>
-                  <span className={['w-3.5 h-3.5', meta.textColor].join(' ')}>
-                    {icon}
-                  </span>
-                </div>
-              )}
-            </div>
-          )
-        })}
-        {extra > 0 && (
-          <span className="text-[11px] text-text-dim/60 ml-0.5">+{extra}</span>
-        )}
-      </div>
-      <button
-        type="button"
-        onClick={onContinue}
-        className="w-full bg-accent-fire/10 border border-accent-fire/30 text-accent-fire font-heading text-sm py-2.5 rounded-xl active:scale-[0.98] transition-all"
-      >
-        Continue Editing
-      </button>
+
+      {/* Long-press → confirm removal (mobile pattern). Desktop uses the
+          hover × button above. */}
+      <ConfirmSheet
+        visible={removeConfirmOpen}
+        title={`Remove "${item.component.title}"?`}
+        body="You can undo this from the toast that appears after."
+        confirmLabel="Remove"
+        workingLabel="Removing…"
+        destructive
+        onConfirm={commitRemove}
+        onClose={() => setRemoveConfirmOpen(false)}
+      />
     </div>
   )
 }
@@ -497,16 +346,11 @@ export default function TodaysPlanClient() {
   const [selectedDayPlans, setSelectedDayPlans] = useState<PlanRow[]>([])
   const [selectedDayLoading, setSelectedDayLoading] = useState(false)
 
-  // ── Drafts ───────────────────────────────────────────────────────────────────
-  const [drafts, setDrafts] = useState<Draft[]>([])
-  const activeDraftIdRef = useRef<string | null>(null)
-  const [showDraftNameInput, setShowDraftNameInput] = useState(false)
-  const [draftNameValue, setDraftNameValue] = useState('')
-  const [draftSavedFeedback, setDraftSavedFeedback] = useState(false)
-
   // ── Calendar ─────────────────────────────────────────────────────────────────
   const [datesWithPlans, setDatesWithPlans] = useState<Set<string>>(new Set())
-  const [calendarAddedTo, setCalendarAddedTo] = useState<string | null>(null)
+
+  // ── Toast (shared provider at app root) ─────────────────────────────────────
+  const toast = useToast()
 
   // ── UI ───────────────────────────────────────────────────────────────────────
   const [showPicker, setShowPicker] = useState(false)
@@ -517,18 +361,20 @@ export default function TodaysPlanClient() {
   const [loading, setLoading] = useState(true)
   const [lightbox, setLightbox] = useState<{ photos: string[] } | null>(null)
   const [activeSheet, setActiveSheet] = useState<PlanItem | null>(null)
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving'>('idle')
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  // Tracks whether `items` contains user-originated edits (vs items that were
+  // just loaded from the DB). Gates auto-save so tapping a saved plan doesn't
+  // trigger a reflexive "Saving… ✓ Saved" flash on data that wasn't edited.
+  const dirtyRef = useRef(false)
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Recently-removed plan item (for undo toast)
+  const [removedItem, setRemovedItem] = useState<{ item: PlanItem; index: number } | null>(null)
+  const removedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [deleteLoading, setDeleteLoading] = useState(false)
-  const [planViewMode, setPlanViewMode] = useState<'view' | 'edit'>('view')
   const [showPlanOptions, setShowPlanOptions] = useState(false)
   const [showMoveCalendar, setShowMoveCalendar] = useState(false)
-  const [classLength, setClassLength] = useState<number | null>(null)
-  const [showLengthPicker, setShowLengthPicker] = useState(false)
 
   // ── Derived ──────────────────────────────────────────────────────────────────
-  const totalMinutes = items.reduce((s, i) => s + (i.durationMinutes ?? 0), 0)
-  const isOverBudget = !!(classLength && totalMinutes > classLength)
   const stationCount = items.filter(i => !i.isAdHoc && i.component.type === 'station').length
   const gameCount = items.filter(i => !i.isAdHoc && i.component.type === 'game').length
   const customCount = items.filter(i => i.isAdHoc).length
@@ -558,33 +404,27 @@ export default function TodaysPlanClient() {
 
   // ── Effects ───────────────────────────────────────────────────────────────────
 
-  // Mount: session recovery → drafts → calendar data
+  // Mount: session recovery → legacy cleanup → calendar data
   useEffect(() => {
     setMounted(true)
 
-    // Session recovery
+    // Session recovery — restore an in-progress new plan after refresh
     try {
       const session = sessionStorage.getItem(SESSION_KEY)
       if (session) {
         const recovered = JSON.parse(session) as PlanItem[]
         if (recovered.length > 0) {
           setItems(recovered)
-          setViewMode('editing') // restore editing view
-          setPlanViewMode('edit')
+          setViewMode('editing')
         }
       }
     } catch { /* ignore */ }
 
-    // Drafts
+    // Legacy cleanup — remove stale localStorage keys from features we've
+    // retired so devices that once had them don't carry the junk forever.
+    // Safe to call unconditionally (removeItem is a no-op if the key is absent).
     try {
-      const raw = localStorage.getItem(DRAFTS_KEY)
-      if (raw) setDrafts(JSON.parse(raw) as Draft[])
-    } catch { /* ignore */ }
-
-    // Class length
-    try {
-      const stored = parseInt(localStorage.getItem('ninja-class-length') || '', 10)
-      if (stored > 0) setClassLength(stored)
+      localStorage.removeItem('ninja-class-length') // time-budget feature (removed 2026-04)
     } catch { /* ignore */ }
 
     // Calendar dots
@@ -613,14 +453,6 @@ export default function TodaysPlanClient() {
       .catch(() => setSelectedDayLoading(false))
   }, [selectedDayIso, mounted, datesWithPlans])
 
-  // Persist class length
-  useEffect(() => {
-    try {
-      if (classLength) localStorage.setItem('ninja-class-length', String(classLength))
-      else localStorage.removeItem('ninja-class-length')
-    } catch { /* ignore */ }
-  }, [classLength])
-
   // Auto-save to Supabase when editing a calendar plan
   const debouncedSave = useCallback((currentItems: PlanItem[], planId: string) => {
     if (saveTimer.current) clearTimeout(saveTimer.current)
@@ -628,7 +460,18 @@ export default function TodaysPlanClient() {
       setSaveStatus('saving')
       try {
         await updatePlanById(planId, currentItems)
-        setSaveStatus('idle')
+        // Successful commit — these items are now in sync with the DB.
+        dirtyRef.current = false
+        // Keep the dashboard's cached plan list in sync. Without this, the
+        // saved card on the dashboard still holds the pre-edit items, so
+        // re-tapping it loads stale data and the coach's changes look like
+        // they were lost.
+        setSelectedDayPlans(prev =>
+          prev.map(p => (p.id === planId ? { ...p, items: currentItems } : p))
+        )
+        setSaveStatus('saved')
+        if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
+        savedTimerRef.current = setTimeout(() => setSaveStatus('idle'), 1800)
       } catch (err) {
         setSaveStatus('idle')
         console.error('Auto-save failed:', err)
@@ -640,6 +483,10 @@ export default function TodaysPlanClient() {
     if (!mounted || loading) return
     if (!editingPlanId) return
     if (items.length === 0) return
+    // Skip auto-save for items that came from the DB (just-loaded plans) —
+    // only write when the coach actually edits. Prevents the "✓ Saved" flash
+    // on plan-tap.
+    if (!dirtyRef.current) return
     debouncedSave(items, editingPlanId)
   }, [items, mounted, loading, editingPlanId, debouncedSave]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -653,49 +500,24 @@ export default function TodaysPlanClient() {
     } catch { /* ignore */ }
   }, [items, mounted, editingPlanId])
 
-  // Auto-save active draft to localStorage
-  useEffect(() => {
-    if (!mounted) return
-    if (editingPlanId !== null) return
-    const id = activeDraftIdRef.current
-    if (!id) return
-    if (items.length === 0) {
-      setDrafts(prev => {
-        const next = prev.filter(d => d.id !== id)
-        saveDraftsToStorage(next)
-        return next
-      })
-      activeDraftIdRef.current = null
-      return
-    }
-    setDrafts(prev => {
-      const existing = prev.find(d => d.id === id)
-      const without = prev.filter(d => d.id !== id)
-      const updated = [
-        { id, name: existing?.name, items, createdAt: new Date().toISOString() },
-        ...without,
-      ].slice(0, MAX_DRAFTS)
-      saveDraftsToStorage(updated)
-      return updated
-    })
-  }, [items, mounted, editingPlanId])
-
   // ── Handlers ──────────────────────────────────────────────────────────────────
 
   function handleSelect(component: ComponentRow) {
+    dirtyRef.current = true
     setItems(prev => [
       ...prev,
-      { localId: crypto.randomUUID(), component, durationMinutes: component.duration_minutes ?? null, coachNote: null },
+      { localId: randomId(), component, durationMinutes: component.duration_minutes ?? null, coachNote: null },
     ])
   }
 
   function handleAdHocSelect(title: string, description?: string, durationMinutes?: number) {
+    dirtyRef.current = true
     setItems(prev => [
       ...prev,
       {
-        localId: crypto.randomUUID(),
+        localId: randomId(),
         component: {
-          id: crypto.randomUUID(),
+          id: randomId(),
           type: 'station' as ComponentType,
           title,
           curriculum: null,
@@ -718,10 +540,31 @@ export default function TodaysPlanClient() {
   }
 
   function handleRemove(localId: string) {
+    const idx = items.findIndex(i => i.localId === localId)
+    if (idx === -1) return
+    dirtyRef.current = true
+    const snapshot = items[idx]
     setItems(prev => prev.filter(i => i.localId !== localId))
+    setRemovedItem({ item: snapshot, index: idx })
+    if (removedTimerRef.current) clearTimeout(removedTimerRef.current)
+    removedTimerRef.current = setTimeout(() => setRemovedItem(null), 4500)
+  }
+
+  function handleUndoRemove() {
+    if (!removedItem) return
+    dirtyRef.current = true
+    const { item, index } = removedItem
+    setItems(prev => {
+      const next = [...prev]
+      next.splice(Math.min(index, next.length), 0, item)
+      return next
+    })
+    setRemovedItem(null)
+    if (removedTimerRef.current) clearTimeout(removedTimerRef.current)
   }
 
   function handleDurationChange(localId: string, value: string) {
+    dirtyRef.current = true
     const num = value === '' ? null : parseInt(value, 10)
     setItems(prev =>
       prev.map(i => i.localId === localId ? { ...i, durationMinutes: isNaN(num as number) ? null : num } : i)
@@ -729,6 +572,7 @@ export default function TodaysPlanClient() {
   }
 
   function handleNoteChange(localId: string, note: string) {
+    dirtyRef.current = true
     setItems(prev =>
       prev.map(i => i.localId === localId ? { ...i, coachNote: note || null } : i)
     )
@@ -754,65 +598,68 @@ export default function TodaysPlanClient() {
 
   // ── View mode handlers ────────────────────────────────────────────────────────
 
-  function handleBackToDashboard() {
-    if (planViewMode === 'edit' && editingPlanId) {
-      setPlanViewMode('view') // editing a saved plan → back to view, not dashboard
-    } else {
-      setViewMode('dashboard') // view mode or new draft → back to dashboard
+  async function handleBackToDashboard() {
+    // If a debounced save is still pending for an existing plan, flush it
+    // now before navigating away so the coach can trust the back action.
+    const planId = editingPlanId
+    const snapshot = items
+    if (saveTimer.current && planId && snapshot.length > 0) {
+      clearTimeout(saveTimer.current)
+      saveTimer.current = null
+      try {
+        setSaveStatus('saving')
+        await updatePlanById(planId, snapshot)
+      } catch (err) {
+        console.error('Flush-on-back failed:', err)
+      } finally {
+        setSaveStatus('idle')
+      }
     }
+    // Even if no flush was needed, keep the dashboard cache in sync — the
+    // last committed auto-save already updated selectedDayPlans, but this is
+    // a cheap guard against any skew if the in-flight state differs from what
+    // was most recently saved.
+    if (planId && snapshot.length > 0) {
+      setSelectedDayPlans(prev =>
+        prev.map(p => (p.id === planId ? { ...p, items: snapshot } : p))
+      )
+    }
+    setViewMode('dashboard')
   }
 
-  // ── Draft handlers ────────────────────────────────────────────────────────────
-
-  function handleSaveDraftTap() {
-    if (items.length === 0) return
-    if (!showDraftNameInput) { setShowDraftNameInput(true); return }
-    confirmSaveDraft()
-  }
-
-  function confirmSaveDraft() {
-    if (items.length === 0) return
-    const id = activeDraftIdRef.current ?? crypto.randomUUID()
-    activeDraftIdRef.current = id
-    const name = draftNameValue.trim() || undefined
-    setDrafts(prev => {
-      const without = prev.filter(d => d.id !== id)
-      const updated = [{ id, name, items, createdAt: new Date().toISOString() }, ...without].slice(0, MAX_DRAFTS)
-      saveDraftsToStorage(updated)
-      return updated
-    })
-    setDraftNameValue('')
-    setShowDraftNameInput(false)
-    setDraftSavedFeedback(true)
-    setTimeout(() => setDraftSavedFeedback(false), 1500)
-    try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
-  }
+  // ── Calendar save ─────────────────────────────────────────────────────────────
 
   async function handleAddToCalendar(date: string, title: string) {
     if (items.length === 0) return
     setSaveStatus('saving')
     try {
       const plan = await addPlanToCalendar(date, items, title || undefined)
-      setLastAddedPlanId(plan.id)
-      setEditingPlanId(plan.id)
-      setEditingPlanLabel(formatDisplayDate(date))
-      setPlanViewMode('view')
-      if (activeDraftIdRef.current) {
-        setDrafts(prev => {
-          const next = prev.filter(d => d.id !== activeDraftIdRef.current)
-          saveDraftsToStorage(next)
-          return next
-        })
-        activeDraftIdRef.current = null
-      }
+
+      // Refresh calendar dots so the saved date lights up in the week strip
       const from = offsetDate(todayIso, -180)
       const to = offsetDate(todayIso, 180)
       const dates = await fetchDatesWithPlans(from, to)
       setDatesWithPlans(new Set(dates))
-      setSaveStatus('idle')
-      setCalendarAddedTo(formatDisplayDate(date))
-      setTimeout(() => setCalendarAddedTo(null), 3000)
+
+      // Clear edit state — the save is a completion, not a transition to
+      // "now editing an existing plan." Coach can tap the saved card on the
+      // dashboard to re-open if they want to keep working.
       try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
+      setItems([])
+      setEditingPlanId(null)
+      setEditingPlanLabel(null)
+      setLastAddedPlanId(plan.id)
+      setSaveStatus('idle')
+
+      // Return to dashboard with the saved date focused so the new plan card
+      // appears right there under "Planned." Jump the week strip too if the
+      // saved date falls outside the currently-displayed week.
+      setSelectedDayIso(date)
+      setWeekStart(getWeekStart(date))
+      setViewMode('dashboard')
+
+      // Floating confirmation toast (rendered by the app-root ToastProvider)
+      toast.success(`Added to ${formatDisplayDate(date)}`, 3500)
     } catch (err) {
       console.error('Add to calendar failed:', err)
       setSaveStatus('idle')
@@ -821,98 +668,127 @@ export default function TodaysPlanClient() {
 
   function handleLoadPlan(plan: PlanRow) {
     if (saveTimer.current) clearTimeout(saveTimer.current)
-    activeDraftIdRef.current = null
     setEditingPlanId(plan.id)
     const titlePart = plan.title ? plan.title : null
     const datePart = plan.plan_date ? formatDisplayDate(plan.plan_date) : null
     setEditingPlanLabel([titlePart, datePart].filter(Boolean).join(' · '))
     setItems(plan.items ?? [])
+    // Freshly-loaded from DB — no pending edits to save.
+    dirtyRef.current = false
     setSaveStatus('idle')
-    setCalendarAddedTo(null)
     setLastAddedPlanId(null)
-    setShowDraftNameInput(false)
+
     try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
-    setPlanViewMode('view')
     setViewMode('editing')
   }
 
-  function handleContinueDraft(draft: Draft) {
-    if (saveTimer.current) clearTimeout(saveTimer.current)
-    activeDraftIdRef.current = draft.id
-    setItems(draft.items)
-    setEditingPlanId(null)
-    setEditingPlanLabel(null)
-    setLastAddedPlanId(null)
-    setSaveStatus('idle')
-    setShowDraftNameInput(false)
-    setPlanViewMode('edit')
-    setViewMode('editing')
+  // ── Dashboard swipe actions ──────────────────────────────────────────────────
+  // Coach swipes left on a saved-plan card → two buttons revealed:
+  // [Options] opens the options sheet for that plan, and [Delete] opens the
+  // confirm sheet. Both stash the plan ID on editingPlanId so the existing
+  // sheet handlers (handleMovePlan / handleDeletePlan / etc.) work untouched.
+  // We stay in dashboard view — the sheets overlay on top via portal.
+  // optionsFromDashboardRef tracks context so we can clean up editingPlanId
+  // on paths that don't naturally clear it (Cancel + Move).
+  const optionsFromDashboardRef = useRef(false)
+
+  function handleOptionsFromDashboard(plan: PlanRow) {
+    setEditingPlanId(plan.id)
+    setEditingPlanLabel(plan.plan_date ? formatDisplayDate(plan.plan_date) : null)
+    optionsFromDashboardRef.current = true
+    setShowPlanOptions(true)
   }
 
-  function handleDiscardDraft(draftId: string) {
-    setDrafts(prev => {
-      const next = prev.filter(d => d.id !== draftId)
-      saveDraftsToStorage(next)
-      return next
-    })
-    if (activeDraftIdRef.current === draftId) {
-      if (saveTimer.current) clearTimeout(saveTimer.current)
-      setItems([])
+  // Flat action handlers used by the long-press menu on SavedPlanRow.
+  // Each one stashes the plan ID + sets the right downstream sheet so the
+  // existing handleMovePlan / handleAddToCalendar / handleDeletePlan
+  // handlers keep working untouched.
+
+  function handleMoveFromDashboard(plan: PlanRow) {
+    setEditingPlanId(plan.id)
+    setEditingPlanLabel(plan.plan_date ? formatDisplayDate(plan.plan_date) : null)
+    optionsFromDashboardRef.current = true
+    setShowMoveCalendar(true)
+  }
+
+  function handleDuplicateFromDashboard(plan: PlanRow) {
+    setEditingPlanId(plan.id)
+    setEditingPlanLabel(plan.plan_date ? formatDisplayDate(plan.plan_date) : null)
+    // Seed items so the duplicate save-to-calendar picks up the plan's content.
+    setItems(plan.items ?? [])
+    optionsFromDashboardRef.current = true
+    setShowDatePicker(true)
+  }
+
+  function handleDeleteFromDashboard(plan: PlanRow) {
+    setEditingPlanId(plan.id)
+    setEditingPlanLabel(plan.plan_date ? formatDisplayDate(plan.plan_date) : null)
+    optionsFromDashboardRef.current = true
+    setShowDeleteConfirm(true)
+  }
+
+  function handleCancelPlanOptions() {
+    setShowPlanOptions(false)
+    if (optionsFromDashboardRef.current) {
       setEditingPlanId(null)
       setEditingPlanLabel(null)
-      setSaveStatus('idle')
-      activeDraftIdRef.current = null
-      setShowDraftNameInput(false)
+      optionsFromDashboardRef.current = false
+    }
+  }
+
+  function handleCancelDeleteConfirm() {
+    setShowDeleteConfirm(false)
+    if (optionsFromDashboardRef.current) {
+      setEditingPlanId(null)
+      setEditingPlanLabel(null)
+      optionsFromDashboardRef.current = false
     }
   }
 
   function handleClearPlan() {
     if (saveTimer.current) clearTimeout(saveTimer.current)
-    const id = activeDraftIdRef.current
-    if (id) {
-      setDrafts(prev => {
-        const next = prev.filter(d => d.id !== id)
-        saveDraftsToStorage(next)
-        return next
-      })
-    }
     setItems([])
     setEditingPlanId(null)
     setEditingPlanLabel(null)
     setLastAddedPlanId(null)
     setSaveStatus('idle')
-    setCalendarAddedTo(null)
-    setShowDraftNameInput(false)
-    setDraftNameValue('')
-    activeDraftIdRef.current = null
+    dirtyRef.current = false
+
     try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
-    setPlanViewMode('view')
     setViewMode('dashboard')
   }
 
+  /** Start a new plan from the dashboard — clean slate, opens picker. */
+  function handleStartNewPlan() {
+    setItems([])
+    setEditingPlanId(null)
+    setEditingPlanLabel(null)
+    dirtyRef.current = false
+    try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
+    setViewMode('editing')
+    setShowPicker(true)
+  }
+
   async function handleDeletePlan() {
+    // ConfirmSheet manages its own loading state; this handler only needs to
+    // perform the work and throw on failure so the sheet releases its lock.
     if (!editingPlanId) return
     if (saveTimer.current) clearTimeout(saveTimer.current)
-    setDeleteLoading(true)
-    try {
-      await deletePlanById(editingPlanId)
-      const from = offsetDate(todayIso, -180)
-      const to = offsetDate(todayIso, 180)
-      const dates = await fetchDatesWithPlans(from, to)
-      setDatesWithPlans(new Set(dates))
-      setSelectedDayPlans(prev => prev.filter(p => p.id !== editingPlanId))
-      setShowDeleteConfirm(false)
-      setEditingPlanId(null)
-      setEditingPlanLabel(null)
-      setItems([])
-      setSaveStatus('idle')
-      setPlanViewMode('view')
-      setViewMode('dashboard')
-    } catch (err) {
-      console.error('Delete failed:', err)
-    } finally {
-      setDeleteLoading(false)
-    }
+    await deletePlanById(editingPlanId)
+    const from = offsetDate(todayIso, -180)
+    const to = offsetDate(todayIso, 180)
+    const dates = await fetchDatesWithPlans(from, to)
+    setDatesWithPlans(new Set(dates))
+    setSelectedDayPlans(prev => prev.filter(p => p.id !== editingPlanId))
+    setShowDeleteConfirm(false)
+    setEditingPlanId(null)
+    setEditingPlanLabel(null)
+    setItems([])
+    setSaveStatus('idle')
+    optionsFromDashboardRef.current = false
+    // If the coach was in edit view, return them to dashboard. If they
+    // triggered this from the dashboard swipe, they're already there.
+    if (viewMode !== 'dashboard') setViewMode('dashboard')
   }
 
   async function handleMovePlan(newDate: string) {
@@ -928,7 +804,13 @@ export default function TodaysPlanClient() {
       setSelectedDayIso(newDate)
       setShowMoveCalendar(false)
       setShowPlanOptions(false)
-      setPlanViewMode('view')
+      // If the options sheet was opened from the dashboard, clear the
+      // temporary editingPlanId so subsequent state isn't stale.
+      if (optionsFromDashboardRef.current) {
+        setEditingPlanId(null)
+        setEditingPlanLabel(null)
+        optionsFromDashboardRef.current = false
+      }
     } catch (err) {
       console.error('Move failed:', err)
     }
@@ -937,6 +819,7 @@ export default function TodaysPlanClient() {
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
     if (!over || active.id === over.id) return
+    dirtyRef.current = true
     setItems(prev => {
       const fromIndex = prev.findIndex(i => i.localId === active.id)
       const toIndex = prev.findIndex(i => i.localId === over.id)
@@ -991,11 +874,20 @@ export default function TodaysPlanClient() {
 
         {/* Title */}
         <div className="flex-1 min-w-0">
-          <h1 className="font-heading text-xl text-text-primary leading-none">
+          <h1 className="font-heading text-xl text-text-primary leading-none truncate">
             {viewMode === 'editing' && editingPlanLabel
               ? editingPlanLabel
               : formatSelectedDayLabel(selectedDayIso, todayIso)}
           </h1>
+          {/* Save indicator — only while editing an existing saved plan */}
+          {viewMode === 'editing' && editingPlanId && saveStatus !== 'idle' && (
+            <p className={[
+              'text-[10px] font-heading uppercase tracking-wider leading-none mt-1.5 transition-opacity',
+              saveStatus === 'saving' ? 'text-text-dim' : 'text-accent-green',
+            ].join(' ')}>
+              {saveStatus === 'saving' ? 'Saving…' : '✓ Saved'}
+            </p>
+          )}
         </div>
 
         {/* Right actions */}
@@ -1011,19 +903,6 @@ export default function TodaysPlanClient() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           </button>
-          {/* Edit button — view sub-mode of a saved plan */}
-          {viewMode === 'editing' && planViewMode === 'view' && editingPlanId && (
-            <button
-              type="button"
-              onClick={() => setPlanViewMode('edit')}
-              className="w-10 h-10 flex items-center justify-center rounded-xl border border-bg-border text-text-muted hover:bg-white/5 active:scale-95 transition-all"
-              aria-label="Edit plan"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-            </button>
-          )}
           {/* Share — editing mode only */}
           {viewMode === 'editing' && sharePlanId && items.length > 0 && (
             <button
@@ -1154,11 +1033,15 @@ export default function TodaysPlanClient() {
 
           {/* ── Planned section ── */}
           <div className="px-4 mt-4">
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-1.5 mb-3">
               <p className="text-[11px] font-heading uppercase tracking-wider text-text-dim">Planned</p>
-              <span className="text-[11px] text-text-dim/50">{formatShortDay(selectedDayIso)}</span>
               {selectedDayPlans.length > 0 && (
-                <span className="ml-auto text-[11px] text-text-dim/50">{selectedDayPlans.length}</span>
+                <>
+                  <span className="text-text-dim/40 text-[11px]">·</span>
+                  <span className="text-[11px] font-heading uppercase tracking-wider text-text-dim/60">
+                    {selectedDayPlans.length}
+                  </span>
+                </>
               )}
             </div>
 
@@ -1169,88 +1052,60 @@ export default function TodaysPlanClient() {
             )}
 
             {!selectedDayLoading && selectedDayPlans.length > 0 && (
-              <div className="space-y-2">
+              <div className="flex flex-col gap-2">
                 {selectedDayPlans.map(plan => (
-                  <button
+                  <SavedPlanRow
                     key={plan.id}
-                    type="button"
-                    onClick={() => handleLoadPlan(plan)}
-                    className="w-full text-left bg-accent-fire/10 border border-accent-fire/25 rounded-2xl px-4 py-3.5 active:bg-accent-fire/20 transition-colors"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="font-heading text-sm text-text-primary leading-snug truncate flex-1">
-                        {autoLabel(plan)}
-                      </p>
-                      <svg className="w-4 h-4 text-accent-fire flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                      </svg>
-                    </div>
-                    <p className="text-[11px] text-text-dim mt-0.5">
-                      {(plan.items ?? []).length} component{(plan.items ?? []).length !== 1 ? 's' : ''}
-                      {plan.updated_at && (
-                        <span className="text-text-dim/50"> · saved {formatSavedAt(plan.updated_at)}</span>
-                      )}
-                    </p>
-                  </button>
+                    plan={plan}
+                    onOpen={() => handleLoadPlan(plan)}
+                    actions={{
+                      onMove: () => handleMoveFromDashboard(plan),
+                      onDuplicate: () => handleDuplicateFromDashboard(plan),
+                      onDelete: () => handleDeleteFromDashboard(plan),
+                    }}
+                  />
                 ))}
               </div>
             )}
 
             {!selectedDayLoading && selectedDayPlans.length === 0 && (
               <p className="text-xs text-text-dim/50 text-center py-8">
-                {selectedDayIso < todayIso
-                  ? 'Nothing was logged for this day'
-                  : selectedDayIso === todayIso
-                    ? 'No class today'
-                    : 'Nothing scheduled yet'}
+                No plan for this day
               </p>
             )}
           </div>
 
-          {/* ── Drafts ── */}
-          {drafts.length > 0 && (
-            <>
-              <div className="mx-4 mt-5 border-t border-bg-border/40" />
-              <div className="px-4 mt-5">
-                <p className="text-[11px] font-heading uppercase tracking-wider text-text-dim mb-3">Drafts</p>
-                <div className="space-y-3">
-                  {drafts.map(draft => (
-                    <DraftCard
-                      key={draft.id}
-                      draft={draft}
-                      onContinue={() => handleContinueDraft(draft)}
-                      onDiscard={() => handleDiscardDraft(draft.id)}
-                    />
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* ── Start New Plan CTA ── */}
+          {/* ── Start Plan CTA ──                                          */}
+          {/* Demoted to outlined/secondary when the day already has saved  */}
+          {/* plan(s), so the saved cards above read as the primary state.  */}
           <div className="px-4 mt-5 pb-2">
-            <button
-              type="button"
-              onClick={() => {
-                // Always start with a clean slate — discard any stale scratchpad
-                setItems([])
-                setEditingPlanId(null)
-                setEditingPlanLabel(null)
-                activeDraftIdRef.current = null
-                try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
-                setPlanViewMode('edit')
-                setViewMode('editing')
-                setShowPicker(true)
-              }}
-              className="w-full inline-flex items-center justify-center gap-2 bg-accent-fire text-white font-heading text-base py-4 rounded-2xl shadow-glow-fire active:scale-[0.98] transition-all min-h-[56px]"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-              {selectedDayIso === todayIso
-                ? 'Start New Plan'
-                : `Plan for ${formatShortDay(selectedDayIso)}`}
-            </button>
+            {selectedDayPlans.length > 0 ? (
+              <button
+                type="button"
+                onClick={handleStartNewPlan}
+                className="w-full inline-flex items-center justify-center gap-1.5 bg-transparent border border-bg-border text-text-muted hover:border-accent-fire/40 hover:text-text-primary font-heading text-sm py-3 rounded-xl transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                {selectedDayIso === todayIso
+                  ? 'New plan for today'
+                  : `Another plan for ${formatShortDay(selectedDayIso)}`}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleStartNewPlan}
+                className="w-full inline-flex items-center justify-center gap-2 bg-accent-fire text-white font-heading text-base py-4 rounded-2xl shadow-glow-fire active:scale-[0.98] transition-all min-h-[56px]"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                {selectedDayIso === todayIso
+                  ? 'Plan for today'
+                  : `Plan for ${formatShortDay(selectedDayIso)}`}
+              </button>
+            )}
           </div>
 
         </div>
@@ -1261,213 +1116,95 @@ export default function TodaysPlanClient() {
       {/* ════════════════════════════════════════════ */}
       {!loading && viewMode === 'editing' && (
         <>
-          {/* ── Add Component button (edit mode only) ── */}
-          {planViewMode === 'edit' && (
-            <div className="px-4 py-3">
+          {/* Add Component button moved below items list */}
+
+          {/* ── Empty state for new plan ── */}
+          {items.length === 0 && (
+            <div className="px-4 pt-10 pb-4">
+              <p className="font-heading text-text-primary text-lg leading-snug text-center">
+                Start building
+              </p>
+              <p className="text-sm text-text-muted mt-2 leading-relaxed max-w-xs mx-auto text-center">
+                Pick stations and games from your library, or create a custom activity.
+              </p>
               <button
                 type="button"
                 onClick={() => setShowPicker(true)}
-                className="w-full inline-flex items-center justify-center gap-2 bg-accent-fire text-white font-heading text-base px-4 py-3.5 rounded-xl active:scale-95 transition-all shadow-glow-fire min-h-[52px]"
+                className="mt-5 w-full flex items-center justify-center gap-1.5 bg-transparent border border-dashed border-bg-border text-text-dim hover:text-text-primary hover:border-text-muted font-heading text-sm px-4 py-3 rounded-xl transition-colors"
               >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                 </svg>
-                Add Component
+                Add component
               </button>
-            </div>
-          )}
-
-          {/* ── Empty state for new plan (edit mode only) ── */}
-          {items.length === 0 && planViewMode === 'edit' && (
-            <div className="text-center py-10 px-6">
-              <p className="font-heading text-text-muted text-lg">Build today's class</p>
-              <p className="text-text-dim text-sm mt-2 leading-relaxed">
-                Pick stations and games from your library, or create a custom activity. Drag to reorder, tap any row to add a coach note.
-              </p>
-              <Link href="/library" className="text-text-dim text-xs mt-3 inline-block underline underline-offset-2 hover:text-text-muted transition-colors">
-                Build your component library first
-              </Link>
-            </div>
-          )}
-
-          {/* ── Inline draft name (new drafts only, edit mode) ── */}
-          {planViewMode === 'edit' && !editingPlanId && (
-            <div className="px-4 pt-2 pb-3">
-              <input
-                value={draftNameValue}
-                onChange={e => setDraftNameValue(e.target.value)}
-                placeholder="Name this plan (optional)"
-                className="w-full bg-transparent text-text-primary text-sm font-heading border-b border-bg-border/40 pb-1.5 placeholder:text-text-dim/30 focus:outline-none focus:border-accent-fire/40 transition-colors"
-              />
-            </div>
-          )}
-
-          {/* ── Time budget ── */}
-          {items.length > 0 && (totalMinutes > 0 || classLength) && (
-            <div className="px-4 pt-1 pb-1">
-              <div className="flex items-center gap-2">
-                <svg className="w-3.5 h-3.5 text-text-dim flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <button
-                  type="button"
-                  onClick={classLength ? () => setShowLengthPicker(v => !v) : undefined}
-                  className={[
-                    'text-xs font-heading',
-                    isOverBudget ? 'text-accent-fire' : 'text-text-muted',
-                    classLength ? 'underline underline-offset-2 cursor-pointer' : '',
-                  ].join(' ')}
-                >
-                  {classLength ? `${totalMinutes} / ${classLength} min` : `${totalMinutes} min`}
-                </button>
-                {classLength && (
-                  <div className="flex-1 h-1 bg-bg-border rounded-full overflow-hidden">
-                    <div
-                      className={['h-full rounded-full transition-all', isOverBudget ? 'bg-accent-fire' : 'bg-accent-green'].join(' ')}
-                      style={{ width: `${Math.min(100, (totalMinutes / classLength) * 100)}%` }}
-                    />
-                  </div>
-                )}
-                {classLength ? (
-                  <button
-                    type="button"
-                    onClick={() => { setClassLength(null); setShowLengthPicker(false) }}
-                    className="text-text-dim/40 hover:text-text-dim transition-colors flex-shrink-0"
-                    aria-label="Clear class length"
-                  >
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setShowLengthPicker(v => !v)}
-                    className="text-[11px] text-text-dim/50 hover:text-text-dim transition-colors flex-shrink-0 underline underline-offset-2"
-                  >
-                    Set length
-                  </button>
-                )}
-              </div>
-              {showLengthPicker && (
-                <div className="flex gap-2 mt-2">
-                  {[30, 45, 60, 90].map(min => (
-                    <button
-                      key={min}
-                      type="button"
-                      onClick={() => { setClassLength(min); setShowLengthPicker(false) }}
-                      className="px-3 py-1.5 rounded-lg border border-bg-border text-xs font-heading text-text-muted hover:border-accent-fire/40 hover:text-accent-fire active:scale-95 transition-all"
-                    >
-                      {min} min
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
           )}
 
           {/* ── Plan items ── */}
           {items.length > 0 && (
-            planViewMode === 'view' ? (
-              <ul className="mx-4 bg-bg-card rounded-2xl overflow-hidden border border-bg-border">
-                {items.map((item, idx) => (
-                  <ViewPlanItem
-                    key={item.localId}
-                    item={item}
-                    index={idx}
-                    onPhotoTap={photos => setLightbox({ photos })}
-                  />
-                ))}
-              </ul>
-            ) : (
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                <SortableContext items={items.map(i => i.localId)} strategy={verticalListSortingStrategy}>
-                  <ul className="mx-4 bg-bg-card rounded-2xl overflow-hidden border border-bg-border">
-                    {items.map((item, idx) => (
-                      <SortablePlanItem
-                        key={item.localId}
-                        item={item}
-                        index={idx}
-                        onRemove={handleRemove}
-                        onPhotoTap={photos => setLightbox({ photos })}
-                        onRowTap={i => setActiveSheet(i)}
-                      />
-                    ))}
-                  </ul>
-                </SortableContext>
-              </DndContext>
-            )
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={items.map(i => i.localId)} strategy={verticalListSortingStrategy}>
+                <div className="mx-4 flex flex-col gap-2">
+                  {items.map((item) => (
+                    <SortablePlanItem
+                      key={item.localId}
+                      item={item}
+                      onRemove={handleRemove}
+                      onPhotoTap={photos => setLightbox({ photos })}
+                      onRowTap={i => setActiveSheet(i)}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
           )}
 
-          {/* ── Type summary ── */}
-          {items.length > 0 && typeSummary && (
-            <p className="text-center text-[11px] text-text-dim/50 px-4 pt-2">
-              {typeSummary}
-            </p>
+          {/* ── Add component (dashed, below items) ── */}
+          {items.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowPicker(true)}
+              className="mx-4 mt-3 w-[calc(100%-2rem)] flex items-center justify-center gap-1.5 bg-transparent border border-dashed border-bg-border text-text-dim hover:text-text-primary hover:border-text-muted font-heading text-sm px-4 py-3 rounded-xl transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              Add component
+            </button>
           )}
 
-          {/* ── Bottom action row (edit mode only) ── */}
-          {items.length > 0 && planViewMode === 'edit' && (
-            <div className="px-4 pt-3 pb-2">
+          {/* ── Bottom action area ── */}
+          {items.length > 0 && (
+            <div className="px-4 pt-5 pb-2">
               {editingPlanId ? (
-                /* Saved plan: Options + Done Editing */
-                <div className="flex gap-2">
+                /* Saved plan: subtle bordered pill — findable without being loud */
+                <div className="flex justify-center">
                   <button
                     type="button"
                     onClick={() => setShowPlanOptions(true)}
-                    className="py-3.5 px-4 rounded-xl border border-bg-border font-heading text-sm text-text-muted hover:bg-white/5 active:scale-[0.98] transition-all min-h-[52px]"
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-bg-border font-heading text-xs uppercase tracking-wider text-text-muted hover:bg-white/5 hover:border-text-dim active:scale-95 transition-all"
                   >
-                    ··· Options
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPlanViewMode('view')}
-                    className="flex-1 py-3.5 rounded-xl border border-bg-border font-heading text-sm text-text-muted hover:border-accent-fire/30 active:scale-[0.98] transition-all min-h-[52px]"
-                  >
-                    Done Editing
+                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                      <circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>
+                    </svg>
+                    Plan options
                   </button>
                 </div>
               ) : (
-                /* New draft: Save Draft + Add to Calendar */
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={showDraftNameInput ? confirmSaveDraft : handleSaveDraftTap}
-                    className="flex-1 py-3.5 rounded-xl border border-bg-border font-heading text-sm text-text-muted hover:border-accent-fire/30 active:scale-[0.98] transition-all min-h-[52px]"
-                  >
-                    {draftSavedFeedback ? '✓ Draft Saved' : showDraftNameInput ? 'Confirm Save' : 'Save Draft'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowDatePicker(true)}
-                    className="flex-1 py-3.5 rounded-xl bg-accent-fire text-white font-heading text-sm shadow-glow-fire active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 min-h-[52px]"
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    Add to Calendar
-                  </button>
-                </div>
+                /* New plan: single primary CTA */
+                <button
+                  type="button"
+                  onClick={() => setShowDatePicker(true)}
+                  className="w-full font-heading text-base px-4 py-3.5 rounded-xl bg-accent-fire text-white active:scale-[0.98] transition-all min-h-[52px]"
+                >
+                  Save to calendar
+                </button>
               )}
             </div>
           )}
 
-          {/* ── Transient confirmation ── */}
-          {calendarAddedTo && (
-            <p className="text-center text-xs text-accent-green px-4 pb-2">
-              ✓ Added to {calendarAddedTo}
-            </p>
-          )}
-
-          {/* ── Editing indicator (edit mode only) ── */}
-          {editingPlanId && planViewMode === 'edit' && (
-            <p className="text-center text-[11px] text-text-dim/50 px-4 pb-1">
-              Editing saved plan · changes auto-save
-            </p>
-          )}
-
-          {/* ── Clear & start over (edit mode, new drafts only) ── */}
-          {items.length > 0 && planViewMode === 'edit' && !editingPlanId && (
+          {/* ── Clear & start over (new plan only) ── */}
+          {items.length > 0 && !editingPlanId && (
             <div className="px-4 pb-4 flex justify-center gap-4">
               <button
                 type="button"
@@ -1479,6 +1216,26 @@ export default function TodaysPlanClient() {
             </div>
           )}
         </>
+      )}
+
+      {/* Save-to-calendar confirmation toast lives in the app-root ToastProvider */}
+
+      {/* ── Undo toast (recently-removed plan item) ── */}
+      {removedItem && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 animate-slide-up">
+          <div className="flex items-center gap-3 bg-bg-card border border-bg-border shadow-card rounded-xl pl-4 pr-2 py-2">
+            <span className="text-sm text-text-muted">
+              Removed <span className="text-text-primary font-heading">{removedItem.item.component.title}</span>
+            </span>
+            <button
+              type="button"
+              onClick={handleUndoRemove}
+              className="px-3 py-1.5 rounded-lg bg-accent-fire/15 text-accent-fire font-heading text-xs uppercase tracking-wider hover:bg-accent-fire/25 active:scale-95 transition-all"
+            >
+              Undo
+            </button>
+          </div>
+        </div>
       )}
 
       {/* ── Modals / portals ── */}
@@ -1502,7 +1259,6 @@ export default function TodaysPlanClient() {
       {activeSheet && (
         <PlanItemSheet
           item={activeSheet}
-          planDate={todayIso}
           onSaveNote={(localId, note) => {
             handleNoteChange(localId, note)
             setActiveSheet(prev => prev ? { ...prev, coachNote: note || null } : null)
@@ -1521,7 +1277,8 @@ export default function TodaysPlanClient() {
           mode="save"
           todayIso={todayIso}
           datesWithPlans={datesWithPlans}
-          initialTitle={draftNameValue}
+          /* Pre-select the day the coach started planning for — one-tap save */
+          initialSelectedDate={selectedDayIso}
           onSaveToCal={async (date, title) => {
             setShowDatePicker(false)
             await handleAddToCalendar(date, title)
@@ -1562,78 +1319,50 @@ export default function TodaysPlanClient() {
       )}
 
       {/* ── Plan Options sheet ── */}
-      {showPlanOptions && createPortal(
-        <div className="fixed inset-0 z-50 flex flex-col justify-end">
-          <div className="fixed inset-0 bg-black/60" onClick={() => setShowPlanOptions(false)} />
-          <div className="relative bg-bg-card rounded-t-2xl p-6 pb-10 flex flex-col gap-3">
-            <div className="w-10 h-1 bg-bg-border rounded-full mx-auto mb-1" />
-            <p className="font-heading text-base text-text-primary text-center mb-1">Plan Options</p>
-            <button
-              type="button"
-              onClick={() => { setShowPlanOptions(false); setShowMoveCalendar(true) }}
-              className="w-full py-3.5 rounded-xl border border-bg-border font-heading text-sm text-text-muted hover:bg-white/5 active:scale-[0.98] transition-all text-left px-4 min-h-[52px]"
-            >
-              Move to a different date
-            </button>
-            <button
-              type="button"
-              onClick={() => { setShowPlanOptions(false); setShowDatePicker(true) }}
-              className="w-full py-3.5 rounded-xl border border-bg-border font-heading text-sm text-text-muted hover:bg-white/5 active:scale-[0.98] transition-all text-left px-4 min-h-[52px]"
-            >
-              Duplicate to another date
-            </button>
-            <button
-              type="button"
-              onClick={() => { setShowPlanOptions(false); setShowDeleteConfirm(true) }}
-              className="w-full py-3.5 rounded-xl border border-red-500/30 font-heading text-sm text-red-400 hover:bg-red-500/10 active:scale-[0.98] transition-all text-left px-4 min-h-[52px]"
-            >
-              Delete this plan
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowPlanOptions(false)}
-              className="w-full py-3.5 rounded-xl border border-bg-border font-heading text-sm text-text-dim hover:bg-white/5 active:scale-[0.98] transition-all min-h-[48px] mt-1"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>,
-        document.body
-      )}
+      <BottomSheet visible={showPlanOptions} onClose={handleCancelPlanOptions} title="Plan Options">
+        <div className="px-6 pb-10 flex flex-col gap-3">
+          <button
+            type="button"
+            onClick={() => { setShowPlanOptions(false); setShowMoveCalendar(true) }}
+            className="w-full py-3.5 rounded-xl border border-bg-border font-heading text-sm text-text-muted hover:bg-white/5 active:scale-[0.98] transition-all text-left px-4 min-h-[52px]"
+          >
+            Move to a different date
+          </button>
+          <button
+            type="button"
+            onClick={() => { setShowPlanOptions(false); setShowDatePicker(true) }}
+            className="w-full py-3.5 rounded-xl border border-bg-border font-heading text-sm text-text-muted hover:bg-white/5 active:scale-[0.98] transition-all text-left px-4 min-h-[52px]"
+          >
+            Duplicate to another date
+          </button>
+          <button
+            type="button"
+            onClick={() => { setShowPlanOptions(false); setShowDeleteConfirm(true) }}
+            className="w-full py-3.5 rounded-xl border border-red-500/30 font-heading text-sm text-red-400 hover:bg-red-500/10 active:scale-[0.98] transition-all text-left px-4 min-h-[52px]"
+          >
+            Delete this plan
+          </button>
+          <button
+            type="button"
+            onClick={handleCancelPlanOptions}
+            className="w-full py-3.5 rounded-xl border border-bg-border font-heading text-sm text-text-dim hover:bg-white/5 active:scale-[0.98] transition-all min-h-[48px] mt-1"
+          >
+            Cancel
+          </button>
+        </div>
+      </BottomSheet>
 
-      {/* ── Delete confirmation sheet ── */}
-      {showDeleteConfirm && createPortal(
-        <div className="fixed inset-0 z-50 flex flex-col justify-end">
-          <div
-            className="fixed inset-0 bg-black/60"
-            onClick={() => !deleteLoading && setShowDeleteConfirm(false)}
-          />
-          <div className="relative bg-bg-card rounded-t-2xl p-6 pb-10 flex flex-col gap-4">
-            <div className="w-10 h-1 bg-bg-border rounded-full mx-auto mb-1" />
-            <p className="font-heading text-lg text-text-primary text-center">Delete this plan?</p>
-            <p className="text-sm text-text-dim text-center leading-relaxed">
-              This can&apos;t be undone. All components and coach notes will be removed.
-            </p>
-            <button
-              type="button"
-              onClick={handleDeletePlan}
-              disabled={deleteLoading}
-              className="w-full py-3.5 rounded-xl bg-red-500 text-white font-heading text-base active:scale-[0.98] transition-all disabled:opacity-60 min-h-[52px]"
-            >
-              {deleteLoading ? 'Deleting…' : 'Delete Plan'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowDeleteConfirm(false)}
-              disabled={deleteLoading}
-              className="w-full py-3.5 rounded-xl border border-bg-border font-heading text-sm text-text-muted hover:bg-white/5 active:scale-[0.98] transition-all min-h-[48px]"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>,
-        document.body
-      )}
+      {/* ── Delete confirmation — shared ConfirmSheet primitive ── */}
+      <ConfirmSheet
+        visible={showDeleteConfirm}
+        title="Delete this plan?"
+        body="This can't be undone. All components and coach notes will be removed."
+        confirmLabel="Delete plan"
+        workingLabel="Deleting…"
+        destructive
+        onConfirm={handleDeletePlan}
+        onClose={handleCancelDeleteConfirm}
+      />
 
     </div>
   )

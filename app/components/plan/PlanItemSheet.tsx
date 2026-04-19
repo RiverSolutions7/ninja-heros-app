@@ -1,9 +1,9 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import type { PlanItem, ComponentType } from '@/app/lib/database.types'
 import { PhotoLightbox } from '@/app/components/ui/PhotoLightbox'
+import BottomSheet from '@/app/components/ui/BottomSheet'
 import { useVoiceNote } from '@/app/hooks/useVoiceNote'
 
 const TYPE_META: Record<ComponentType, { label: string; accent: string; placeholderBg: string }> = {
@@ -11,27 +11,33 @@ const TYPE_META: Record<ComponentType, { label: string; accent: string; placehol
   game: { label: 'Game', accent: 'text-accent-green', placeholderBg: 'bg-accent-green/20' },
 }
 
-function formatDisplayDate(isoDate: string): string {
-  const d = new Date(isoDate + 'T00:00:00')
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
-
 interface PlanItemSheetProps {
   item: PlanItem
-  planDate: string
   onSaveNote: (localId: string, note: string) => void
   onDurationChange: (localId: string, value: string) => void
   onClose: () => void
 }
 
-export function PlanItemSheet({ item, planDate, onSaveNote, onDurationChange, onClose }: PlanItemSheetProps) {
-  const [visible, setVisible] = useState(false)
+export function PlanItemSheet({ item, onSaveNote, onDurationChange, onClose }: PlanItemSheetProps) {
+  // Starts true so BottomSheet animates in on mount; handleClose flips it false
+  // to trigger the 300ms exit before the parent unmounts us.
+  const [visible, setVisible] = useState(true)
   // Pre-fill with existing coach note, or fall back to library description as a starting point
   const [noteText, setNoteText] = useState(item.coachNote ?? item.component.description ?? '')
   const [lightbox, setLightbox] = useState<{ photos: string[]; index: number } | null>(null)
   // Local copy of duration so stepper updates feel instant
   const [localDuration, setLocalDuration] = useState<number | null>(item.durationMinutes ?? null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Duration stepper hold-to-accelerate state. Tap = 1-min step via onClick.
+  // Hold ≥ 450ms = rapid-fire, accelerating from slow to very fast as the
+  // user keeps their finger down, so going 0 → 45 is a second of holding
+  // rather than 9 taps.
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const heldRef = useRef(false)
+  // Latest duration value visible to the hold ticks — updated via ref so the
+  // rapid-fire callback doesn't close over a stale state value.
+  const durationRef = useRef<number | null>(item.durationMinutes ?? null)
 
   const {
     voiceState,
@@ -46,12 +52,6 @@ export function PlanItemSheet({ item, planDate, onSaveNote, onDurationChange, on
 
   const meta = TYPE_META[item.component.type]
   const photos = (item.component.photos ?? []).filter(Boolean)
-
-  // Slide-up animation
-  useEffect(() => {
-    const t = requestAnimationFrame(() => setVisible(true))
-    return () => cancelAnimationFrame(t)
-  }, [])
 
   function handleClose() {
     // Auto-save note when closing — no explicit Save button needed
@@ -74,17 +74,68 @@ export function PlanItemSheet({ item, planDate, onSaveNote, onDurationChange, on
     }
   }
 
-  function handleDurationStep(delta: number) {
-    const current = localDuration ?? 0
+  /** Single step of the duration stepper. 1-minute granularity. */
+  function stepDuration(delta: number) {
+    const current = durationRef.current ?? 0
     let next: number | null
     if (delta < 0) {
-      next = current <= 5 ? null : Math.max(5, Math.round(current / 5) * 5 + delta)
+      next = current + delta <= 0 ? null : current + delta
     } else {
-      next = current === 0 ? 5 : Math.min(120, Math.round(current / 5) * 5 + delta)
+      next = Math.min(120, current + delta)
     }
+    if (next === durationRef.current) return // clamped — no-op
+    durationRef.current = next
     setLocalDuration(next)
     onDurationChange(item.localId, next === null ? '' : String(next))
   }
+
+  /**
+   * Start a press-and-hold on a stepper button. After 450ms the rapid-fire
+   * kicks in and accelerates: first few ticks are paced (110ms), then faster
+   * (55ms), then very fast (30ms) — so going 0 → 45 takes ~1.5s of holding.
+   * Short taps don't enter rapid-fire; the onClick handler does the single step.
+   */
+  function startDurationHold(delta: number) {
+    heldRef.current = false
+    if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
+    let ticks = 0
+    const tick = () => {
+      heldRef.current = true
+      stepDuration(delta)
+      ticks += 1
+      const delay = ticks < 5 ? 110 : ticks < 12 ? 55 : 30
+      holdTimerRef.current = setTimeout(tick, delay)
+    }
+    holdTimerRef.current = setTimeout(tick, 450)
+  }
+
+  function stopDurationHold() {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current)
+      holdTimerRef.current = null
+    }
+  }
+
+  /**
+   * Click handler — fires after pointerup. If the user was holding, we've
+   * already rapid-fire-stepped; skip the extra step from this click. Otherwise
+   * (plain tap) this is the single step.
+   */
+  function handleDurationClick(delta: number) {
+    if (heldRef.current) {
+      heldRef.current = false
+      return
+    }
+    stepDuration(delta)
+  }
+
+  // Clear any running hold timer on unmount — guards against the sheet closing
+  // mid-hold (e.g. backdrop tap).
+  useEffect(() => {
+    return () => {
+      if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
+    }
+  }, [])
 
   const micIcon = () => {
     if (voiceState === 'recording') {
@@ -126,30 +177,10 @@ export function PlanItemSheet({ item, planDate, onSaveNote, onDurationChange, on
     error: 'bg-red-900/30 border border-red-500/40 text-red-400',
   }
 
-  const sheet = (
+  return (
     <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-black/60 transition-opacity duration-300"
-        style={{ zIndex: 9999, opacity: visible ? 1 : 0 }}
-        onClick={handleClose}
-      />
-
-      {/* Sheet */}
-      <div
-        className="fixed inset-x-0 bottom-0 bg-bg-card rounded-t-2xl flex flex-col transition-transform duration-300 ease-out"
-        style={{
-          zIndex: 10000,
-          maxHeight: '90vh',
-          transform: visible ? 'translateY(0)' : 'translateY(100%)',
-        }}
-      >
-        {/* Drag handle */}
-        <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
-          <div className="w-10 h-1 rounded-full bg-white/20" />
-        </div>
-
-        <div className="overflow-y-auto flex-1 pb-safe">
+      <BottomSheet visible={visible} onClose={handleClose} maxHeight="90vh">
+        <div>
           {/* Photos row */}
           {photos.length > 0 && (
             <div className="flex gap-2 px-4 pt-3 overflow-x-auto scrollbar-hide" style={{ scrollbarWidth: 'none' }}>
@@ -172,26 +203,20 @@ export function PlanItemSheet({ item, planDate, onSaveNote, onDurationChange, on
             <div className={['mx-4 mt-3 h-20 rounded-xl', meta.placeholderBg].join(' ')} />
           )}
 
-          {/* Title + type badge */}
-          <div className="px-4 pt-4">
-            <div className="flex items-start gap-2">
-              <h2 className="font-heading text-xl text-text-primary leading-snug flex-1">
-                {item.component.title}
-              </h2>
-              <span className={['text-xs font-heading mt-1 flex-shrink-0', meta.accent].join(' ')}>
-                {meta.label}
-              </span>
+          {/* Metadata row + title — library-card hierarchy */}
+          <div className="px-4 pt-3">
+            <div className="flex items-center gap-1.5 text-[10px] font-heading uppercase tracking-wide">
+              <span className={meta.accent}>{meta.label}</span>
+              {item.component.curriculum && (
+                <>
+                  <span className="text-text-dim/40">·</span>
+                  <span className="text-text-dim">{item.component.curriculum}</span>
+                </>
+              )}
             </div>
-            {item.component.curriculum && (
-              <p className="text-xs text-text-dim mt-0.5">{item.component.curriculum}</p>
-            )}
-            {/* Date-specific reassurance */}
-            <p className="text-[11px] text-text-dim/40 mt-1.5 flex items-center gap-1">
-              <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              {formatDisplayDate(planDate)} only · won&apos;t change the library
-            </p>
+            <h2 className="font-heading text-xl text-text-primary leading-snug mt-1">
+              {item.component.title}
+            </h2>
           </div>
 
           {/* Equipment */}
@@ -202,31 +227,42 @@ export function PlanItemSheet({ item, planDate, onSaveNote, onDurationChange, on
             </div>
           )}
 
-          {/* Optional duration stepper */}
-          <div className="px-4 mt-4 flex items-center gap-3">
-            <span className="text-xs text-text-dim font-heading flex-shrink-0">Duration</span>
-            <div className="flex items-center">
+          {/* Duration stepper — 1-min steps, hold-to-accelerate */}
+          <div className="px-4 mt-3 flex items-center justify-between">
+            <span className="text-xs text-text-dim font-heading">Duration</span>
+            <div className="flex items-center select-none" style={{ touchAction: 'manipulation' }}>
               <button
                 type="button"
-                onClick={() => handleDurationStep(-5)}
+                onClick={() => handleDurationClick(-1)}
+                onPointerDown={() => startDurationHold(-1)}
+                onPointerUp={stopDurationHold}
+                onPointerLeave={stopDurationHold}
+                onPointerCancel={stopDurationHold}
                 disabled={!localDuration}
-                className="w-8 h-8 flex items-center justify-center rounded-l-lg border border-bg-border bg-bg-input text-text-muted active:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                className="w-9 h-9 flex items-center justify-center rounded-l-lg border border-bg-border bg-bg-input text-text-muted active:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                 aria-label="Decrease duration"
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" />
                 </svg>
               </button>
-              <div className="h-8 px-3 flex items-center justify-center border-t border-b border-bg-border bg-bg-input min-w-[60px]">
-                <span className="text-text-muted text-xs font-heading whitespace-nowrap">
-                  {localDuration ? `${localDuration} min` : '— min'}
+              <div className="h-9 px-4 flex items-center justify-center border-t border-b border-bg-border bg-bg-input min-w-[72px]">
+                <span className={[
+                  'font-heading whitespace-nowrap tabular-nums',
+                  localDuration ? 'text-text-primary text-sm' : 'text-text-dim text-sm',
+                ].join(' ')}>
+                  {localDuration ? `${localDuration} min` : '—'}
                 </span>
               </div>
               <button
                 type="button"
-                onClick={() => handleDurationStep(5)}
+                onClick={() => handleDurationClick(1)}
+                onPointerDown={() => startDurationHold(1)}
+                onPointerUp={stopDurationHold}
+                onPointerLeave={stopDurationHold}
+                onPointerCancel={stopDurationHold}
                 disabled={!!localDuration && localDuration >= 120}
-                className="w-8 h-8 flex items-center justify-center rounded-r-lg border border-bg-border bg-bg-input text-text-muted active:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                className="w-9 h-9 flex items-center justify-center rounded-r-lg border border-bg-border bg-bg-input text-text-muted active:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                 aria-label="Increase duration"
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -234,22 +270,21 @@ export function PlanItemSheet({ item, planDate, onSaveNote, onDurationChange, on
                 </svg>
               </button>
             </div>
-            <span className="text-[11px] text-text-dim/40">optional</span>
           </div>
 
-          {/* Coach Note section */}
-          <div className="px-4 mt-5 pb-2">
+          {/* Running Note section */}
+          <div className="px-4 mt-4 pb-2">
             <div className="flex items-center gap-2 mb-3">
               <div className="h-px flex-1 bg-bg-border" />
               <span className="text-[11px] font-heading uppercase tracking-wider text-text-dim px-2">
-                Coach Note
+                Running Note
               </span>
               <div className="h-px flex-1 bg-bg-border" />
             </div>
 
-            {/* Mic button + label row */}
-            <div className="flex items-center gap-3 mb-3">
-              {isSupported ? (
+            {/* Mic button + label row — hidden entirely when voice unsupported */}
+            {isSupported && (
+              <div className="flex items-center gap-3 mb-2">
                 <button
                   type="button"
                   onClick={handleMicToggle}
@@ -263,32 +298,29 @@ export function PlanItemSheet({ item, planDate, onSaveNote, onDurationChange, on
                 >
                   {micIcon()}
                 </button>
-              ) : null}
-              <div className="flex-1 min-w-0">
-                {voiceState === 'recording' && (
-                  <p className="text-xs text-accent-fire animate-pulse">Listening… tap mic to stop</p>
-                )}
-                {voiceState === 'processing' && (
-                  <p className="text-xs text-text-dim">Processing…</p>
-                )}
-                {voiceState === 'done' && (
-                  <p className="text-xs text-accent-green">Note formatted ✓</p>
-                )}
-                {voiceState === 'error' && errorMessage && (
-                  <p className="text-xs text-red-400">{errorMessage}</p>
-                )}
-                {voiceState === 'idle' && isSupported && (
-                  <p className="text-xs text-text-dim">Tap mic to speak running instructions</p>
-                )}
-                {!isSupported && (
-                  <p className="text-xs text-text-dim">Voice not supported — type below</p>
-                )}
+                <div className="flex-1 min-w-0">
+                  {voiceState === 'recording' && (
+                    <p className="text-xs text-accent-fire animate-pulse">Listening… tap mic to stop</p>
+                  )}
+                  {voiceState === 'processing' && (
+                    <p className="text-xs text-text-dim">Processing…</p>
+                  )}
+                  {voiceState === 'done' && (
+                    <p className="text-xs text-accent-green">Note formatted ✓</p>
+                  )}
+                  {voiceState === 'error' && errorMessage && (
+                    <p className="text-xs text-red-400">{errorMessage}</p>
+                  )}
+                  {voiceState === 'idle' && (
+                    <p className="text-xs text-text-dim">Tap mic to dictate</p>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Live transcript preview while recording */}
             {voiceState === 'recording' && transcript && (
-              <p className="text-xs text-text-dim italic mb-3 px-1 leading-relaxed">
+              <p className="text-xs text-text-dim italic mb-2 px-1 leading-relaxed">
                 &ldquo;{transcript}&rdquo;
               </p>
             )}
@@ -298,7 +330,7 @@ export function PlanItemSheet({ item, planDate, onSaveNote, onDurationChange, on
               ref={textareaRef}
               value={noteText}
               onChange={(e) => setNoteText(e.target.value)}
-              placeholder="Add running instructions for this component…"
+              placeholder="Running instructions for this component…"
               rows={4}
               className="w-full bg-bg-input border border-bg-border rounded-xl px-3 py-2.5 text-sm text-text-primary placeholder:text-text-dim focus:outline-none focus:border-accent-fire/50 transition-colors resize-none leading-relaxed"
             />
@@ -313,7 +345,7 @@ export function PlanItemSheet({ item, planDate, onSaveNote, onDurationChange, on
             </button>
           </div>
         </div>
-      </div>
+      </BottomSheet>
 
       {/* Photo lightbox — above sheet */}
       {lightbox && (
@@ -326,6 +358,4 @@ export function PlanItemSheet({ item, planDate, onSaveNote, onDurationChange, on
       )}
     </>
   )
-
-  return createPortal(sheet, document.body)
 }

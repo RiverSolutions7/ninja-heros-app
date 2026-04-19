@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createPortal } from 'react-dom'
 import type { PlanRow } from '@/app/lib/database.types'
 import { fetchPlansForDate } from '@/app/lib/planQueries'
+import BottomSheet from '@/app/components/ui/BottomSheet'
+import SavedPlanRow from './SavedPlanRow'
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
@@ -52,22 +53,7 @@ function formatWeekRange(weekStart: Date): string {
   return `${startStr} – ${endStr}`
 }
 
-function formatSavedAt(ts: string): string {
-  return new Date(ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-}
-
-/** Auto-generate a readable label from component types when plan has no title. */
-function autoLabel(plan: PlanRow): string {
-  if (plan.title) return plan.title
-  const items = plan.items ?? []
-  const stations = items.filter(i => i.component.type === 'station').length
-  const games = items.filter(i => i.component.type === 'game').length
-  const parts = [
-    stations > 0 && `${stations} station${stations > 1 ? 's' : ''}`,
-    games > 0 && `${games} game${games > 1 ? 's' : ''}`,
-  ].filter(Boolean) as string[]
-  return parts.length > 0 ? parts.join(' · ') : 'Class Plan'
-}
+// formatSavedAt + autoLabel now live in SavedPlanRow (shared with dashboard)
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -88,36 +74,20 @@ interface PlanCalendarSheetProps {
   defaultView?: ViewMode
   /** Pre-fill the plan title field with a value the coach already typed. */
   initialTitle?: string
+  /**
+   * Pre-select a date on open (save mode only). The calendar jumps to that
+   * month and the confirm button ("Add to {date}") is immediately active —
+   * one tap to save when the coach already signaled which date they're
+   * planning for (e.g. by tapping "Plan for Sat, Apr 18" on the dashboard).
+   */
+  initialSelectedDate?: string
 }
 
 type ViewMode = 'week' | 'month'
 
-// ── Plan card used in both week and month browse views ────────────────────────
-
-function PlanCard({ plan, onLoad }: { plan: PlanRow; onLoad: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onLoad}
-      className="w-full text-left bg-accent-fire/10 border border-accent-fire/25 rounded-2xl px-4 py-3.5 active:bg-accent-fire/20 transition-colors"
-    >
-      <div className="flex items-center justify-between gap-2">
-        <p className="font-heading text-sm text-text-primary leading-snug truncate flex-1">
-          {autoLabel(plan)}
-        </p>
-        <svg className="w-4 h-4 text-accent-fire flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-        </svg>
-      </div>
-      <p className="text-[11px] text-text-dim mt-0.5">
-        {(plan.items ?? []).length} component{(plan.items ?? []).length !== 1 ? 's' : ''}
-        {plan.updated_at && (
-          <span className="text-text-dim/50"> · saved {formatSavedAt(plan.updated_at)}</span>
-        )}
-      </p>
-    </button>
-  )
-}
+// Calendar-browse list uses the shared SavedPlanRow (imported at top).
+// Keeping the one-place-for-everything card grammar in lockstep with the
+// dashboard so the same conceptual object doesn't render two ways.
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -130,17 +100,25 @@ export function PlanCalendarSheet({
   onClose,
   defaultView,
   initialTitle = '',
+  initialSelectedDate,
 }: PlanCalendarSheetProps) {
   const today = new Date(todayIso + 'T00:00:00')
 
+  // If the caller pre-seeded a date (save mode only), anchor the month view
+  // to that date and start with it selected so the coach can confirm in one
+  // tap without scrolling.
+  const seededIso = mode === 'save' && initialSelectedDate ? initialSelectedDate : null
+  const seededDate = seededIso ? new Date(seededIso + 'T00:00:00') : today
+
   // Shared
   const [viewMode, setViewMode] = useState<ViewMode>(defaultView ?? (mode === 'browse' ? 'week' : 'month'))
-  const [visible, setVisible] = useState(false)
+  // Starts true so BottomSheet animates in immediately on mount.
+  const [visible, setVisible] = useState(true)
 
   // Month view
-  const [viewYear, setViewYear] = useState(today.getFullYear())
-  const [viewMonth, setViewMonth] = useState(today.getMonth())
-  const [selectedIso, setSelectedIso] = useState<string | null>(null)
+  const [viewYear, setViewYear] = useState(seededDate.getFullYear())
+  const [viewMonth, setViewMonth] = useState(seededDate.getMonth())
+  const [selectedIso, setSelectedIso] = useState<string | null>(seededIso)
   const [planTitle, setPlanTitle] = useState(initialTitle)
   const [browsePlans, setBrowsePlans] = useState<PlanRow[]>([])
   const [browseLoading, setBrowseLoading] = useState(false)
@@ -151,12 +129,10 @@ export function PlanCalendarSheet({
   const [weekPlans, setWeekPlans] = useState<PlanRow[]>([])
   const [weekLoading, setWeekLoading] = useState(false)
 
-  useEffect(() => {
-    const t = requestAnimationFrame(() => setVisible(true))
-    return () => cancelAnimationFrame(t)
-  }, [])
 
   // Load plans when a week day is selected (browse + week view)
+  // Always list plans as cards — never auto-load on passive selection. The week
+  // view is for browsing; explicit tap on a card is required to open a plan.
   useEffect(() => {
     if (mode !== 'browse' || viewMode !== 'week') return
     if (!datesWithPlans.has(selectedWeekIso)) {
@@ -167,13 +143,6 @@ export function PlanCalendarSheet({
     setWeekPlans([])
     fetchPlansForDate(selectedWeekIso).then(plans => {
       setWeekLoading(false)
-      if (plans.length === 1) {
-        // Single plan — load immediately
-        onLoadPlan(plans[0])
-        setVisible(false)
-        setTimeout(onClose, 300)
-        return
-      }
       setWeekPlans(plans)
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -212,12 +181,8 @@ export function PlanCalendarSheet({
       setBrowsePlans([])
       const plans = await fetchPlansForDate(iso)
       setBrowseLoading(false)
-      if (plans.length === 1) {
-        onLoadPlan(plans[0])
-        setVisible(false)
-        setTimeout(onClose, 300)
-        return
-      }
+      // Always list plans as cards — never auto-load on date tap. Browse = explore,
+      // load requires an explicit card tap.
       setBrowsePlans(plans)
     } else {
       if (selectedIso === iso) resetMonthSelection()
@@ -272,46 +237,37 @@ export function PlanCalendarSheet({
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  const sheet = (
-    <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-black/60 transition-opacity duration-300"
-        style={{ zIndex: 9999, opacity: visible ? 1 : 0 }}
-        onClick={handleClose}
-      />
-
-      {/* Sheet */}
-      <div
-        className="fixed inset-x-0 bottom-0 bg-bg-card rounded-t-2xl flex flex-col transition-transform duration-300 ease-out"
-        style={{ zIndex: 10000, maxHeight: '92vh', transform: visible ? 'translateY(0)' : 'translateY(100%)' }}
-      >
-        {/* Drag handle */}
-        <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
-          <div className="w-10 h-1 rounded-full bg-white/20" />
-        </div>
-
+  // Swipe-dismiss is disabled so the nested calendar-grid scroll doesn't fight
+  // the sheet's drag handle. Re-enable in a follow-up after mobile QA.
+  return (
+    <BottomSheet visible={visible} onClose={handleClose} maxHeight="92vh" disableSwipeDismiss>
+      <div className="flex flex-col h-full">
         {/* Header */}
         <div className="flex items-center justify-between px-4 pb-3 flex-shrink-0">
           <p className="text-[11px] font-heading uppercase tracking-wider text-text-dim">
             {mode === 'save' ? 'Add to Calendar' : 'View Calendar'}
           </p>
-          {/* Week / Month toggle — browse mode only */}
+          {/* Week / Month toggle — browse mode only. Underline tab style
+              matches ComponentPickerModal so tab treatments are identical
+              across the whole app. */}
           {mode === 'browse' && (
-            <div className="flex items-center bg-bg-input border border-bg-border rounded-lg p-0.5">
+            <div className="flex items-center gap-4">
               {(['week', 'month'] as ViewMode[]).map(v => (
                 <button
                   key={v}
                   type="button"
                   onClick={() => setViewMode(v)}
                   className={[
-                    'px-3 py-1 rounded-md text-[11px] font-heading capitalize transition-colors',
+                    'relative py-2 text-[11px] font-heading uppercase tracking-wider transition-colors',
                     viewMode === v
-                      ? 'bg-accent-fire text-white'
+                      ? 'text-accent-fire'
                       : 'text-text-dim hover:text-text-muted',
                   ].join(' ')}
                 >
                   {v}
+                  {viewMode === v && (
+                    <span className="absolute inset-x-0 -bottom-px h-0.5 bg-accent-fire rounded-full" />
+                  )}
                 </button>
               ))}
             </div>
@@ -394,7 +350,7 @@ export function PlanCalendarSheet({
                     </p>
                   )}
                   {weekPlans.map(plan => (
-                    <PlanCard key={plan.id} plan={plan} onLoad={() => handleLoadPlan(plan)} />
+                    <SavedPlanRow key={plan.id} plan={plan} onOpen={() => handleLoadPlan(plan)} />
                   ))}
                 </div>
               )}
@@ -535,18 +491,20 @@ export function PlanCalendarSheet({
                 </div>
               )}
 
-              {/* Browse mode: multiple plans */}
-              {mode === 'browse' && !browseLoading && browsePlans.length > 1 && (
+              {/* Browse mode: plans for selected date */}
+              {mode === 'browse' && !browseLoading && browsePlans.length > 0 && (
                 <div className="mt-4 pb-6">
                   <p className="text-xs text-text-dim mb-3 text-center">
-                    {browsePlans.length} plans on {formatConfirmDate(selectedIso!)}
+                    {browsePlans.length === 1
+                      ? formatConfirmDate(selectedIso!)
+                      : `${browsePlans.length} plans on ${formatConfirmDate(selectedIso!)}`}
                   </p>
                   <div className="space-y-2">
                     {browsePlans.map(plan => (
-                      <PlanCard
+                      <SavedPlanRow
                         key={plan.id}
                         plan={plan}
-                        onLoad={() => { onLoadPlan(plan); setVisible(false); setTimeout(onClose, 300) }}
+                        onOpen={() => { onLoadPlan(plan); setVisible(false); setTimeout(onClose, 300) }}
                       />
                     ))}
                   </div>
@@ -561,7 +519,7 @@ export function PlanCalendarSheet({
               {mode === 'browse' && !browseLoading && browsePlans.length === 0 && !selectedIso && (
                 <div className="mt-4 pb-6">
                   <p className="text-center text-xs text-text-dim py-2">
-                    Tap a highlighted date to load a saved plan
+                    Tap a highlighted date to view saved plans
                   </p>
                   <button type="button" onClick={handleClose}
                     className="mt-1 w-full text-sm text-text-dim/50 hover:text-text-dim transition-colors py-2">
@@ -574,8 +532,6 @@ export function PlanCalendarSheet({
 
         </div>
       </div>
-    </>
+    </BottomSheet>
   )
-
-  return createPortal(sheet, document.body)
 }

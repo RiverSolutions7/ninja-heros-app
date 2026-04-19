@@ -1,47 +1,21 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/app/lib/supabase'
 import type { ComponentRow, ComponentType, CurriculumRow } from '@/app/lib/database.types'
-import { PhotoLightbox } from '@/app/components/ui/PhotoLightbox'
 import { useVoiceNote } from '@/app/hooks/useVoiceNote'
+import ComponentDetailSheet from '@/app/components/library/ComponentDetailSheet'
+import ComponentCard from '@/app/components/library/ComponentCard'
+import ChoiceSheet, { type ChoiceOption } from '@/app/components/ui/ChoiceSheet'
 
 type TabValue = ComponentType | 'custom'
 
 const TYPE_FILTERS: { label: string; value: TabValue }[] = [
   { label: 'Stations', value: 'station' },
   { label: 'Games', value: 'game' },
-  { label: 'Create Your Own', value: 'custom' },
+  { label: 'Custom', value: 'custom' },
 ]
-
-const TYPE_PLACEHOLDER: Record<ComponentType, string> = {
-  station: 'bg-accent-blue/20',
-  game: 'bg-accent-green/20',
-}
-
-const TYPE_ICON_COLOR: Record<ComponentType, string> = {
-  station: 'text-accent-blue',
-  game: 'text-accent-green',
-}
-
-const TYPE_ICONS: Record<ComponentType, React.ReactNode> = {
-  game: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
-    </svg>
-  ),
-  station: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
-    </svg>
-  ),
-}
-
-const TYPE_LABEL: Record<ComponentType, string> = {
-  station: 'Station',
-  game: 'Game',
-}
 
 // Module-level variable so the last selected tab persists across modal open/close
 let _lastTypeFilter: TabValue = 'station'
@@ -60,20 +34,20 @@ export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose,
   const [loading, setLoading] = useState(true)
   const [typeFilter, setTypeFilter] = useState<TabValue>(_lastTypeFilter)
   const [curriculumFilter, setCurriculumFilter] = useState('')
+  const [curriculumSheetOpen, setCurriculumSheetOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [curriculums, setCurriculums] = useState<CurriculumRow[]>([])
   const [mounted, setMounted] = useState(false)
-  const [lightbox, setLightbox] = useState<{ photos: string[]; index: number } | null>(null)
-  const [videoPreview, setVideoPreview] = useState<string | null>(null)
-  // Detail preview
+  // Detail preview — delegated to the unified ComponentDetailSheet
   const [preview, setPreview] = useState<ComponentRow | null>(null)
-  const [previewPhotoIndex, setPreviewPhotoIndex] = useState(0)
-  const previewTouchStartX = useRef(0)
   // Create Your Own state
   const [adHocTitle, setAdHocTitle] = useState('')
   const [adHocDescription, setAdHocDescription] = useState('')
   const [adHocDuration, setAdHocDuration] = useState<number | null>(null)
-  const { voiceState, transcript, startRecording, stopRecording, parseComponent, reset: resetVoice } = useVoiceNote()
+  // Transient confirmation: flips the CTA to a green "Added to plan" panel
+  // for ~1.8s after an add, then resets so the coach can dictate the next.
+  const [adHocAddState, setAdHocAddState] = useState<'idle' | 'added'>('idle')
+  const { voiceState, transcript, startRecording, stopRecording, parseComponent, reset: resetVoice, isSupported, errorMessage } = useVoiceNote()
 
   useEffect(() => {
     setMounted(true)
@@ -124,6 +98,10 @@ export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose,
     setAdHocDescription('')
     setAdHocDuration(null)
     resetVoice()
+    // Flip CTA to the green "Added to plan" confirmation — mirrors the library
+    // path's ComponentDetailSheet so all three add flows feel the same.
+    setAdHocAddState('added')
+    setTimeout(() => setAdHocAddState('idle'), 1800)
   }
 
   let filtered = components
@@ -141,16 +119,45 @@ export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose,
     onSelect(component)
   }
 
-  useEffect(() => { setPreviewPhotoIndex(0) }, [preview])
-
-  function handlePhotoTap(e: React.MouseEvent, photos: string[]) {
-    e.stopPropagation()
-    setLightbox({ photos, index: 0 })
+  // ── Compact mic icon (matches PlanItemSheet) ────────────────────────
+  const micIcon = () => {
+    if (voiceState === 'recording') {
+      return (
+        <svg className="w-5 h-5 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zM8 11a4 4 0 008 0h2a6 6 0 01-5 5.91V19h3v2H8v-2h3v-2.09A6 6 0 016 11h2z"/>
+        </svg>
+      )
+    }
+    if (voiceState === 'processing') {
+      return <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+    }
+    if (voiceState === 'done') {
+      return (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+        </svg>
+      )
+    }
+    if (voiceState === 'error') {
+      return (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M12 3a9 9 0 100 18A9 9 0 0012 3z" />
+        </svg>
+      )
+    }
+    return (
+      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+        <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zM8 11a4 4 0 008 0h2a6 6 0 01-5 5.91V19h3v2H8v-2h3v-2.09A6 6 0 016 11h2z"/>
+      </svg>
+    )
   }
 
-  function openPreview(e: React.MouseEvent, component: ComponentRow) {
-    e.stopPropagation()
-    setPreview(component)
+  const micColors: Record<string, string> = {
+    idle: 'bg-bg-input border border-bg-border text-text-muted hover:bg-white/5',
+    recording: 'bg-accent-fire text-white shadow-glow-fire',
+    processing: 'bg-bg-input border border-bg-border text-text-dim',
+    done: 'bg-accent-green/20 border border-accent-green/40 text-accent-green',
+    error: 'bg-red-900/30 border border-red-500/40 text-red-400',
   }
 
   if (!mounted) return null
@@ -172,7 +179,7 @@ export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose,
           </svg>
         </button>
         <h2 className="font-heading text-lg text-text-primary leading-none flex-1">
-          Pick a Component
+          Add to plan
         </h2>
         <button
           type="button"
@@ -182,19 +189,6 @@ export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose,
           Done
         </button>
       </div>
-
-      {/* Search — hidden on Create Your Own tab */}
-      {typeFilter !== 'custom' && (
-        <div className="px-4 pt-3 pb-2 flex-shrink-0">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search components..."
-            className="w-full bg-bg-input border border-bg-border rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-dim focus:outline-none focus:border-accent-fire/50 transition-colors"
-          />
-        </div>
-      )}
 
       {/* Type sub-tabs */}
       <div className="flex border-b border-bg-border flex-shrink-0">
@@ -215,72 +209,77 @@ export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose,
         ))}
       </div>
 
-      {/* Curriculum filter — hidden on Create Your Own tab */}
+      {/* Search + curriculum filter — hidden on Custom tab */}
       {typeFilter !== 'custom' && (
-        <div className="px-4 py-2 border-b border-bg-border flex-shrink-0">
-          <div className="relative">
-            <select
-              value={curriculumFilter}
-              onChange={(e) => setCurriculumFilter(e.target.value)}
-              className="w-full appearance-none cursor-pointer bg-bg-input border border-bg-border rounded-lg pl-3 pr-7 py-2 text-sm text-text-muted focus:outline-none focus:border-accent-fire/50 transition-colors"
-            >
-              <option value="">All Curriculums</option>
-              {curriculums.map((c) => (
-                <option key={c.age_group} value={c.age_group}>{c.label}</option>
-              ))}
-            </select>
-            <svg
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-dim pointer-events-none"
-              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-            >
+        <div className="px-4 pt-3 pb-3 flex-shrink-0 flex items-center gap-2 border-b border-bg-border/50">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search…"
+            className="flex-1 bg-bg-input border border-bg-border rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-dim focus:outline-none focus:border-accent-fire/50 transition-colors"
+          />
+          <button
+            type="button"
+            onClick={() => setCurriculumSheetOpen(true)}
+            className="inline-flex items-center gap-1.5 flex-shrink-0 bg-bg-input border border-bg-border rounded-xl pl-3 pr-2.5 py-2 text-sm text-text-muted hover:border-accent-fire/40 hover:text-text-primary transition-colors"
+            aria-haspopup="dialog"
+            aria-expanded={curriculumSheetOpen}
+          >
+            <span className="whitespace-nowrap">{curriculums.find((c) => c.age_group === curriculumFilter)?.label ?? 'All'}</span>
+            <svg className="w-3.5 h-3.5 text-text-dim flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
             </svg>
-          </div>
+          </button>
         </div>
       )}
 
-      {/* List — hidden on Create Your Own tab */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* Custom tab                                                  */}
+      {/* ═══════════════════════════════════════════════════════════ */}
       {typeFilter === 'custom' ? (
-        /* ── Create Your Own UI ─────────────────────────────────── */
-        <div className="flex-1 overflow-y-auto flex flex-col items-center justify-start px-6 pt-8 pb-6 gap-5">
-          {/* Mic button */}
-          <button
-            type="button"
-            onClick={handleMicToggle}
-            disabled={voiceState === 'processing'}
-            className={[
-              'w-20 h-20 rounded-full flex items-center justify-center transition-all flex-shrink-0',
-              voiceState === 'recording'
-                ? 'bg-accent-fire text-white shadow-lg shadow-accent-fire/30 scale-110 animate-pulse'
-                : voiceState === 'processing'
-                ? 'bg-bg-card border-2 border-bg-border text-text-dim cursor-not-allowed'
-                : 'bg-bg-card border-2 border-bg-border text-text-dim hover:border-accent-fire/50 hover:text-accent-fire',
-            ].join(' ')}
-            aria-label={voiceState === 'recording' ? 'Stop recording' : 'Start recording'}
-          >
-            {voiceState === 'processing' ? (
-              <div className="w-6 h-6 border-2 border-accent-fire border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
-              </svg>
-            )}
-          </button>
+        <div className="flex-1 overflow-y-auto px-4 pt-4 pb-6 flex flex-col gap-3">
+          {/* Compact mic row — matches PlanItemSheet pattern */}
+          {isSupported && (
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleMicToggle}
+                disabled={voiceState === 'processing'}
+                className={[
+                  'w-11 h-11 flex items-center justify-center rounded-full transition-all flex-shrink-0',
+                  micColors[voiceState],
+                  voiceState === 'processing' ? 'cursor-not-allowed' : '',
+                ].join(' ')}
+                aria-label={voiceState === 'recording' ? 'Stop recording' : 'Start recording'}
+              >
+                {micIcon()}
+              </button>
+              <div className="flex-1 min-w-0">
+                {voiceState === 'recording' && (
+                  <p className="text-xs text-accent-fire animate-pulse">Listening… tap mic to stop</p>
+                )}
+                {voiceState === 'processing' && (
+                  <p className="text-xs text-text-dim">Generating…</p>
+                )}
+                {voiceState === 'done' && (
+                  <p className="text-xs text-accent-green">Filled ✓</p>
+                )}
+                {voiceState === 'error' && errorMessage && (
+                  <p className="text-xs text-red-400">{errorMessage}</p>
+                )}
+                {voiceState === 'idle' && (
+                  <p className="text-xs text-text-dim">Tap mic and describe the activity — or fill fields below</p>
+                )}
+              </div>
+            </div>
+          )}
 
-          {/* Status label */}
-          {voiceState === 'recording' && (
-            <p className="text-xs text-accent-fire font-heading animate-pulse -mt-2">Listening…</p>
-          )}
-          {voiceState === 'processing' && (
-            <p className="text-xs text-text-dim font-heading -mt-2">Generating…</p>
-          )}
-          {voiceState === 'idle' && (
-            <p className="text-xs text-text-dim/50 -mt-2">Tap mic and describe the activity</p>
-          )}
-
-          {/* Live transcript preview */}
+          {/* Live transcript preview while recording */}
           {voiceState === 'recording' && transcript && (
-            <p className="text-xs text-text-dim italic text-center leading-relaxed -mt-2">{transcript}</p>
+            <p className="text-xs text-text-dim italic leading-relaxed px-1">
+              &ldquo;{transcript}&rdquo;
+            </p>
           )}
 
           {/* Title input */}
@@ -304,7 +303,7 @@ export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose,
 
           {/* Duration chip — only shown if voice extracted one */}
           {adHocDuration && (
-            <div className="w-full flex items-center gap-2">
+            <div className="flex items-center gap-2">
               <span className="text-xs font-heading text-text-dim">Duration</span>
               <span className="flex items-center gap-1.5 px-2.5 py-1 bg-accent-fire/10 border border-accent-fire/20 rounded-full text-xs font-heading text-accent-fire">
                 {adHocDuration} min
@@ -322,22 +321,44 @@ export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose,
             </div>
           )}
 
-          {/* Add to Plan button */}
-          <button
-            type="button"
-            onClick={handleAdHocAdd}
-            disabled={!adHocTitle.trim()}
-            className={[
-              'w-full py-3.5 rounded-xl font-heading text-sm transition-all',
-              adHocTitle.trim()
-                ? 'bg-accent-fire text-white hover:opacity-90 active:opacity-75'
-                : 'bg-bg-card text-text-dim border border-bg-border cursor-not-allowed',
-            ].join(' ')}
-          >
-            Add to Plan
-          </button>
+          {/* Add-to-plan CTA — flips to green confirmation after tap, mirrors
+              the library path (ComponentDetailSheet) so every add flow in the
+              app confirms the same way. */}
+          {adHocAddState === 'added' ? (
+            <div className="mt-1 w-full flex items-center gap-2.5 py-3.5 px-5 rounded-xl bg-accent-green/15 border border-accent-green/30 min-h-[52px]">
+              <svg
+                className="w-5 h-5 text-accent-green flex-shrink-0"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2.5}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              <span className="flex-1 font-heading text-[14px] text-accent-green tracking-wide">
+                Added to plan
+              </span>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handleAdHocAdd}
+              disabled={!adHocTitle.trim()}
+              className={[
+                'mt-1 w-full py-3.5 rounded-xl font-heading text-base transition-all min-h-[52px]',
+                adHocTitle.trim()
+                  ? 'bg-accent-fire text-white shadow-glow-fire active:scale-[0.98]'
+                  : 'bg-bg-card text-text-dim border border-bg-border cursor-not-allowed',
+              ].join(' ')}
+            >
+              Add to plan
+            </button>
+          )}
         </div>
       ) : (
+        /* ═══════════════════════════════════════════════════════════ */
+        /* Library list                                                */
+        /* ═══════════════════════════════════════════════════════════ */
         <div className="flex-1 overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center py-16">
@@ -346,367 +367,63 @@ export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose,
           ) : filtered.length === 0 ? (
             <div className="text-center py-16">
               <p className="font-heading text-text-muted">No components found</p>
+              {(search || curriculumFilter) && (
+                <p className="text-xs text-text-dim mt-1">Try clearing filters or search</p>
+              )}
             </div>
           ) : (
-            <ul>
+            <div className="px-3 py-3 flex flex-col gap-2">
               {filtered.map((component) => {
                 const inPlan = existingIds?.has(component.id) ?? false
-                const photos = (component.photos ?? []).filter(Boolean)
-                const hasPhoto = photos.length > 0
-                const extraCount = photos.length - 1
-
                 return (
-                  <li
+                  <div
                     key={component.id}
-                    className={[
-                      'flex items-center gap-3 px-4 border-b border-bg-border/50 transition-colors',
-                      inPlan ? 'bg-accent-green/5' : '',
-                    ].join(' ')}
+                    className={inPlan ? 'opacity-60 pointer-events-none' : ''}
                   >
-                    {/* Thumbnail */}
-                    {(() => {
-                      const hasVideoFile = !!component.video_url
-                      const hasVideoLink = !!component.video_link
-                      const isInteractive = hasPhoto || hasVideoFile || hasVideoLink
-                      function handleThumbClick(e: React.MouseEvent) {
-                        e.stopPropagation()
-                        if (hasPhoto) handlePhotoTap(e, photos)
-                        else if (hasVideoFile) setVideoPreview(component.video_url!)
-                        else if (hasVideoLink) window.open(component.video_link!, '_blank', 'noopener,noreferrer')
-                      }
-                      return (
-                        <div className="relative flex-shrink-0 py-3.5">
-                          <button
-                            type="button"
-                            onClick={isInteractive ? handleThumbClick : undefined}
-                            className={[
-                              'w-14 h-14 rounded-xl overflow-hidden block',
-                              isInteractive ? 'cursor-pointer active:opacity-75 transition-opacity' : 'cursor-default',
-                            ].join(' ')}
-                            tabIndex={isInteractive ? 0 : -1}
-                            aria-label={
-                              hasPhoto ? `View photos of ${component.title}` :
-                              hasVideoFile ? `Watch video of ${component.title}` :
-                              hasVideoLink ? `Open video link for ${component.title}` :
-                              undefined
-                            }
-                          >
-                            {hasPhoto ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={photos[0]} alt={component.title} className="w-full h-full object-cover" />
-                            ) : hasVideoFile || hasVideoLink ? (
-                              <div className="w-full h-full flex items-center justify-center bg-black/60">
-                                <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
-                                  <path d="M8 5.14v14l11-7-11-7z" />
-                                </svg>
-                              </div>
-                            ) : (
-                              <div className={['w-full h-full flex items-center justify-center', TYPE_PLACEHOLDER[component.type]].join(' ')}>
-                                <span className={TYPE_ICON_COLOR[component.type]}>
-                                  {TYPE_ICONS[component.type]}
-                                </span>
-                              </div>
-                            )}
-                          </button>
-                          {extraCount > 0 && (
-                            <span className="absolute bottom-4 right-0 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">
-                              +{extraCount}
-                            </span>
-                          )}
-                          {/* Play overlay badge when there's both a photo and a video */}
-                          {hasPhoto && (hasVideoFile || hasVideoLink) && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                if (hasVideoFile) setVideoPreview(component.video_url!)
-                                else window.open(component.video_link!, '_blank', 'noopener,noreferrer')
-                              }}
-                              className="absolute bottom-4 right-0 bg-black/70 hover:bg-black/90 text-white rounded p-0.5 transition-colors"
-                              aria-label={`Watch video of ${component.title}`}
-                            >
-                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M8 5.14v14l11-7-11-7z" />
-                              </svg>
-                            </button>
-                          )}
-                        </div>
-                      )
-                    })()}
-
-                    {/* Row content — tap to open detail preview */}
-                    <button
-                      type="button"
-                      onClick={(e) => openPreview(e, component)}
-                      className="flex-1 flex items-center gap-2 py-3.5 text-left min-w-0 hover:opacity-80 active:opacity-60 transition-colors"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className={['font-heading text-sm truncate', inPlan ? 'text-text-dim' : 'text-text-primary'].join(' ')}>
-                          {component.title}
-                        </p>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className={['text-[10px] font-heading uppercase tracking-wide flex-shrink-0', TYPE_ICON_COLOR[component.type]].join(' ')}>
-                            {TYPE_LABEL[component.type]}
-                          </span>
-                          {component.curriculum && (
-                            <>
-                              <span className="text-text-dim/30 text-[10px] flex-shrink-0">·</span>
-                              <span className="text-[10px] text-text-dim truncate">{component.curriculum}</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        {inPlan ? (
-                          <div className="flex items-center gap-1.5">
-                            <svg className="w-4 h-4 text-accent-green" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <ComponentCard
+                      component={component}
+                      onClick={inPlan ? undefined : () => setPreview(component)}
+                      trailing={
+                        inPlan ? (
+                          <div className="flex items-center gap-1 text-accent-green">
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                             </svg>
-                            <span className="text-xs text-accent-green font-heading">In plan</span>
+                            <span className="text-[10px] font-heading uppercase tracking-wide">In plan</span>
                           </div>
-                        ) : (
-                          <>
-                            {component.duration_minutes ? (
-                              <span className="text-xs text-text-dim">{component.duration_minutes}m</span>
-                            ) : null}
-                            <svg className="w-4 h-4 text-text-dim/40 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                            </svg>
-                          </>
-                        )}
-                      </div>
-                    </button>
-                  </li>
+                        ) : undefined
+                      }
+                    />
+                  </div>
                 )
               })}
-            </ul>
+            </div>
           )}
         </div>
       )}
 
-      {/* Photo lightbox */}
-      {lightbox && (
-        <PhotoLightbox
-          photos={lightbox.photos}
-          initialIndex={lightbox.index}
-          onClose={() => setLightbox(null)}
+      {/* ── Component detail sheet — unified editorial view ─────────── */}
+      {preview && (
+        <ComponentDetailSheet
+          component={preview}
+          onClose={() => setPreview(null)}
+          onAdd={() => { handleItemSelect(preview); setPreview(null) }}
+          isInPlan={existingIds?.has(preview.id) ?? false}
         />
       )}
 
-      {/* Inline video preview */}
-      {videoPreview && (
-        <div
-          style={{ position: 'fixed', inset: 0, zIndex: 10000 }}
-          className="bg-black flex flex-col"
-          onClick={() => setVideoPreview(null)}
-        >
-          <div className="flex items-center justify-between px-4 py-3 flex-shrink-0">
-            <button
-              type="button"
-              onClick={() => setVideoPreview(null)}
-              className="text-white/70 hover:text-white transition-colors p-1.5 -ml-1.5"
-            >
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          <div
-            className="flex-1 flex items-center justify-center"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <video
-              src={videoPreview}
-              controls
-              autoPlay
-              playsInline
-              className="max-w-full max-h-full"
-            />
-          </div>
-        </div>
-      )}
-
-      {/* ── Component detail preview overlay ────────────────── */}
-      {preview && (() => {
-        const inPlan = existingIds?.has(preview.id) ?? false
-        const photos = (preview.photos ?? []).filter(Boolean)
-        const meta = { color: TYPE_ICON_COLOR[preview.type], label: TYPE_LABEL[preview.type] }
-
-        return (
-          <div
-            style={{ position: 'absolute', inset: 0, zIndex: 100 }}
-            className="bg-bg-primary flex flex-col"
-          >
-            {/* Header */}
-            <div className="flex items-center gap-3 px-4 py-4 border-b border-bg-border flex-shrink-0">
-              <button
-                type="button"
-                onClick={() => setPreview(null)}
-                className="text-text-dim hover:text-text-primary transition-colors p-1.5 rounded-lg hover:bg-white/5 -ml-1.5"
-                aria-label="Back to list"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-              <div className="flex-1 min-w-0">
-                <h2 className={`font-heading text-base leading-tight truncate ${meta.color}`}>
-                  {preview.title}
-                </h2>
-                {preview.curriculum && (
-                  <p className="text-text-dim text-xs mt-0.5 truncate">{preview.curriculum}</p>
-                )}
-              </div>
-              <span className={`text-[10px] font-heading uppercase tracking-wider px-2 py-0.5 rounded-full flex-shrink-0 ${meta.color} bg-white/5 border border-current/20`}>
-                {meta.label}
-              </span>
-            </div>
-
-            {/* Scrollable body */}
-            <div className="flex-1 overflow-y-auto">
-              {/* Photos — swipeable */}
-              {photos.length > 0 && (
-                <div
-                  className="relative w-full bg-black flex-shrink-0"
-                  style={{ aspectRatio: '4/3' }}
-                  onTouchStart={(e) => { previewTouchStartX.current = e.touches[0].clientX }}
-                  onTouchEnd={(e) => {
-                    const diff = previewTouchStartX.current - e.changedTouches[0].clientX
-                    if (diff > 50) setPreviewPhotoIndex((i) => (i + 1) % photos.length)
-                    else if (diff < -50) setPreviewPhotoIndex((i) => (i - 1 + photos.length) % photos.length)
-                  }}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={photos[previewPhotoIndex]}
-                    alt={`${preview.title} photo ${previewPhotoIndex + 1}`}
-                    className="w-full h-full object-cover"
-                  />
-                  {photos.length > 1 && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => setPreviewPhotoIndex((i) => (i - 1 + photos.length) % photos.length)}
-                        className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-2 transition-colors"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                        </svg>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPreviewPhotoIndex((i) => (i + 1) % photos.length)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-2 transition-colors"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                        </svg>
-                      </button>
-                      <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5 pointer-events-none">
-                        {photos.map((_, i) => (
-                          <span key={i} className={`w-1.5 h-1.5 rounded-full transition-colors ${i === previewPhotoIndex ? 'bg-white' : 'bg-white/30'}`} />
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-
-              {/* Uploaded video */}
-              {preview.video_url && (
-                <div className="px-4 pt-4">
-                  <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-2">Video</p>
-                  <div className="rounded-xl overflow-hidden border border-bg-border bg-black">
-                    <video controls playsInline src={preview.video_url} className="w-full" style={{ maxHeight: 240 }} />
-                  </div>
-                </div>
-              )}
-
-              {/* External video link */}
-              {preview.video_link && (
-                <div className="px-4 pt-4">
-                  <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-2">Reference Video</p>
-                  <a
-                    href={preview.video_link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2.5 px-4 py-3 bg-bg-card border border-bg-border rounded-xl text-text-primary hover:border-accent-fire/40 transition-colors"
-                  >
-                    <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-accent-fire/15 flex items-center justify-center">
-                      <svg className="w-4 h-4 text-accent-fire" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M8 5.14v14l11-7-11-7z" />
-                      </svg>
-                    </span>
-                    <span className="text-sm font-semibold truncate flex-1">{preview.video_link}</span>
-                    <svg className="w-4 h-4 text-text-dim flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
-                  </a>
-                </div>
-              )}
-
-              {/* Detail fields */}
-              <div className="px-4 py-5 space-y-5">
-                {/* Coaching Cue / Description */}
-                {preview.description && (
-                  <div>
-                    <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-1">Coaching Cue</p>
-                    <p className="text-sm text-text-primary leading-relaxed whitespace-pre-wrap">{preview.description}</p>
-                  </div>
-                )}
-
-                {/* Skills */}
-                {(preview.skills?.length ?? 0) > 0 && (
-                  <div>
-                    <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-2">Skills</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {preview.skills!.map((skill) => (
-                        <span key={skill} className="badge badge-skill">{skill}</span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Equipment */}
-                {preview.equipment && (
-                  <div>
-                    <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-1">Equipment</p>
-                    <p className="text-sm font-bold text-accent-blue">{preview.equipment}</p>
-                  </div>
-                )}
-
-                {/* Duration */}
-                {preview.duration_minutes != null && (
-                  <div>
-                    <p className="text-xs font-heading text-text-dim uppercase tracking-wider mb-1">Duration</p>
-                    <p className="text-sm text-text-primary">{preview.duration_minutes} minutes</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Sticky Add to Plan footer */}
-            <div className="px-4 py-4 border-t border-bg-border flex-shrink-0">
-              {inPlan ? (
-                <div className="w-full py-3.5 rounded-xl bg-accent-green/10 border border-accent-green/20 flex items-center justify-center gap-2">
-                  <svg className="w-4 h-4 text-accent-green" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span className="text-sm font-heading text-accent-green">Already in plan</span>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => { handleItemSelect(preview); setPreview(null) }}
-                  className="w-full py-3.5 rounded-xl bg-accent-fire text-white font-heading text-sm hover:opacity-90 active:opacity-75 transition-all"
-                >
-                  Add to Plan
-                </button>
-              )}
-            </div>
-          </div>
-        )
-      })()}
+      {/* ── Curriculum choice sheet (replaces native <select>) ─────── */}
+      <ChoiceSheet
+        visible={curriculumSheetOpen}
+        title="Filter by curriculum"
+        options={[
+          { value: '', label: 'All curricula' },
+          ...curriculums.map<ChoiceOption>((c) => ({ value: c.age_group, label: c.label, sublabel: c.age_group })),
+        ]}
+        selectedValue={curriculumFilter}
+        onSelect={(v) => { setCurriculumFilter(v); setCurriculumSheetOpen(false) }}
+        onClose={() => setCurriculumSheetOpen(false)}
+      />
     </div>
   )
 

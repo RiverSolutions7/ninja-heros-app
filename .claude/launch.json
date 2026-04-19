@@ -4,8 +4,8 @@
     {
       "name": "Next.js Dev Server",
       "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
-      "runtimeArgs": ["C:\\Users\\river\\OneDrive\\Documents\\ninja-heros-app\\node_modules\\next\\dist\\bin\\next", "dev", "C:\\Users\\river\\OneDrive\\Documents\\ninja-heros-app"],
-      "port": 3000
+      "runtimeArgs": ["C:\\Users\\river\\OneDrive\\Documents\\ninja-heros-app\\node_modules\\next\\dist\\bin\\next", "dev", "C:\\Users\\river\\OneDrive\\Documents\\ninja-heros-app\\.claude\\worktrees\\beautiful-clarke", "-p", "3001"],
+      "port": 3001
     }
   ]
 }

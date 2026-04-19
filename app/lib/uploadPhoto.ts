@@ -1,8 +1,9 @@
 import { supabase } from './supabase'
+import { randomId } from './uuid'
 
 export async function uploadStationPhoto(file: File): Promise<string> {
   const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg'
-  const fileName = `${crypto.randomUUID()}.${ext}`
+  const fileName = `${randomId()}.${ext}`
   const filePath = `stations/${fileName}`
 
   const { error } = await supabase.storage
