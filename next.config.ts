@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
   // Without this, Next 16 blocks cross-origin dev resources and onClick/
   // onTouch handlers never wire up — the page renders via SSR but taps
   // do nothing. Safe to leave loose in dev; ignored in production.
-  allowedDevOrigins: ['192.168.4.32', '*.local', '192.168.*.*'],
+  allowedDevOrigins: ['192.168.4.32', '*.local', '192.168.*.*', '172.20.*.*'],
   images: {
     remotePatterns: [
       {

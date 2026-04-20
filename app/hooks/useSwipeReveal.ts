@@ -10,7 +10,9 @@ export const REVEAL_WIDTH_DEFAULT = 80   // px — width of the revealed delete 
 const FULL_SWIPE_PX        = 260  // px — past this on release → immediate delete
 const CLAIM_DISTANCE       = 18   // px horizontal movement before we claim
 const BIAS_RATIO           = 2.5  // horizontal must be 2.5× vertical to claim
-const SPRING_MS            = 260  // spring-back / spring-open animation ms
+/** Exported so consumers can compose matching spring transitions (e.g. combining
+ *  translateX with a simultaneous scale during long-press feedback). */
+export const SPRING_MS     = 260  // spring-back / spring-open animation ms
 
 export interface UseSwipeRevealOptions {
   /** Width in px of the revealed delete zone (default 80) */
@@ -168,7 +170,13 @@ export function useSwipeReveal({
     revealed,
     /** Programmatically collapse the reveal (e.g. after a parent list action) */
     closeReveal,
-    /** Inline style to merge onto the sliding element */
+    /** Raw translateX offset in px — use when composing with other transforms
+     *  (e.g. combining with a long-press scale). Negative = slid left. */
+    offset,
+    /** True while a spring snap animation is in progress */
+    animating,
+    /** Convenience style for simple cases (no transform composition needed).
+     *  When composing transforms, use `offset` and `animating` directly. */
     rowStyle: {
       transform:   `translateX(${offset}px)`,
       transition:  animating ? `transform ${SPRING_MS}ms cubic-bezier(0.25, 1, 0.5, 1)` : 'none',
