@@ -76,6 +76,15 @@ export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose,
     if (tab !== 'custom') resetVoice()
   }
 
+  function handleStartOver() {
+    existingRef.current = null
+    resetVoice()
+    setAdHocTitle('')
+    setAdHocDescription('')
+    setAdHocDuration(null)
+    startRecording()
+  }
+
   async function handleMicToggle() {
     // Fresh recording — clear fields and start from scratch
     if (voiceState === 'idle' || voiceState === 'error') {
@@ -280,7 +289,16 @@ export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose,
                   <p className="text-xs text-text-dim">Generating…</p>
                 )}
                 {voiceState === 'done' && (
-                  <p className="text-xs text-accent-green">Filled ✓</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-accent-green">Filled ✓ — tap to refine</p>
+                    <button
+                      type="button"
+                      onClick={handleStartOver}
+                      className="text-xs text-text-dim hover:text-text-primary active:opacity-60 transition-colors"
+                    >
+                      ↺ Start over
+                    </button>
+                  </div>
                 )}
                 {voiceState === 'error' && errorMessage && (
                   <p className="text-xs text-red-400">{errorMessage}</p>

@@ -210,6 +210,17 @@ export default function LogComponentPage() {
 
   // ── Voice ────────────────────────────────────────────────────────────────────
 
+  function handleStartOver() {
+    existingRef.current = null
+    setTitle('')
+    setDescription('')
+    setDurationMinutes(null)
+    setSkills([])
+    setJustFilled(new Set())
+    resetVoice()
+    startRecording()
+  }
+
   async function handleMicToggle() {
     // Fresh recording — no existing content
     if (voiceState === 'idle' || voiceState === 'error') {
@@ -586,6 +597,17 @@ export default function LogComponentPage() {
         errorMessage={errorMessage}
         onToggle={handleMicToggle}
       />
+      {voiceState === 'done' && (
+        <div className="flex justify-center mt-2">
+          <button
+            type="button"
+            onClick={handleStartOver}
+            className="text-xs text-text-dim hover:text-text-primary active:opacity-60 transition-colors px-3 py-1"
+          >
+            ↺ Start over
+          </button>
+        </div>
+      )}
 
       {/* ── ZONE 2: Media strip ────────────────────────────── */}
       <div className="mt-6">

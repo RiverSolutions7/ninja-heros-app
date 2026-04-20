@@ -63,6 +63,13 @@ export function PlanItemSheet({ item, onSaveNote, onDurationChange, onClose }: P
     setTimeout(onClose, 300)
   }
 
+  function handleNoteStartOver() {
+    existingNoteRef.current = null
+    setNoteText('')
+    reset()
+    startRecording()
+  }
+
   async function handleMicToggle() {
     // Fresh recording — generate note from scratch
     if (voiceState === 'idle' || voiceState === 'error') {
@@ -324,7 +331,16 @@ export function PlanItemSheet({ item, onSaveNote, onDurationChange, onClose }: P
                     <p className="text-xs text-text-dim">Processing…</p>
                   )}
                   {voiceState === 'done' && (
-                    <p className="text-xs text-accent-green">Note formatted ✓ — tap to refine</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs text-accent-green">Formatted ✓ — tap to refine</p>
+                      <button
+                        type="button"
+                        onClick={handleNoteStartOver}
+                        className="text-xs text-text-dim hover:text-text-primary active:opacity-60 transition-colors"
+                      >
+                        ↺ Start over
+                      </button>
+                    </div>
                   )}
                   {voiceState === 'error' && errorMessage && (
                     <p className="text-xs text-red-400">{errorMessage}</p>
