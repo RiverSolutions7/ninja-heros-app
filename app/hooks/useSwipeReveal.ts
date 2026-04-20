@@ -3,16 +3,28 @@
 import { useCallback, useRef, useState } from 'react'
 
 // ── Thresholds ────────────────────────────────────────────────────────────────
-// All values satisfy memory/MEMORY.md gesture spec:
-//   CLAIM_DISTANCE ≥ 18 px  |  BIAS_RATIO ≥ 2.5×  |  min events before claim ≥ 2
+// All values satisfy memory/MEMORY.md gesture spec minimums AND the stricter
+// values chosen to prevent false triggers during iOS list scrolling:
+//
+//   CLAIM_DISTANCE ≥ 18 px   → we use 25 px
+//   BIAS_RATIO     ≥ 2.5×    → we use 3.5× (25° off-vertical = not captured)
+//   min moves      ≥ 2       → we use 3
+//   MIN_CLAIM_VELOCITY        → NEW: requires deliberate horizontal speed
+//
+// Why velocity?  Distance + ratio alone cannot distinguish an intentional
+// swipe from scroll drift.  An intentional swipe reaches 25 px in ≤ 200ms
+// (≥ 0.125 px/ms); natural scroll drift reaches 25 px in 500 ms+ (≤ 0.05).
+// A 0.08 px/ms threshold sits cleanly between them.
 /** Exported so callers can size the delete zone div to match the gesture threshold. */
-export const REVEAL_WIDTH_DEFAULT = 80   // px — width of the revealed delete button
-const FULL_SWIPE_PX        = 260  // px — past this on release → immediate delete
-const CLAIM_DISTANCE       = 18   // px horizontal movement before we claim
-const BIAS_RATIO           = 2.5  // horizontal must be 2.5× vertical to claim
+export const REVEAL_WIDTH_DEFAULT  = 80    // px — width of the revealed delete button
+const FULL_SWIPE_PX                = 260   // px — past this on release → immediate delete
+const CLAIM_DISTANCE               = 25    // px horizontal before we claim (was 18)
+const BIAS_RATIO                   = 3.5   // vertical must be < 3.5× horizontal (was 2.5)
+const MIN_SWIPE_MOVES              = 3     // min pointermove events before claiming (was 2)
+const MIN_CLAIM_VELOCITY           = 0.08  // px/ms — rejects slow scroll drift
 /** Exported so consumers can compose matching spring transitions (e.g. combining
  *  translateX with a simultaneous scale during long-press feedback). */
-export const SPRING_MS     = 260  // spring-back / spring-open animation ms
+export const SPRING_MS             = 260   // spring-back / spring-open animation ms
 
 export interface UseSwipeRevealOptions {
   /** Width in px of the revealed delete zone (default 80) */
@@ -47,9 +59,10 @@ export function useSwipeReveal({
 
   const startX      = useRef(0)
   const startY      = useRef(0)
+  const startTime   = useRef(0)   // performance.now() at pointerdown, for velocity
   const startOffset = useRef(0)
   const claimed     = useRef(false)
-  const moveCount   = useRef(0)   // must see ≥ 2 moves before claiming
+  const moveCount   = useRef(0)   // must see ≥ MIN_SWIPE_MOVES events before claiming
 
   // ── Snap helpers ─────────────────────────────────────────────────────────────
   const snapTo = useCallback((target: number, done?: () => void) => {
@@ -70,6 +83,7 @@ export function useSwipeReveal({
 
       startX.current      = e.clientX
       startY.current      = e.clientY
+      startTime.current   = performance.now()
       startOffset.current = offset
       claimed.current     = false
       moveCount.current   = 0
@@ -97,17 +111,23 @@ export function useSwipeReveal({
       const ady = Math.abs(dy)
 
       if (!claimed.current) {
-        if (moveCount.current < 2)         return  // ≥ 2 events before claiming
-        if (ady > adx * BIAS_RATIO)        return  // vertical scroll wins
-        if (!revealed && dx > 0)           return  // only claim leftward swipes
-        if (adx < CLAIM_DISTANCE)          return  // not far enough yet
+        if (moveCount.current < MIN_SWIPE_MOVES) return  // wait for direction to stabilise
+        if (ady > adx * BIAS_RATIO)              return  // vertical scroll wins
+        if (!revealed && dx > 0)                 return  // only claim leftward swipes
+        if (adx < CLAIM_DISTANCE)                return  // not far enough yet
+
+        // Velocity gate: reject slow scroll drift.  An intentional swipe covers
+        // CLAIM_DISTANCE in well under 200ms; natural scroll drift takes 400ms+.
+        const elapsed   = Math.max(performance.now() - startTime.current, 1)
+        const hVelocity = adx / elapsed  // px/ms
+        if (hVelocity < MIN_CLAIM_VELOCITY) return
 
         claimed.current = true
 
         if (process.env.NODE_ENV === 'development') {
           console.log(
-            '[gesture:swipereveal] event=claim dx=%d dy=%d moves=%d',
-            Math.round(dx), Math.round(dy), moveCount.current,
+            '[gesture:swipereveal] event=claim dx=%d dy=%d moves=%d velocity=%s px/ms',
+            Math.round(dx), Math.round(dy), moveCount.current, hVelocity.toFixed(3),
           )
         }
       }
