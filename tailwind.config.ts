@@ -22,8 +22,8 @@ const config: Config = {
           fire: '#e84040',
           orange: '#f97316',
           gold: '#f59e0b',
-          green: '#22c55e',
-          blue: '#3b82f6',
+          green: '#3cbe7a',
+          blue: '#6aa3d4',
           purple: '#a855f7',
         },
         text: {
@@ -40,7 +40,7 @@ const config: Config = {
       boxShadow: {
         'glow-fire': '0 0 24px rgba(232, 64, 64, 0.25), 0 4px 12px rgba(232, 64, 64, 0.15)',
         'glow-gold': '0 0 24px rgba(245, 158, 11, 0.25), 0 4px 12px rgba(245, 158, 11, 0.15)',
-        'glow-green': '0 0 24px rgba(34, 197, 94, 0.25), 0 4px 12px rgba(34, 197, 94, 0.15)',
+        'glow-green': '0 0 24px rgba(60, 190, 122, 0.25), 0 4px 12px rgba(60, 190, 122, 0.15)',
         'card': '0 1px 3px rgba(0, 0, 0, 0.5), 0 4px 20px rgba(0, 0, 0, 0.25)',
       },
       keyframes: {
@@ -55,9 +55,9 @@ const config: Config = {
         // Post-voice field highlight — green ring pulses out then fades.
         // Signals to the coach "this was just filled in" without moving layout.
         'fill-pulse': {
-          '0%':   { boxShadow: '0 0 0 0 rgba(34, 197, 94, 0.55)' },
-          '40%':  { boxShadow: '0 0 0 6px rgba(34, 197, 94, 0.28)' },
-          '100%': { boxShadow: '0 0 0 0 rgba(34, 197, 94, 0)' },
+          '0%':   { boxShadow: '0 0 0 0 rgba(60, 190, 122, 0.55)' },
+          '40%':  { boxShadow: '0 0 0 6px rgba(60, 190, 122, 0.28)' },
+          '100%': { boxShadow: '0 0 0 0 rgba(60, 190, 122, 0)' },
         },
       },
       animation: {
