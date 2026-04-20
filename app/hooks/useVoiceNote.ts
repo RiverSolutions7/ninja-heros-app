@@ -121,7 +121,7 @@ export function useVoiceNote() {
     setVoiceState('processing')
   }
 
-  async function parseNote(): Promise<string> {
+  async function parseNote(existing?: string): Promise<string> {
     const text = transcriptRef.current.trim()
     if (!text) {
       devLog('parse-note-skip', { reason: 'empty' })
@@ -129,13 +129,13 @@ export function useVoiceNote() {
       setErrorMessage('No speech detected. Try again.')
       return ''
     }
-    devLog('parse-note', { chars: text.length })
+    devLog('parse-note', { chars: text.length, refine: !!(existing?.trim()) })
 
     try {
       const res = await fetch('/api/parse-note', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcript: text }),
+        body: JSON.stringify({ transcript: text, ...(existing?.trim() ? { existing } : {}) }),
       })
 
       if (!res.ok) throw new Error(`api ${res.status}`)
@@ -154,7 +154,8 @@ export function useVoiceNote() {
 
   async function parseComponent(
     componentType: string,
-    availableSkills?: string[]
+    availableSkills?: string[],
+    existing?: { title?: string; description?: string; skills?: string[]; durationMinutes?: number | null }
   ): Promise<{ title: string; description: string; skills: string[]; durationMinutes: number | null }> {
     const text = transcriptRef.current.trim()
     if (!text) {
@@ -163,13 +164,13 @@ export function useVoiceNote() {
       setErrorMessage('No speech detected. Try again.')
       return { title: '', description: '', skills: [], durationMinutes: null }
     }
-    devLog('parse-component', { chars: text.length, type: componentType })
+    devLog('parse-component', { chars: text.length, type: componentType, refine: !!existing })
 
     try {
       const res = await fetch('/api/parse-component', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcript: text, componentType, availableSkills }),
+        body: JSON.stringify({ transcript: text, componentType, availableSkills, ...(existing ? { existing } : {}) }),
       })
 
       if (!res.ok) throw new Error(`api ${res.status}`)

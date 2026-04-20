@@ -28,6 +28,9 @@ export function PlanItemSheet({ item, onSaveNote, onDurationChange, onClose }: P
   // Local copy of duration so stepper updates feel instant
   const [localDuration, setLocalDuration] = useState<number | null>(item.durationMinutes ?? null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  // Snapshot of noteText taken when coach taps mic after a prior voice fill.
+  // Non-null = refine mode; null = fresh recording (generate from scratch).
+  const existingNoteRef = useRef<string | null>(null)
 
   // Duration stepper hold-to-accelerate state. Tap = 1-min step via onClick.
   // Hold ≥ 450ms = rapid-fire, accelerating from slow to very fast as the
@@ -61,16 +64,31 @@ export function PlanItemSheet({ item, onSaveNote, onDurationChange, onClose }: P
   }
 
   async function handleMicToggle() {
-    if (voiceState === 'idle' || voiceState === 'error' || voiceState === 'done') {
+    // Fresh recording — generate note from scratch
+    if (voiceState === 'idle' || voiceState === 'error') {
+      existingNoteRef.current = null
       reset()
       startRecording()
-    } else if (voiceState === 'recording') {
+      return
+    }
+
+    // Refine recording — snapshot current note so API can merge
+    if (voiceState === 'done') {
+      existingNoteRef.current = noteText || null
+      reset()
+      startRecording()
+      return
+    }
+
+    if (voiceState === 'recording') {
       stopRecording()
-      // Show raw transcript immediately so coach sees what was heard
-      if (transcript) setNoteText(transcript)
-      // Then replace with Claude-formatted bullets
-      const structured = await parseNote()
+      const existingNote = existingNoteRef.current
+      // Show raw transcript as interim placeholder only on fresh recordings
+      // (refine mode keeps the existing note visible while Claude processes)
+      if (transcript && !existingNote) setNoteText(transcript)
+      const structured = await parseNote(existingNote || undefined)
       if (structured) setNoteText(structured)
+      existingNoteRef.current = null
     }
   }
 
@@ -306,7 +324,7 @@ export function PlanItemSheet({ item, onSaveNote, onDurationChange, onClose }: P
                     <p className="text-xs text-text-dim">Processing…</p>
                   )}
                   {voiceState === 'done' && (
-                    <p className="text-xs text-accent-green">Note formatted ✓</p>
+                    <p className="text-xs text-accent-green">Note formatted ✓ — tap to refine</p>
                   )}
                   {voiceState === 'error' && errorMessage && (
                     <p className="text-xs text-red-400">{errorMessage}</p>

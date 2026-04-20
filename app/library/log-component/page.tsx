@@ -121,6 +121,10 @@ export default function LogComponentPage() {
   const [libraryRank, setLibraryRank] = useState<number | null>(null)
 
   const newSkillInputRef = useRef<HTMLInputElement>(null)
+  // Snapshot of form state taken when the coach taps the mic after a prior fill.
+  // Non-null = refine mode (send existing content to API for merging).
+  // Null     = fresh mode (generate from scratch).
+  const existingRef = useRef<{ title: string; description: string; skills: string[]; durationMinutes: number | null } | null>(null)
 
   const {
     voiceState,
@@ -207,18 +211,35 @@ export default function LogComponentPage() {
   // ── Voice ────────────────────────────────────────────────────────────────────
 
   async function handleMicToggle() {
-    if (voiceState === 'idle' || voiceState === 'error' || voiceState === 'done') {
+    // Fresh recording — no existing content
+    if (voiceState === 'idle' || voiceState === 'error') {
+      existingRef.current = null
       resetVoice()
       startRecording()
       return
     }
+
+    // Refine recording — snapshot current form state before resetting so the
+    // API can merge the new transcript with what's already been filled.
+    if (voiceState === 'done') {
+      existingRef.current = { title, description, skills, durationMinutes }
+      resetVoice()
+      startRecording()
+      return
+    }
+
     if (voiceState === 'recording') {
       stopRecording()
-      const result = await parseComponent(componentType!, componentType === 'station' ? availableSkills : [])
+      const existing = existingRef.current  // null on first run, populated on refine
+      const result = await parseComponent(
+        componentType!,
+        componentType === 'station' ? availableSkills : [],
+        existing ?? undefined,
+      )
 
       // Pushback on silent overwrite: if the coach has already typed a name,
       // confirm before voice replaces it. Other fields overwrite freely since
-      // they're bulkier and less "theirs."
+      // they're bulkier and less “theirs.”
       let shouldReplaceTitle = true
       if (result.title && title.trim() && result.title.trim() !== title.trim()) {
         shouldReplaceTitle = window.confirm(
@@ -233,7 +254,14 @@ export default function LogComponentPage() {
       if (result.description) { setDescription(result.description); filled.add('description') }
       if (result.durationMinutes) { setDurationMinutes(result.durationMinutes); filled.add('duration') }
       if (componentType === 'station' && result.skills.length > 0) {
-        setSkills(result.skills); filled.add('skills')
+        if (existing) {
+          // Refine mode: merge new skills with existing ones
+          setSkills((prev) => Array.from(new Set([...prev, ...result.skills])))
+        } else {
+          // Fresh mode: overwrite
+          setSkills(result.skills)
+        }
+        filled.add('skills')
       }
 
       // Fire the post-voice highlight. Using key-based re-mount via justFilled
@@ -243,6 +271,8 @@ export default function LogComponentPage() {
         setJustFilled(filled)
         setTimeout(() => setJustFilled(new Set()), 1300)
       }
+
+      existingRef.current = null  // clear after use
     }
   }
 
@@ -703,7 +733,7 @@ function VoiceHero({
   const subtitle =
     voiceState === 'recording'   ? 'Tap the mic again when you\'re done.' :
     voiceState === 'processing'  ? 'Organizing what you said into fields…' :
-    voiceState === 'done'        ? 'Edit anything below before you save.' :
+    voiceState === 'done'        ? 'Tap to refine or add more. Edit fields directly too.' :
     voiceState === 'error'       ? (errorMessage ?? 'Tap to try again.') :
     !voiceSupported              ? 'Fill in the details below.' :
                                    'Name, cues, duration, and skills fill in automatically.'

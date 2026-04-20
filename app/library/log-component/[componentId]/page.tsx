@@ -82,6 +82,9 @@ export default function EditComponentPage() {
   const [justFilled, setJustFilled] = useState<Set<string>>(new Set())
 
   const newSkillInputRef = useRef<HTMLInputElement>(null)
+  // Snapshot of form state at the moment the coach taps to re-record.
+  // Non-null = refine mode; null = fresh recording.
+  const existingRef = useRef<{ title: string; description: string; skills: string[]; durationMinutes: number | null } | null>(null)
 
   const {
     voiceState,
@@ -99,14 +102,30 @@ export default function EditComponentPage() {
   const hasLink = media.some((m) => m.kind === 'link')
 
   async function handleMicToggle() {
-    if (voiceState === 'idle' || voiceState === 'error' || voiceState === 'done') {
+    // Fresh recording
+    if (voiceState === 'idle' || voiceState === 'error') {
+      existingRef.current = null
       resetVoice()
       startRecording()
       return
     }
+
+    // Refine recording — snapshot current state so the API can merge
+    if (voiceState === 'done') {
+      existingRef.current = { title, description, skills, durationMinutes }
+      resetVoice()
+      startRecording()
+      return
+    }
+
     if (voiceState === 'recording' && component) {
       stopRecording()
-      const result = await parseComponent(component.type, component.type === 'station' ? availableSkills : [])
+      const existing = existingRef.current
+      const result = await parseComponent(
+        component.type,
+        component.type === 'station' ? availableSkills : [],
+        existing ?? undefined,
+      )
 
       let shouldReplaceTitle = true
       if (result.title && title.trim() && result.title.trim() !== title.trim()) {
@@ -130,6 +149,8 @@ export default function EditComponentPage() {
         setJustFilled(filled)
         setTimeout(() => setJustFilled(new Set()), 1300)
       }
+
+      existingRef.current = null  // clear after use
     }
   }
 
@@ -491,7 +512,7 @@ function VoiceHero({
   const subtitle =
     voiceState === 'recording'   ? 'Tap the mic again when you\'re done.' :
     voiceState === 'processing'  ? 'Organizing what you said into fields…' :
-    voiceState === 'done'        ? 'Edit anything below before you save.' :
+    voiceState === 'done'        ? 'Tap to refine or add more. Edit fields directly too.' :
     voiceState === 'error'       ? (errorMessage ?? 'Tap to try again.') :
     !voiceSupported              ? 'Edit the details below.' :
                                    idleSub

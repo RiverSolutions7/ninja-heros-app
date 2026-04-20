@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/app/lib/supabase'
 import type { ComponentRow, ComponentType, CurriculumRow } from '@/app/lib/database.types'
@@ -48,6 +48,8 @@ export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose,
   // for ~1.8s after an add, then resets so the coach can dictate the next.
   const [adHocAddState, setAdHocAddState] = useState<'idle' | 'added'>('idle')
   const { voiceState, transcript, startRecording, stopRecording, parseComponent, reset: resetVoice, isSupported, errorMessage } = useVoiceNote()
+  // Snapshot of ad-hoc fields taken when coach taps mic after a prior fill.
+  const existingRef = useRef<{ title: string; description: string; durationMinutes: number | null } | null>(null)
 
   useEffect(() => {
     setMounted(true)
@@ -75,18 +77,33 @@ export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose,
   }
 
   async function handleMicToggle() {
-    if (voiceState === 'idle' || voiceState === 'error' || voiceState === 'done') {
+    // Fresh recording — clear fields and start from scratch
+    if (voiceState === 'idle' || voiceState === 'error') {
+      existingRef.current = null
       resetVoice()
       setAdHocTitle('')
       setAdHocDescription('')
       setAdHocDuration(null)
       startRecording()
-    } else if (voiceState === 'recording') {
+      return
+    }
+
+    // Refine recording — snapshot current fields, keep them visible while recording
+    if (voiceState === 'done') {
+      existingRef.current = { title: adHocTitle, description: adHocDescription, durationMinutes: adHocDuration }
+      resetVoice()
+      startRecording()
+      return
+    }
+
+    if (voiceState === 'recording') {
       stopRecording()
-      const result = await parseComponent('station', [])
+      const existing = existingRef.current
+      const result = await parseComponent('station', [], existing ?? undefined)
       if (result.title) setAdHocTitle(result.title)
       if (result.description) setAdHocDescription(result.description)
       setAdHocDuration(result.durationMinutes ?? null)
+      existingRef.current = null
     }
   }
 
