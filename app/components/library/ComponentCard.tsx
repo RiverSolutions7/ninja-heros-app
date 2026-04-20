@@ -158,7 +158,7 @@ export default function ComponentCard({ component, showMenu = false, onClick, tr
       {trailing ? (
         <div className="flex-shrink-0">{trailing}</div>
       ) : showMenu ? (
-        <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+        <div data-component-menu className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
           <ComponentCardMenu component={component} />
         </div>
       ) : null}

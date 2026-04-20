@@ -123,8 +123,10 @@ export function useSwipeReveal({
       if (e.pointerType !== 'touch') return
 
       if (!claimed.current) {
-        // Plain tap while revealed → collapse
-        if (revealed) closeReveal()
+        // Plain tap while revealed → collapse, unless the tap target is
+        // explicitly skipped (e.g. a kebab menu button that should open
+        // independently while the row stays revealed).
+        if (revealed && !shouldSkip?.((e.target as Element))) closeReveal()
         return
       }
 
@@ -145,7 +147,7 @@ export function useSwipeReveal({
         closeReveal()
       }
     },
-    [revealed, offset, revealWidth, snapTo, onDelete, openReveal, closeReveal],
+    [revealed, offset, revealWidth, shouldSkip, snapTo, onDelete, openReveal, closeReveal],
   )
 
   const onPointerCancel = useCallback(() => {
