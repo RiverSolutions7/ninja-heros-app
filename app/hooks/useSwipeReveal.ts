@@ -152,7 +152,7 @@ export function useSwipeReveal({
     [revealed, offset, revealWidth, shouldSkip, snapTo, onDelete, openReveal, closeReveal],
   )
 
-  const onPointerCancel = useCallback(() => {
+  const onPointerCancel = useCallback((_e?: React.PointerEvent) => {
     if (!claimed.current && !revealed) return
     claimed.current = false
     closeReveal()
