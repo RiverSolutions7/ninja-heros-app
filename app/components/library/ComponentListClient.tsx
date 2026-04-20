@@ -7,6 +7,8 @@ import { supabase } from '@/app/lib/supabase'
 import ComponentCard from './ComponentCard'
 import ComponentDetailSheet from './ComponentDetailSheet'
 import ConfirmSheet from '@/app/components/ui/ConfirmSheet'
+import EmptyState from '@/app/components/ui/EmptyState'
+import { useToast } from '@/app/components/ui/Toast'
 import { useSwipeReveal, REVEAL_WIDTH_DEFAULT } from '@/app/hooks/useSwipeReveal'
 import { LONG_PRESS_STYLE } from '@/app/hooks/useLongPress'
 
@@ -92,9 +94,9 @@ function SwipeableCard({
 
 export default function ComponentListClient({ components }: ComponentListClientProps) {
   const router = useRouter()
+  const toast  = useToast()
   const [selected,     setSelected]     = useState<ComponentRow | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ComponentRow | null>(null)
-  const [isDeleting,   setIsDeleting]   = useState(false)
   const [search,       setSearch]       = useState('')
   const [activeType,   setActiveType]   = useState<ComponentType>('station')
 
@@ -104,7 +106,6 @@ export default function ComponentListClient({ components }: ComponentListClientP
 
   async function handleDeleteConfirmed() {
     if (!deleteTarget) return
-    setIsDeleting(true)
     try {
       // Remove photos from storage
       const photoPaths = (deleteTarget.photos ?? [])
@@ -126,8 +127,8 @@ export default function ComponentListClient({ components }: ComponentListClientP
 
       setDeleteTarget(null)
       router.refresh()
-    } finally {
-      setIsDeleting(false)
+    } catch {
+      toast.error('Could not delete — check your connection')
     }
   }
 
@@ -140,7 +141,7 @@ export default function ComponentListClient({ components }: ComponentListClientP
             key={tab.type}
             type="button"
             onClick={() => { setActiveType(tab.type); setSearch('') }}
-            className={`flex-1 py-2.5 text-sm font-heading transition-colors ${
+            className={`flex-1 py-3 text-sm font-heading transition-colors min-h-[44px] active:bg-white/5 ${
               activeType === tab.type
                 ? 'text-text-primary border-b-2 border-accent-fire -mb-px'
                 : 'text-text-dim hover:text-text-muted'
@@ -158,17 +159,17 @@ export default function ComponentListClient({ components }: ComponentListClientP
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={`Search ${SUB_TABS.find((t) => t.type === activeType)?.label.toLowerCase()}...`}
+          aria-label={`Search ${activeType}s`}
           className="w-full bg-bg-input border border-bg-border rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-dim focus:outline-none focus:border-accent-fire/50 transition-colors"
         />
       </div>
 
       {/* List */}
       {filtered.length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-text-dim text-sm">
-            {search ? `No results for "${search}"` : EMPTY_MESSAGES[activeType]}
-          </p>
-        </div>
+        <EmptyState
+          compact
+          title={search ? `No results for "${search}"` : EMPTY_MESSAGES[activeType]}
+        />
       ) : (
         <div className="flex flex-col gap-2">
           {filtered.map((c) => (
