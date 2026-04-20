@@ -26,7 +26,8 @@ import { PhotoLightbox } from '@/app/components/ui/PhotoLightbox'
 import BottomSheet from '@/app/components/ui/BottomSheet'
 import ConfirmSheet from '@/app/components/ui/ConfirmSheet'
 import { useToast } from '@/app/components/ui/Toast'
-import useLongPress, { LONG_PRESS_STYLE } from '@/app/hooks/useLongPress'
+import { LONG_PRESS_STYLE } from '@/app/hooks/useLongPress'
+import { useSwipeReveal } from '@/app/hooks/useSwipeReveal'
 import { PlanItemSheet } from './PlanItemSheet'
 import { PlanCalendarSheet } from './PlanCalendarSheet'
 import SavedPlanRow from './SavedPlanRow'
@@ -179,18 +180,12 @@ function SortablePlanItem({
     opacity: isDragging ? 0.5 : 1,
   }
 
-  // Long-press → confirmation sheet. `shouldSkip` lets dnd-kit's drag handle
-  // keep its own gesture without our long-press timer interfering.
-  const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false)
-  const longPress = useLongPress({
-    onLongPress: () => setRemoveConfirmOpen(true),
+  // Swipe-left → reveal red delete button (iOS table-view pattern).
+  // shouldSkip lets dnd-kit's drag handle keep its own gesture.
+  const swipe = useSwipeReveal({
+    onDelete: () => onRemove(item.localId),
     shouldSkip: (target) => !!target.closest('[data-drag-handle]'),
   })
-
-  function commitRemove() {
-    setRemoveConfirmOpen(false)
-    onRemove(item.localId)
-  }
 
   return (
     <div
@@ -198,10 +193,28 @@ function SortablePlanItem({
       style={style}
       className="relative rounded-xl overflow-hidden group"
     >
-      {/* ─── Foreground row ─────────────────────────────────────────── */}
+      {/* ─── Delete zone (revealed behind the sliding row) ──────────── */}
       <div
-        {...longPress}
-        style={LONG_PRESS_STYLE}
+        className="absolute inset-y-0 right-0 flex items-center justify-center rounded-xl bg-accent-fire"
+        style={{ width: 80 }}
+      >
+        <button
+          type="button"
+          onClick={() => onRemove(item.localId)}
+          aria-label={`Remove ${item.component.title}`}
+          className="flex flex-col items-center gap-0.5 text-white active:opacity-70 transition-opacity p-4 min-w-[44px] min-h-[44px]"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+          <span className="text-[9px] font-heading uppercase tracking-wide">Delete</span>
+        </button>
+      </div>
+
+      {/* ─── Foreground row (slides left to reveal delete) ───────────── */}
+      <div
+        {...swipe.handlers}
+        style={{ ...LONG_PRESS_STYLE, ...swipe.rowStyle }}
         className={[
           'relative flex items-center gap-3 px-3 py-2.5 rounded-xl bg-bg-card',
           'border-l-4',
@@ -296,7 +309,7 @@ function SortablePlanItem({
               <circle cx="13" cy="15" r="1.25" />
             </svg>
           </span>
-          {/* Remove (visible on desktop-hover only; mobile uses long-press) */}
+          {/* Remove (visible on desktop-hover only; mobile uses swipe-left) */}
           <button
             type="button"
             onClick={() => onRemove(item.localId)}
@@ -310,18 +323,8 @@ function SortablePlanItem({
         </div>
       </div>
 
-      {/* Long-press → confirm removal (mobile pattern). Desktop uses the
-          hover × button above. */}
-      <ConfirmSheet
-        visible={removeConfirmOpen}
-        title={`Remove "${item.component.title}"?`}
-        body="You can undo this from the toast that appears after."
-        confirmLabel="Remove"
-        workingLabel="Removing…"
-        destructive
-        onConfirm={commitRemove}
-        onClose={() => setRemoveConfirmOpen(false)}
-      />
+      {/* Desktop: hover × button above handles removal.
+          Mobile: swipe-left reveals the delete zone above. */}
     </div>
   )
 }
