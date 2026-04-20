@@ -39,7 +39,8 @@ Every interactive or visually-distinct element MUST use the canonical primitive 
 
 | Hook | Path | Use for |
 |---|---|---|
-| `useLongPress` | `app/hooks/useLongPress.ts` | Press-and-hold to open contextual actions (replaces `useSwipeReveal`). Includes `LONG_PRESS_STYLE` to spread onto target. |
+| `useSwipeReveal` | `app/hooks/useSwipeReveal.ts` | Swipe-left to reveal a delete button on list rows (iOS table-view pattern). Export `REVEAL_WIDTH_DEFAULT` to size the delete zone div. |
+| `useLongPress` | `app/hooks/useLongPress.ts` | Press-and-hold to open contextual actions (saved-plan rows, future long-press menus). Includes `LONG_PRESS_STYLE` to spread onto target. |
 | `useVoiceNote` | `app/hooks/useVoiceNote.ts` | Web Speech API + Claude parse endpoints. Used for coach notes and component auto-fill. |
 | `useIsMobile` | `app/hooks/useIsMobile.ts` | Breakpoint hook — don't reimplement `window.matchMedia` inline. |
 

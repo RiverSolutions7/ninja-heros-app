@@ -5,7 +5,8 @@ import { useCallback, useRef, useState } from 'react'
 // ── Thresholds ────────────────────────────────────────────────────────────────
 // All values satisfy memory/MEMORY.md gesture spec:
 //   CLAIM_DISTANCE ≥ 18 px  |  BIAS_RATIO ≥ 2.5×  |  min events before claim ≥ 2
-const REVEAL_WIDTH_DEFAULT = 80   // px — width of the revealed delete button
+/** Exported so callers can size the delete zone div to match the gesture threshold. */
+export const REVEAL_WIDTH_DEFAULT = 80   // px — width of the revealed delete button
 const FULL_SWIPE_PX        = 260  // px — past this on release → immediate delete
 const CLAIM_DISTANCE       = 18   // px horizontal movement before we claim
 const BIAS_RATIO           = 2.5  // horizontal must be 2.5× vertical to claim

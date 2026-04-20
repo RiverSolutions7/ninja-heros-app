@@ -27,7 +27,7 @@ import BottomSheet from '@/app/components/ui/BottomSheet'
 import ConfirmSheet from '@/app/components/ui/ConfirmSheet'
 import { useToast } from '@/app/components/ui/Toast'
 import { LONG_PRESS_STYLE } from '@/app/hooks/useLongPress'
-import { useSwipeReveal } from '@/app/hooks/useSwipeReveal'
+import { useSwipeReveal, REVEAL_WIDTH_DEFAULT } from '@/app/hooks/useSwipeReveal'
 import { PlanItemSheet } from './PlanItemSheet'
 import { PlanCalendarSheet } from './PlanCalendarSheet'
 import SavedPlanRow from './SavedPlanRow'
@@ -196,18 +196,17 @@ function SortablePlanItem({
       {/* ─── Delete zone (revealed behind the sliding row) ──────────── */}
       <div
         className="absolute inset-y-0 right-0 flex items-center justify-center rounded-xl bg-accent-fire"
-        style={{ width: 80 }}
+        style={{ width: REVEAL_WIDTH_DEFAULT }}
       >
         <button
           type="button"
           onClick={() => onRemove(item.localId)}
           aria-label={`Remove ${item.component.title}`}
-          className="flex flex-col items-center gap-0.5 text-white active:opacity-70 transition-opacity p-4 min-w-[44px] min-h-[44px]"
+          className="flex items-center justify-center text-white active:opacity-70 transition-opacity p-4 min-w-[44px] min-h-[44px]"
         >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
-          <span className="text-[9px] font-heading uppercase tracking-wide">Delete</span>
         </button>
       </div>
 
