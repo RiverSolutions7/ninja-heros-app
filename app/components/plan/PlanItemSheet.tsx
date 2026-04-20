@@ -336,14 +336,15 @@ export function PlanItemSheet({ item, onSaveNote, onDurationChange, onClose }: P
                       <button
                         type="button"
                         onClick={handleNoteStartOver}
-                        className="text-xs text-text-dim hover:text-text-primary active:opacity-60 transition-colors"
+                        aria-label="Start voice over from scratch"
+                        className="text-xs text-text-dim hover:text-text-primary active:opacity-60 transition-colors min-h-[44px] px-4 py-2.5 focus-visible:ring-1 focus-visible:ring-white/30 rounded"
                       >
                         ↺ Start over
                       </button>
                     </div>
                   )}
                   {voiceState === 'error' && errorMessage && (
-                    <p className="text-xs text-red-400">{errorMessage}</p>
+                    <p className="text-xs text-accent-fire">{errorMessage}</p>
                   )}
                   {voiceState === 'idle' && (
                     <p className="text-xs text-text-dim">Tap mic to dictate</p>
