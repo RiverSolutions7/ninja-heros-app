@@ -187,7 +187,7 @@ function SwipeableCard({
   } else if (swipe.offset !== 0) {
     transition = 'none'
   } else if (isPressing) {
-    transition = 'transform 200ms ease'
+    transition = 'transform 150ms ease'
   } else {
     transition = 'transform 120ms ease'
   }
@@ -220,7 +220,16 @@ function SwipeableCard({
       </div>
 
       {/* ─── Sliding foreground card ──────────────────────────────── */}
-      <div {...handlers} style={foregroundStyle}>
+      {/* role="button" + tabIndex + onKeyDown so keyboard users can open the
+          detail sheet (Enter/Space). Swipe and long-press are touch-only and
+          have no keyboard equivalent — the kebab menu covers those actions. */}
+      <div
+        {...handlers}
+        style={foregroundStyle}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick() }}
+      >
         <ComponentCard
           component={component}
           showMenu
@@ -259,7 +268,12 @@ export default function ComponentListClient({ components }: ComponentListClientP
     if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
       try { await navigator.share({ title: component.title, url }); return } catch {}
     }
-    try { await navigator.clipboard.writeText(url); toast.success('Link copied') } catch {}
+    try {
+      await navigator.clipboard.writeText(url)
+      toast.success('Link copied')
+    } catch {
+      toast.error('Could not share — try again')
+    }
   }
 
   function handleMenuDelete(component: ComponentRow) {
@@ -353,7 +367,9 @@ export default function ComponentListClient({ components }: ComponentListClientP
               component={c}
               onDeleteRequest={() => setDeleteTarget(c)}
               onMenuRequest={() => {
-                // If the card is swiped open, close it first before showing menu
+                // Conflict resolution guarantees the card can't be swiped AND
+                // long-pressed simultaneously (swipe claims at 18px; long-press
+                // cancels at 12px). No closeReveal needed here.
                 setMenuTarget(c)
               }}
               onClick={() => setSelected(c)}

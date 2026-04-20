@@ -44,8 +44,8 @@ export default function MenuList({ items, ariaLabel }: MenuListProps) {
             className={[
               'w-full flex items-center gap-2.5 px-4 py-3.5 text-sm text-left transition-colors disabled:opacity-40',
               item.destructive
-                ? 'text-accent-fire hover:bg-accent-fire/10'
-                : 'text-text-primary hover:bg-white/5',
+                ? 'text-accent-fire hover:bg-accent-fire/10 active:bg-accent-fire/15'
+                : 'text-text-primary hover:bg-white/5 active:bg-white/10',
             ].join(' ')}
           >
             {item.icon && (
