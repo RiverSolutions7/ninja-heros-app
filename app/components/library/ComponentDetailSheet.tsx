@@ -67,10 +67,14 @@ function formatDaysSince(d: number | null): string {
   return `${Math.floor(d / 30)} months ago`
 }
 
-function formatTimesUsed(n: number): string {
-  if (n === 0) return 'First time'
-  if (n === 1) return '1 time'
-  return `${n} times`
+function formatDateAdded(iso: string): string {
+  const d = new Date(iso)
+  const month = d.toLocaleDateString('en-US', { month: 'short' })
+  const day = d.getDate()
+  if (d.getFullYear() === new Date().getFullYear()) {
+    return `${month} ${day}`
+  }
+  return `${month} ${day} '${String(d.getFullYear()).slice(2)}`
 }
 
 // ── Default library-add behavior ─────────────────────────────────────────────
@@ -415,8 +419,8 @@ export default function ComponentDetailSheet({
         <div className="grid grid-cols-3 gap-3 pb-7 border-b border-white/[0.06]">
           <Stat value={durationValue} label={durationLabel} />
           <Stat
-            value={usage ? formatTimesUsed(usage.timesUsed) : '—'}
-            label="Taught"
+            value={formatDateAdded(component.created_at)}
+            label="Added"
           />
           <Stat
             value={usage ? formatDaysSince(usage.daysSince) : '—'}

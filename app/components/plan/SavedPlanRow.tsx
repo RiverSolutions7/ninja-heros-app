@@ -95,7 +95,7 @@ export default function SavedPlanRow({ plan, onOpen, actions }: SavedPlanRowProp
         {...(actions ? longPress : {})}
         onClick={() => onOpen()}
         style={actions ? LONG_PRESS_STYLE : undefined}
-        className="relative w-full text-left bg-bg-card border border-bg-border border-l-4 border-l-accent-green rounded-xl pl-4 pr-10 py-3 transition-colors cursor-pointer active:bg-white/5"
+        className="relative w-full text-left bg-bg-card border border-bg-border border-l-4 border-l-accent-fire rounded-xl pl-4 pr-10 py-3 transition-colors cursor-pointer active:bg-white/5"
       >
         <div className="meta-row">
           <span className="text-accent-green">Saved</span>

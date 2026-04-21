@@ -223,10 +223,7 @@ export function PlanItemSheet({ item, onSaveNote, onDurationChange, onClose }: P
             </div>
           )}
 
-          {/* No photo placeholder */}
-          {photos.length === 0 && (
-            <div className={['mx-4 mt-3 h-20 rounded-xl', meta.placeholderBg].join(' ')} />
-          )}
+          {/* No photo — no placeholder */}
 
           {/* Metadata row + title — library-card hierarchy */}
           <div className="px-4 pt-3">

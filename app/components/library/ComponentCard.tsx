@@ -14,14 +14,14 @@ const TYPE_META: Record<ComponentType, {
 }> = {
   game: {
     label: 'Game',
-    border: 'border-l-accent-green',
+    border: 'border-l-accent-fire',
     badge: 'bg-accent-green/10 text-accent-green border border-accent-green/20',
     textColor: 'text-accent-green',
     placeholderBg: 'bg-accent-green/20',
   },
   station: {
     label: 'Station',
-    border: 'border-l-accent-blue',
+    border: 'border-l-accent-fire',
     badge: 'bg-accent-blue/10 text-accent-blue border border-accent-blue/20',
     textColor: 'text-accent-blue',
     placeholderBg: 'bg-accent-blue/20',
@@ -87,51 +87,47 @@ export default function ComponentCard({ component, showMenu = false, onClick, tr
         'cursor-pointer active:bg-white/[0.02] transition-colors',
       ].join(' ')}
     >
-      {/* ─── Thumbnail slot (fixed 72×72) ──────────────────────── */}
-      <div
-        style={{ width: THUMB, height: THUMB, minWidth: THUMB }}
-        className="relative shrink-0 rounded-lg overflow-hidden"
-      >
-        {firstPhoto ? (
-          <>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={firstPhoto}
-              alt={component.title}
+      {/* ─── Thumbnail slot — only rendered when photo or video exists ── */}
+      {(firstPhoto || hasVideo) && (
+        <div
+          style={{ width: THUMB, height: THUMB, minWidth: THUMB }}
+          className="relative shrink-0 rounded-lg overflow-hidden"
+        >
+          {firstPhoto ? (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={firstPhoto}
+                alt={component.title}
+                style={{ width: THUMB, height: THUMB }}
+                className="object-cover block"
+              />
+              {hasVideo && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                  <svg className="w-5 h-5 text-white drop-shadow" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5.14v14l11-7-11-7z" />
+                  </svg>
+                </div>
+              )}
+              {photos.length > 1 && (
+                <span className="absolute bottom-0.5 right-0.5 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">
+                  +{photos.length - 1}
+                </span>
+              )}
+            </>
+          ) : (
+            // Video-only — play icon on dark background
+            <div
               style={{ width: THUMB, height: THUMB }}
-              className="object-cover block"
-            />
-            {hasVideo && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                <svg className="w-5 h-5 text-white drop-shadow" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8 5.14v14l11-7-11-7z" />
-                </svg>
-              </div>
-            )}
-            {photos.length > 1 && (
-              <span className="absolute bottom-0.5 right-0.5 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">
-                +{photos.length - 1}
-              </span>
-            )}
-          </>
-        ) : (
-          // No-photo variant — icon only, no container. The ghostly icon recedes
-          // into the card so photo cards visually dominate. Type is still
-          // signalled by the left stripe + metadata text.
-          <div
-            style={{ width: THUMB, height: THUMB }}
-            className="flex items-center justify-center text-text-dim/50"
-          >
-            {hasVideo ? (
-              <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
+              className="flex items-center justify-center bg-bg-primary"
+            >
+              <svg className="w-7 h-7 text-text-dim/50" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5.14v14l11-7-11-7z" />
               </svg>
-            ) : (
-              <TypeIcon type={component.type} className="w-7 h-7" />
-            )}
-          </div>
-        )}
-      </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ─── Info stack ────────────────────────────────────────── */}
       <div className="flex-1 min-w-0">

@@ -21,8 +21,8 @@ import type { ComponentRow, ComponentType } from '@/app/lib/database.types'
 import { PhotoLightbox } from '@/app/components/ui/PhotoLightbox'
 
 const TYPE_META: Record<ComponentType, { label: string; accent: string; border: string }> = {
-  station: { label: 'STATION', accent: 'text-accent-blue', border: 'border-l-accent-blue' },
-  game: { label: 'GAME', accent: 'text-accent-green', border: 'border-l-accent-green' },
+  station: { label: 'STATION', accent: 'text-accent-blue', border: 'border-l-accent-fire' },
+  game: { label: 'GAME', accent: 'text-accent-green', border: 'border-l-accent-fire' },
 }
 
 interface ComponentArticleProps {

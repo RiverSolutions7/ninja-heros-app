@@ -111,8 +111,8 @@ const WEEK_DAY_LABELS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
 // ── Type icons + placeholder ──────────────────────────────────────────────────
 
 const TYPE_META: Record<ComponentType, { label: string; border: string; textColor: string; placeholderBg: string }> = {
-  station: { label: 'Station', border: 'border-l-accent-blue', textColor: 'text-accent-blue', placeholderBg: 'bg-accent-blue/20' },
-  game: { label: 'Game', border: 'border-l-accent-green', textColor: 'text-accent-green', placeholderBg: 'bg-accent-green/20' },
+  station: { label: 'Station', border: 'border-l-accent-fire', textColor: 'text-accent-blue', placeholderBg: 'bg-accent-blue/20' },
+  game: { label: 'Game', border: 'border-l-accent-fire', textColor: 'text-accent-green', placeholderBg: 'bg-accent-green/20' },
 }
 
 // Fallback for legacy warmup data embedded in saved plans
@@ -220,43 +220,31 @@ function SortablePlanItem({
           meta.border,
         ].join(' ')}
       >
-        {/* ─── Thumbnail slot ──────────────────────────────────── */}
-        <div className="relative shrink-0 rounded-lg overflow-hidden">
-          <button
-            type="button"
-            onClick={() => !item.isAdHoc && photos.length > 0 && onPhotoTap(photos)}
-            style={{ width: PLAN_THUMB, height: PLAN_THUMB }}
-            className={firstPhoto ? 'cursor-pointer active:opacity-80 transition-opacity block' : 'cursor-default block'}
-            tabIndex={firstPhoto ? 0 : -1}
-            aria-label={firstPhoto ? `View photos of ${item.component.title}` : undefined}
-          >
-            {firstPhoto ? (
-              // eslint-disable-next-line @next/next/no-img-element
+        {/* ─── Thumbnail slot — only rendered when photo exists ───────── */}
+        {firstPhoto && (
+          <div className="relative shrink-0 rounded-lg overflow-hidden">
+            <button
+              type="button"
+              onClick={() => !item.isAdHoc && onPhotoTap(photos)}
+              style={{ width: PLAN_THUMB, height: PLAN_THUMB }}
+              className="cursor-pointer active:opacity-80 transition-opacity block"
+              aria-label={`View photos of ${item.component.title}`}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={firstPhoto}
                 alt={item.component.title}
                 style={{ width: PLAN_THUMB, height: PLAN_THUMB }}
                 className="object-cover block"
               />
-            ) : (
-              <div
-                style={{ width: PLAN_THUMB, height: PLAN_THUMB }}
-                className={['flex items-center justify-center', meta.textColor, 'opacity-50'].join(' ')}
-              >
-                {item.isAdHoc ? (
-                  <span className="w-7 h-7">{CUSTOM_ICON}</span>
-                ) : (
-                  <span className="w-7 h-7">{TYPE_ICONS[item.component.type as ComponentType]}</span>
-                )}
-              </div>
+            </button>
+            {extraCount > 0 && (
+              <span className="absolute bottom-0.5 right-0.5 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">
+                +{extraCount}
+              </span>
             )}
-          </button>
-          {extraCount > 0 && (
-            <span className="absolute bottom-0.5 right-0.5 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">
-              +{extraCount}
-            </span>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* ─── Info stack ──────────────────────────────────────── */}
         <button
