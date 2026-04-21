@@ -16,6 +16,8 @@ import MediaAddSheet from '@/app/components/ui/MediaAddSheet'
 import Button from '@/app/components/ui/Button'
 import ComponentDetailSheet from '@/app/components/library/ComponentDetailSheet'
 import { useVoiceNote } from '@/app/hooks/useVoiceNote'
+import { useUnsavedGuard } from '@/app/hooks/useUnsavedGuard'
+import ConfirmSheet from '@/app/components/ui/ConfirmSheet'
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -99,6 +101,18 @@ export default function LogComponentPage() {
   // replaces any existing one).
   const [media, setMedia] = useState<MediaItem[]>([])
   const [showMediaSheet, setShowMediaSheet] = useState(false)
+
+  // Unsaved-changes guard
+  const isDirty =
+    gateStep === 'form' && (
+      title.trim() !== '' ||
+      description.trim() !== '' ||
+      skills.length > 0 ||
+      durationMinutes !== null ||
+      media.length > 0
+    )
+  const [guardDest, setGuardDest] = useState<string | null>(null)
+  useUnsavedGuard(isDirty, setGuardDest)
 
   // Skills
   const [availableSkills, setAvailableSkills] = useState<string[]>([])
@@ -727,6 +741,17 @@ export default function LogComponentPage() {
       />
 
       {toast && <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
+
+      <ConfirmSheet
+        visible={guardDest !== null}
+        title="Leave without saving?"
+        body="Your progress will be lost."
+        confirmLabel="Leave"
+        cancelLabel="Stay"
+        destructive
+        onConfirm={() => { router.push(guardDest!) }}
+        onClose={() => setGuardDest(null)}
+      />
     </form>
   )
 }

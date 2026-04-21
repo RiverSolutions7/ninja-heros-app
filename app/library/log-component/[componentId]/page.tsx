@@ -13,6 +13,8 @@ import MediaStrip, { type MediaItem } from '@/app/components/ui/MediaStrip'
 import MediaAddSheet from '@/app/components/ui/MediaAddSheet'
 import Button from '@/app/components/ui/Button'
 import { useVoiceNote } from '@/app/hooks/useVoiceNote'
+import { useUnsavedGuard } from '@/app/hooks/useUnsavedGuard'
+import ConfirmSheet from '@/app/components/ui/ConfirmSheet'
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -67,6 +69,17 @@ export default function EditComponentPage() {
   // Unified media — seeded from component on load, same shape as create page.
   const [media, setMedia] = useState<MediaItem[]>([])
   const [showMediaSheet, setShowMediaSheet] = useState(false)
+
+  // Unsaved-changes guard — compares current state against DB values
+  const isDirty = !!component && (
+    title !== (component.title ?? '') ||
+    description !== (component.description ?? '') ||
+    durationMinutes !== (component.duration_minutes ?? null) ||
+    JSON.stringify([...skills].sort()) !== JSON.stringify([...(component.skills ?? [])].sort()) ||
+    media.some(m => m.kind !== 'link' && !!m.file)
+  )
+  const [guardDest, setGuardDest] = useState<string | null>(null)
+  useUnsavedGuard(isDirty, setGuardDest)
 
   const [curriculums, setCurriculums] = useState<CurriculumRow[]>([])
   const [availableSkills, setAvailableSkills] = useState<string[]>([])
@@ -498,6 +511,17 @@ export default function EditComponentPage() {
         onAdd={handleAddMedia}
         hasVideo={hasVideo}
         hasLink={hasLink}
+      />
+
+      <ConfirmSheet
+        visible={guardDest !== null}
+        title="Leave without saving?"
+        body="Your changes will be lost."
+        confirmLabel="Leave"
+        cancelLabel="Stay"
+        destructive
+        onConfirm={() => { router.push(guardDest!) }}
+        onClose={() => setGuardDest(null)}
       />
     </form>
   )
