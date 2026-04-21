@@ -18,6 +18,7 @@
 import { useRef, useState } from 'react'
 import BottomSheet from './BottomSheet'
 import { randomId } from '@/app/lib/uuid'
+import { compressImage } from '@/app/lib/compressImage'
 import type { MediaItem } from './MediaStrip'
 
 interface MediaAddSheetProps {
@@ -47,10 +48,11 @@ export default function MediaAddSheet({
   const [linkMode, setLinkMode] = useState(false)
   const [linkUrl, setLinkUrl] = useState('')
 
-  function handleFilePicked(kind: 'photo' | 'video', file: File | null) {
+  async function handleFilePicked(kind: 'photo' | 'video', file: File | null) {
     if (!file) return
-    const previewUrl = URL.createObjectURL(file)
-    onAdd({ localId: randomId(), kind, url: previewUrl, file })
+    const fileToUse = kind === 'photo' ? await compressImage(file) : file
+    const previewUrl = URL.createObjectURL(fileToUse)
+    onAdd({ localId: randomId(), kind, url: previewUrl, file: fileToUse })
     // Reset the input so the same file can be picked again if the coach
     // added, removed, and wants to re-add it.
     if (kind === 'photo') {
