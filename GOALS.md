@@ -39,21 +39,42 @@ a class confidently on day one.
 
 ---
 
+## THE COMPETITIVE BET
+
+Most SaaS apps for gyms compete on features. This one competes
+on *feel*.
+
+Coaches use this app while standing on the gym floor during
+live class — phone in one hand, kids running around, 30 seconds
+between activities. If any interaction feels janky — a button
+that doesn't respond, an animation that stutters, a gesture
+that misfires — the coach loses trust. Over a month, that
+trust erodes into churn.
+
+The product bar is **Apple-grade mobile polish.** Interactions
+match iOS 17+ system apps (Photos, Notes, Messages, Reminders).
+This is the moat. Feature-rich competitors exist; polished
+competitors don't.
+
+Polish is not aesthetics. Polish is retention.
+
+---
+
 ## THE TWO-TOOL ARCHITECTURE
 
 ### Library — The Knowledge Base
 
-Individual components (games, warmups, stations/drills) are
-logged here. Each component has:
+Individual components (games and stations) are logged here.
+Each component has:
 - Description and coaching cues (logged by voice or typed)
 - Photos showing real equipment setup
 - Video of the activity in action
 - Tagged skills, curriculum, and equipment
 
 The library is searchable and organized by type (Games /
-Warmups / Stations). The more components are logged, the more
-valuable the library becomes. Every coach who logs a great
-game is contributing to a shared system that outlasts them.
+Stations). The more components are logged, the more valuable
+the library becomes. Every coach who logs a great game is
+contributing to a shared system that outlasts them.
 
 ### Today's Plan — The Class Record
 
@@ -122,10 +143,10 @@ their program work.
 
 **Log what you have, nothing more.**
 
-A coach should be able to log just a game, just a warmup, or
-just one station without being forced to fill out an entire
-class structure. A single great component documented is more
-valuable than a complex template left blank.
+A coach should be able to log just a game or just one station
+without being forced to fill out an entire class structure. A
+single great component documented is more valuable than a
+complex template left blank.
 
 **Voice first.**
 
@@ -133,6 +154,33 @@ If a coach has to type a detailed description at the end of
 a long day, it won't get done. If they can tap a mic button
 and speak for 30 seconds, it will. Voice is the primary input
 method for descriptions and coach notes.
+
+---
+
+## HOW THIS APP IS BUILT
+
+Polish at this bar requires infrastructure most solo founders
+skip. The workflow is deliberate:
+
+- **Claude Design** (primary — 80% of polish work). Every new
+  feature and every polish iteration starts in a visual design
+  tool. Iterate on the feel before any code gets written.
+- **Claude Code** (implementation). Builds features from Claude
+  Design specs. Uses the canonical primitive library from
+  `memory/MEMORY.md` (Button, Chip, BottomSheet, ConfirmSheet,
+  ChoiceSheet, MenuList, etc.). Never invents a new primitive
+  when an existing one covers the case.
+- **polish-audit subagent** (automated quality gate). Fires
+  after every commit via a PostToolUse hook. Reviews against
+  iOS HIG, design primitives, accessibility, state coverage.
+  Catches drift before it ships.
+- **inspect.dev** (rare — 20%). Device-level debugging when a
+  bug reproduces on the iPhone but not locally. Reserved for
+  cases where the design is right but the code isn't doing
+  what the design says.
+
+**Rule of thumb: 80% of polish work starts in Claude Design.
+Code is the output, not the starting point.**
 
 ---
 
@@ -161,6 +209,10 @@ facility that has the same problem — great coaches, no system.
 ---
 
 ## MEDIUM-TERM GOALS (3-6 Months)
+
+*Preconditioned on the polish workflow running at full speed
+— polish fixes taking ~5 minutes end-to-end, not 90. Until
+that pace is real, these goals stay on hold.*
 
 1. Pitch to other ninja and gymnastics gyms
 2. Multi-gym architecture — each gym gets their own workspace
@@ -197,6 +249,11 @@ facility that has the same problem — great coaches, no system.
   the app easier to use, not harder
 - **Grow beyond any one coach** — the whole point is that the
   program outlasts the people who built it
+- **Design before code** — new features start in Claude Design,
+  not in the codebase. Iterate on the feel first, then implement.
+- **Use the primitive registry** — every interactive element
+  has a canonical primitive (see `memory/MEMORY.md`). Never
+  invent a new one when an existing one covers the case.
 
 ---
 
