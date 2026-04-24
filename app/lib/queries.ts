@@ -79,11 +79,14 @@ export async function fetchComponentUsage(componentId: string): Promise<Componen
 
   let daysSince: number | null = null
   if (lastUsed) {
+    // Parse YYYY-MM-DD as local midnight. Using new Date('YYYY-MM-DD') would
+    // produce UTC midnight, which then shifts to the *previous* day in negative-
+    // offset timezones — causing the "−1 days ago" bug seen on US devices.
     const today = new Date()
     today.setHours(0, 0, 0, 0)
-    const last = new Date(lastUsed)
-    last.setHours(0, 0, 0, 0)
-    daysSince = Math.floor((today.getTime() - last.getTime()) / 86_400_000)
+    const [y, m, d] = lastUsed.split('-').map(Number)
+    const last = new Date(y, m - 1, d) // local-time midnight
+    daysSince = Math.max(0, Math.floor((today.getTime() - last.getTime()) / 86_400_000))
   }
 
   return { timesUsed, lastUsed, daysSince }

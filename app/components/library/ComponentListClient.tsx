@@ -21,13 +21,14 @@ const EMPTY_MESSAGES: Record<ComponentType, string> = {
 }
 
 export default function ComponentListClient({ components }: ComponentListClientProps) {
-  const [selected,   setSelected]   = useState<ComponentRow | null>(null)
-  const [search,     setSearch]     = useState('')
+  const [selected, setSelected] = useState<ComponentRow | null>(null)
   const [activeType, setActiveType] = useState<ComponentType>('station')
 
-  const filtered = components
-    .filter((c) => c.type === activeType)
-    .filter((c) => !search || c.title.toLowerCase().includes(search.toLowerCase()))
+  const filtered = components.filter((c) => c.type === activeType)
+
+  const countLabel = filtered.length === 1
+    ? `1 ${activeType === 'station' ? 'STATION' : 'GAME'}`
+    : `${filtered.length} ${activeType === 'station' ? 'STATIONS' : 'GAMES'}`
 
   return (
     <>
@@ -37,7 +38,7 @@ export default function ComponentListClient({ components }: ComponentListClientP
           <button
             key={tab.type}
             type="button"
-            onClick={() => { setActiveType(tab.type); setSearch('') }}
+            onClick={() => setActiveType(tab.type)}
             className={`flex-1 py-3 text-sm font-heading transition-colors min-h-[44px] active:bg-white/5 ${
               activeType === tab.type
                 ? 'text-text-primary border-b-2 border-accent-fire -mb-px'
@@ -49,32 +50,19 @@ export default function ComponentListClient({ components }: ComponentListClientP
         ))}
       </div>
 
-      {/* Search */}
-      <div className="mb-3">
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={`Search ${SUB_TABS.find((t) => t.type === activeType)?.label.toLowerCase()}...`}
-          aria-label={`Search ${activeType}s`}
-          className="w-full bg-bg-input border border-bg-border rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-dim focus:outline-none focus:border-accent-fire/50 transition-colors"
-        />
-      </div>
+      {/* Count label */}
+      <p className="section-label mb-3">{countLabel}</p>
 
       {/* List */}
       {filtered.length === 0 ? (
         <EmptyState
           compact
-          title={search ? `No results for "${search}"` : EMPTY_MESSAGES[activeType]}
-          icon={search ? (
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 111 11a6 6 0 0116 0z" />
-            </svg>
-          ) : (
+          title={EMPTY_MESSAGES[activeType]}
+          icon={
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
             </svg>
-          )}
+          }
         />
       ) : (
         <div className="flex flex-col gap-2">
@@ -82,7 +70,6 @@ export default function ComponentListClient({ components }: ComponentListClientP
             <ComponentCard
               key={c.id}
               component={c}
-              showMenu
               onClick={() => setSelected(c)}
             />
           ))}

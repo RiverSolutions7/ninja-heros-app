@@ -12,9 +12,18 @@ import SkillChip from '@/app/components/skills/SkillChip'
 import MediaStrip, { type MediaItem } from '@/app/components/ui/MediaStrip'
 import MediaAddSheet from '@/app/components/ui/MediaAddSheet'
 import Button from '@/app/components/ui/Button'
+import ConfirmSheet from '@/app/components/ui/ConfirmSheet'
 import { useVoiceNote } from '@/app/hooks/useVoiceNote'
 import { useUnsavedGuard } from '@/app/hooks/useUnsavedGuard'
 import ConfirmSheet from '@/app/components/ui/ConfirmSheet'
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function extractPath(url: string, bucket: string): string | null {
+  const marker = `/storage/v1/object/public/${bucket}/`
+  const idx = url.indexOf(marker)
+  return idx >= 0 ? url.slice(idx + marker.length) : null
+}
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -90,6 +99,7 @@ export default function EditComponentPage() {
   const [submitting, setSubmitting] = useState(false)
   const [titleError, setTitleError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   // Post-voice highlight tracking
   const [justFilled, setJustFilled] = useState<Set<string>>(new Set())
@@ -263,6 +273,23 @@ export default function EditComponentPage() {
 
   function handleRemoveMedia(localId: string) {
     setMedia((prev) => prev.filter((m) => m.localId !== localId))
+  }
+
+  async function handleDeleteConfirmed() {
+    if (!component) return
+    const photoPaths = (component.photos ?? [])
+      .map((u) => extractPath(u, 'station-photos'))
+      .filter(Boolean) as string[]
+    if (photoPaths.length > 0) {
+      await supabase.storage.from('station-photos').remove(photoPaths)
+    }
+    if (component.video_url) {
+      const videoPath = extractPath(component.video_url, 'lane-videos')
+      if (videoPath) await supabase.storage.from('lane-videos').remove([videoPath])
+    }
+    const { error: deleteErr } = await supabase.from('components').delete().eq('id', component.id)
+    if (deleteErr) throw deleteErr
+    router.push('/library?view=components')
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -504,6 +531,28 @@ export default function EditComponentPage() {
           {submitting ? 'Saving…' : 'Save Changes'}
         </Button>
       </div>
+
+      {/* Delete — intentionally separated from Save to prevent accidental taps */}
+      <div className="mt-6 flex justify-center">
+        <button
+          type="button"
+          onClick={() => setShowDeleteConfirm(true)}
+          className="text-sm text-red-400 hover:text-red-300 transition-colors py-2 px-4"
+        >
+          Delete component
+        </button>
+      </div>
+
+      <ConfirmSheet
+        visible={showDeleteConfirm}
+        title="Delete component?"
+        body="This can't be undone. Saved plans using this component will keep their copy."
+        confirmLabel="Delete component"
+        workingLabel="Deleting…"
+        destructive
+        onConfirm={handleDeleteConfirmed}
+        onClose={() => setShowDeleteConfirm(false)}
+      />
 
       <MediaAddSheet
         visible={showMediaSheet}

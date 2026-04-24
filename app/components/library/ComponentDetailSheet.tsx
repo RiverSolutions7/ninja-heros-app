@@ -2,12 +2,14 @@
 // Component Detail Sheet — unified editorial detail view
 // ------------------------------------------------------------
 // Used from:
-//   • Library list (no onAdd prop → uses default library behavior:
-//     writes the component into the current plan session draft
-//     in sessionStorage, then auto-closes with a brief "Added" beat)
+//   • Library list — reference-only; no add-to-plan action here.
+//     The planner's own ComponentPickerModal is the entry point
+//     for building a plan.
 //   • ComponentPickerModal (passes onAdd + isInPlan explicitly)
+//     so the "Add to plan" / "Added ✓" footer appears in picker
+//     context only.
 //
-// Design principles (see /preview/component/* mock for reference):
+// Design principles:
 //   • One voice per screen — hero image + title own the frame.
 //   • Typography IS the UI — no chip-and-box-per-field chrome.
 //   • One hot color — fire red, used sparingly (meta line + CTA).
@@ -21,12 +23,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import type { ComponentRow, PlanItem } from '@/app/lib/database.types'
+import type { ComponentRow } from '@/app/lib/database.types'
 import { fetchComponentUsage, type ComponentUsage } from '@/app/lib/queries'
-import { randomId } from '@/app/lib/uuid'
-
-// Session storage key — must match TodaysPlanClient's SESSION_KEY
-const PLAN_SESSION_KEY = 'ninja-plan-session'
 
 interface ComponentDetailSheetProps {
   component: ComponentRow
@@ -77,40 +75,6 @@ function formatDateAdded(iso: string): string {
   return `${month} ${day} '${String(d.getFullYear()).slice(2)}`
 }
 
-// ── Default library-add behavior ─────────────────────────────────────────────
-// Used when the sheet is opened from the library list (no onAdd prop).
-// Writes directly into the same sessionStorage key the Today's Plan editor
-// reads from, so the component shows up the next time the coach opens /plan.
-function addToPlanSession(component: ComponentRow): void {
-  try {
-    const raw = sessionStorage.getItem(PLAN_SESSION_KEY)
-    const items: PlanItem[] = raw ? JSON.parse(raw) : []
-    const alreadyIn = items.some((i) => i.component?.id === component.id)
-    if (alreadyIn) return
-    const newItem: PlanItem = {
-      localId: randomId(),
-      component,
-      isAdHoc: false,
-      durationMinutes: component.duration_minutes,
-      coachNote: null,
-    }
-    sessionStorage.setItem(PLAN_SESSION_KEY, JSON.stringify([...items, newItem]))
-  } catch {
-    /* ignore — quota or parse error */
-  }
-}
-
-function detectInPlan(componentId: string): boolean {
-  try {
-    const raw = sessionStorage.getItem(PLAN_SESSION_KEY)
-    if (!raw) return false
-    const items: PlanItem[] = JSON.parse(raw)
-    return items.some((i) => i.component?.id === componentId)
-  } catch {
-    return false
-  }
-}
-
 // ── Component ────────────────────────────────────────────────────────────────
 export default function ComponentDetailSheet({
   component,
@@ -132,16 +96,15 @@ export default function ComponentDetailSheet({
   // Usage stats — fetched on mount, used for the reward-loop identity row
   const [usage, setUsage] = useState<ComponentUsage | null>(null)
 
-  // Library-context in-plan detection (only used when prop is not provided)
-  const [libraryInPlan, setLibraryInPlan] = useState(false)
-
-  // CTA state — 'idle' | 'adding' | 'added'
+  // CTA state — used only in picker context (when onAdd is provided)
   const [addState, setAddState] = useState<'idle' | 'adding' | 'added'>('idle')
 
   // Share confirmation — transient "Link copied" flash on the share button
   const [shareCopied, setShareCopied] = useState(false)
 
-  const isInPlan = isInPlanProp ?? libraryInPlan
+  // In picker context, isInPlan comes from the prop. Library context has no
+  // in-plan detection (the library is reference-only, not an add surface).
+  const isInPlan = isInPlanProp ?? false
 
   useEffect(() => {
     let cancelled = false
@@ -150,12 +113,6 @@ export default function ComponentDetailSheet({
       .catch(() => { if (!cancelled) setUsage({ timesUsed: 0, lastUsed: null, daysSince: null }) })
     return () => { cancelled = true }
   }, [component.id])
-
-  useEffect(() => {
-    if (isInPlanProp === undefined) {
-      setLibraryInPlan(detectInPlan(component.id))
-    }
-  }, [component.id, isInPlanProp])
 
   function handleSwipe(e: React.TouchEvent) {
     if (photos.length < 2) return
@@ -199,26 +156,11 @@ export default function ComponentDetailSheet({
   }
 
   function handleAdd() {
-    if (isInPlan || addState !== 'idle') return
+    if (!onAdd || isInPlan || addState !== 'idle') return
+    // Picker flow only — caller closes the sheet itself.
     setAddState('adding')
-    if (onAdd) {
-      // Picker flow — caller closes the sheet itself.
-      onAdd()
-      setAddState('added')
-    } else {
-      // Library flow — write to the plan session and leave the sheet open
-      // with a persistent green confirmation. Auto-closing made the success
-      // moment invisible on mobile ("nothing happened" feeling) and dropped
-      // the coach back on /library with no signal their plan had items.
-      addToPlanSession(component)
-      setAddState('added')
-      setLibraryInPlan(true)
-    }
-  }
-
-  function handleViewPlan() {
-    onClose()
-    router.push('/plan')
+    onAdd()
+    setAddState('added')
   }
 
   const metaLine = [
@@ -414,7 +356,9 @@ export default function ComponentDetailSheet({
       </div>
 
       {/* ── Body ─────────────────────────────────────────────────────────── */}
-      <div className="px-6 pt-2 pb-32">
+      {/* pb-32 only when the sticky footer is present (afterSave or picker);
+          pb-8 in library-browse context where the footer is absent. */}
+      <div className={`px-6 pt-2 ${mode === 'afterSave' || onAdd !== undefined ? 'pb-32' : 'pb-8'}`}>
         {/* Stat row — 3-up, no per-stat borders, one thin divider below */}
         <div className="grid grid-cols-3 gap-3 pb-7 border-b border-white/[0.06]">
           <Stat value={durationValue} label={durationLabel} />
@@ -502,120 +446,100 @@ export default function ComponentDetailSheet({
       </div>
 
       {/* ── Sticky CTA footer ────────────────────────────────────────────── */}
-      {/* Solid tap target (bg-bg-primary) so touches can't slip past on mobile
-          Safari, plus a gradient fade above it (absolute, pointer-events-none)
-          so the body content dissolves into the footer seamlessly — no hard
-          slicer line. */}
-      <div
-        className="fixed inset-x-0 bottom-0 px-6 pt-5 bg-bg-primary"
-        style={{ paddingBottom: 'max(20px, env(safe-area-inset-bottom, 20px))' }}
-      >
+      {/* Shown only in picker context (onAdd provided) or after a save.
+          The library browse context is reference-only — no add-to-plan here. */}
+      {(mode === 'afterSave' || onAdd !== undefined) && (
         <div
-          aria-hidden="true"
-          className="pointer-events-none absolute left-0 right-0 bottom-full h-10 bg-gradient-to-t from-bg-primary to-transparent"
-        />
-        <div className="max-w-2xl mx-auto">
-          {mode === 'afterSave' ? (
-            // Just-logged celebratory context — primary is Back to Library
-            // (the coach's most common next move), with a quiet link to keep
-            // logging if they're in flow.
-            <div className="flex flex-col items-center gap-3.5">
+          className="fixed inset-x-0 bottom-0 px-6 pt-5 bg-bg-primary"
+          style={{ paddingBottom: 'max(20px, env(safe-area-inset-bottom, 20px))' }}
+        >
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute left-0 right-0 bottom-full h-10 bg-gradient-to-t from-bg-primary to-transparent"
+          />
+          <div className="max-w-2xl mx-auto">
+            {mode === 'afterSave' ? (
+              // Just-logged celebratory context — primary is Back to Library
+              // (the coach's most common next move), with a quiet link to keep
+              // logging if they're in flow.
+              <div className="flex flex-col items-center gap-3.5">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-full font-heading text-[15px] tracking-wide py-4 rounded-2xl bg-accent-fire text-white active:scale-[0.98] transition-all"
+                  style={{ minHeight: '52px' }}
+                >
+                  Back to Library
+                </button>
+                {onLogAnother && (
+                  <button
+                    type="button"
+                    onClick={onLogAnother}
+                    className="text-[13px] font-heading text-text-muted tracking-wide hover:text-text-primary active:opacity-70"
+                    style={{ minHeight: '32px' }}
+                  >
+                    + Log another component
+                  </button>
+                )}
+              </div>
+            ) : addState === 'added' ? (
+              // Picker: just added — green confirmation bar.
+              <div className="w-full flex items-center gap-3 py-3.5 px-5 rounded-2xl bg-accent-green/10 border border-accent-green/30">
+                <svg
+                  className="w-5 h-5 text-accent-green flex-shrink-0"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2.5}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                <span className="flex-1 font-heading text-[14px] text-accent-green tracking-wide">
+                  Added to plan
+                </span>
+              </div>
+            ) : isInPlan ? (
+              // Picker: component was already in the plan when this sheet opened.
+              <div className="w-full flex items-center gap-3 py-3.5 px-5 rounded-2xl bg-white/[0.04] border border-white/[0.08]">
+                <svg
+                  className="w-5 h-5 text-accent-green/80 flex-shrink-0"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2.5}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                <span className="flex-1 font-heading text-[14px] text-text-muted tracking-wide">
+                  Already in plan
+                </span>
+              </div>
+            ) : (
+              // Picker: idle — primary Add to plan button.
               <button
                 type="button"
-                onClick={onClose}
-                className="w-full font-heading text-[15px] tracking-wide py-4 rounded-2xl bg-accent-fire text-white active:scale-[0.98] transition-all"
+                onClick={handleAdd}
+                disabled={addState !== 'idle'}
+                className={[
+                  'w-full font-heading text-[15px] tracking-wide py-4 rounded-2xl transition-all',
+                  'bg-accent-fire text-white shadow-glow-fire',
+                  addState === 'idle' ? 'active:scale-[0.98]' : 'opacity-80',
+                ].join(' ')}
                 style={{ minHeight: '52px' }}
               >
-                Back to Library
+                {addState === 'adding' ? (
+                  <span className="inline-flex items-center gap-2">
+                    <span className="w-4 h-4 border-2 border-white/70 border-t-transparent rounded-full animate-spin" />
+                    Adding…
+                  </span>
+                ) : (
+                  <>Add to plan</>
+                )}
               </button>
-              {onLogAnother && (
-                <button
-                  type="button"
-                  onClick={onLogAnother}
-                  className="text-[13px] font-heading text-text-muted tracking-wide hover:text-text-primary active:opacity-70"
-                  style={{ minHeight: '32px' }}
-                >
-                  + Log another component
-                </button>
-              )}
-            </div>
-          ) : addState === 'added' ? (
-            // Just added in this session — persistent green confirmation.
-            // "View plan →" only shown in library context (picker is already on /plan).
-            <div className="w-full flex items-center gap-3 py-3.5 px-5 rounded-2xl bg-accent-green/10 border border-accent-green/30">
-              <svg
-                className="w-5 h-5 text-accent-green flex-shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2.5}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-              <span className="flex-1 font-heading text-[14px] text-accent-green tracking-wide">
-                Added to plan
-              </span>
-              {!onAdd && (
-                <button
-                  type="button"
-                  onClick={handleViewPlan}
-                  className="text-[13px] font-heading text-accent-green tracking-wide hover:underline underline-offset-4 active:opacity-70"
-                  style={{ minHeight: '32px' }}
-                >
-                  View plan →
-                </button>
-              )}
-            </div>
-          ) : isInPlan ? (
-            // Component was already in the plan when this sheet opened.
-            <div className="w-full flex items-center gap-3 py-3.5 px-5 rounded-2xl bg-white/[0.04] border border-white/[0.08]">
-              <svg
-                className="w-5 h-5 text-accent-green/80 flex-shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2.5}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-              <span className="flex-1 font-heading text-[14px] text-text-muted tracking-wide">
-                Already in plan
-              </span>
-              {!onAdd && (
-                <button
-                  type="button"
-                  onClick={handleViewPlan}
-                  className="text-[13px] font-heading text-text-muted tracking-wide hover:text-text-primary hover:underline underline-offset-4 active:opacity-70"
-                  style={{ minHeight: '32px' }}
-                >
-                  View plan →
-                </button>
-              )}
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={handleAdd}
-              disabled={addState !== 'idle'}
-              className={[
-                'w-full font-heading text-[15px] tracking-wide py-4 rounded-2xl transition-all',
-                'bg-accent-fire text-white shadow-glow-fire',
-                addState === 'idle' ? 'active:scale-[0.98]' : 'opacity-80',
-              ].join(' ')}
-              style={{ minHeight: '52px' }}
-            >
-              {addState === 'adding' ? (
-                <span className="inline-flex items-center gap-2">
-                  <span className="w-4 h-4 border-2 border-white/70 border-t-transparent rounded-full animate-spin" />
-                  Adding…
-                </span>
-              ) : (
-                <>Add to plan</>
-              )}
-            </button>
-          )}
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 
