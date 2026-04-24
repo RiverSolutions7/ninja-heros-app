@@ -81,7 +81,6 @@ export interface ComponentRow {
 export interface PlanItem {
   localId: string
   component: ComponentRow
-  isAdHoc?: boolean
   durationMinutes: number | null
   coachNote: string | null
 }

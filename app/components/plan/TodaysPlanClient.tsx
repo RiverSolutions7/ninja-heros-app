@@ -95,13 +95,11 @@ function formatSelectedDayLabel(selectedIso: string, todayIso: string): string {
 function autoLabel(plan: PlanRow): string {
   if (plan.title) return plan.title
   const its = plan.items ?? []
-  const s = its.filter(i => i.component.type === 'station' && !i.isAdHoc).length
-  const g = its.filter(i => i.component.type === 'game' && !i.isAdHoc).length
-  const c = its.filter(i => i.isAdHoc).length
+  const s = its.filter(i => i.component.type === 'station').length
+  const g = its.filter(i => i.component.type === 'game').length
   const parts = [
     s > 0 && `${s} station${s > 1 ? 's' : ''}`,
     g > 0 && `${g} game${g > 1 ? 's' : ''}`,
-    c > 0 && `${c} custom`,
   ].filter(Boolean) as string[]
   return parts.length ? parts.join(' · ') : 'Class Plan'
 }
@@ -118,10 +116,7 @@ const TYPE_META: Record<ComponentType, { label: string; border: string; textColo
 // Fallback for legacy warmup data embedded in saved plans
 const LEGACY_FALLBACK_META = TYPE_META['game']
 
-const CUSTOM_META = { label: 'Custom', border: 'border-l-accent-fire', textColor: 'text-accent-fire', placeholderBg: 'bg-accent-fire/15' }
-
-function resolveMeta(item: { isAdHoc?: boolean; component: { type: string } }) {
-  if (item.isAdHoc) return CUSTOM_META
+function resolveMeta(item: { component: { type: string } }) {
   return TYPE_META[item.component.type as ComponentType] ?? LEGACY_FALLBACK_META
 }
 
@@ -138,11 +133,6 @@ const TYPE_ICONS: Record<ComponentType, React.ReactNode> = {
   ),
 }
 
-const CUSTOM_ICON = (
-  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
-  </svg>
-)
 
 function TypePlaceholder({ type, className }: { type: ComponentType; className?: string }) {
   const meta = TYPE_META[type]
@@ -169,7 +159,7 @@ function SortablePlanItem({
   onRowTap: (item: PlanItem) => void
 }) {
   const meta = resolveMeta(item)
-  const photos = item.isAdHoc ? [] : (item.component.photos ?? []).filter(Boolean)
+  const photos = (item.component.photos ?? []).filter(Boolean)
   const firstPhoto = photos[0] ?? null
   const extraCount = photos.length - 1
 
@@ -225,7 +215,7 @@ function SortablePlanItem({
           <div className="relative shrink-0 rounded-lg overflow-hidden">
             <button
               type="button"
-              onClick={() => !item.isAdHoc && onPhotoTap(photos)}
+              onClick={() => onPhotoTap(photos)}
               style={{ width: PLAN_THUMB, height: PLAN_THUMB }}
               className="cursor-pointer active:opacity-80 transition-opacity block"
               aria-label={`View photos of ${item.component.title}`}
@@ -254,7 +244,7 @@ function SortablePlanItem({
         >
           <div className="flex items-center gap-1.5 text-[10px] font-heading uppercase tracking-wide">
             <span className={meta.textColor}>{meta.label}</span>
-            {!item.isAdHoc && item.component.curriculum && (
+            {item.component.curriculum && (
               <>
                 <span className="text-text-dim/40">·</span>
                 <span className="text-text-dim truncate">{item.component.curriculum}</span>
@@ -365,13 +355,11 @@ export default function TodaysPlanClient() {
   const [showMoveCalendar, setShowMoveCalendar] = useState(false)
 
   // ── Derived ──────────────────────────────────────────────────────────────────
-  const stationCount = items.filter(i => !i.isAdHoc && i.component.type === 'station').length
-  const gameCount = items.filter(i => !i.isAdHoc && i.component.type === 'game').length
-  const customCount = items.filter(i => i.isAdHoc).length
+  const stationCount = items.filter(i => i.component.type === 'station').length
+  const gameCount = items.filter(i => i.component.type === 'game').length
   const typeSummary = [
     stationCount > 0 && `${stationCount} station${stationCount > 1 ? 's' : ''}`,
     gameCount > 0 && `${gameCount} game${gameCount > 1 ? 's' : ''}`,
-    customCount > 0 && `${customCount} custom`,
   ].filter(Boolean).join(' · ')
 
   const siblingIndex = editingPlanId
@@ -500,34 +488,6 @@ export default function TodaysPlanClient() {
     ])
   }
 
-  function handleAdHocSelect(title: string, description?: string, durationMinutes?: number) {
-    dirtyRef.current = true
-    setItems(prev => [
-      ...prev,
-      {
-        localId: randomId(),
-        component: {
-          id: randomId(),
-          type: 'station' as ComponentType,
-          title,
-          curriculum: null,
-          description: description ?? null,
-          equipment: null,
-          skills: [],
-          photos: [],
-          video_url: null,
-          video_link: null,
-          duration_minutes: durationMinutes ?? null,
-          folder_id: null,
-          in_handoff: false,
-          created_at: new Date().toISOString(),
-        },
-        isAdHoc: true,
-        durationMinutes: durationMinutes ?? null,
-        coachNote: null,
-      },
-    ])
-  }
 
   function handleRemove(localId: string) {
     const idx = items.findIndex(i => i.localId === localId)
@@ -1233,9 +1193,8 @@ export default function TodaysPlanClient() {
       {showPicker && (
         <ComponentPickerModal
           onSelect={handleSelect}
-          onAdHocSelect={handleAdHocSelect}
           onClose={() => setShowPicker(false)}
-          existingIds={new Set(items.filter(i => !i.isAdHoc).map(i => i.component.id))}
+          existingIds={new Set(items.map(i => i.component.id))}
         />
       )}
 

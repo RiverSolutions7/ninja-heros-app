@@ -1,10 +1,12 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/app/lib/supabase'
 import type { CurriculumRow } from '@/app/lib/database.types'
 
 export default function SettingsPage() {
+  const router = useRouter()
   const [curriculums, setCurriculums] = useState<CurriculumRow[]>([])
   const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -202,6 +204,21 @@ export default function SettingsPage() {
             )}
           </div>
         )}
+      </section>
+
+      {/* ── Dev / Reset ───────────────────────────────────────── */}
+      <section className="mt-8">
+        <p className="text-[11px] font-heading uppercase tracking-wider text-text-dim mb-3">Developer</p>
+        <button
+          type="button"
+          onClick={() => {
+            localStorage.removeItem('ninja-coach-profile')
+            router.replace('/onboarding')
+          }}
+          className="w-full text-left bg-bg-card border border-bg-border rounded-xl px-4 py-3 font-heading text-sm text-accent-fire hover:bg-accent-fire/5 transition-colors"
+        >
+          Reset onboarding
+        </button>
       </section>
     </div>
   )

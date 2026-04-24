@@ -1,55 +1,39 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/app/lib/supabase'
 import type { ComponentRow, ComponentType, CurriculumRow } from '@/app/lib/database.types'
-import { useVoiceNote } from '@/app/hooks/useVoiceNote'
 import ComponentDetailSheet from '@/app/components/library/ComponentDetailSheet'
 import ComponentCard from '@/app/components/library/ComponentCard'
 import ChoiceSheet, { type ChoiceOption } from '@/app/components/ui/ChoiceSheet'
 
-type TabValue = ComponentType | 'custom'
-
-const TYPE_FILTERS: { label: string; value: TabValue }[] = [
+const TYPE_FILTERS: { label: string; value: ComponentType }[] = [
   { label: 'Stations', value: 'station' },
   { label: 'Games', value: 'game' },
-  { label: 'Custom', value: 'custom' },
 ]
 
 // Module-level variable so the last selected tab persists across modal open/close
-let _lastTypeFilter: TabValue = 'station'
+let _lastTypeFilter: ComponentType = 'station'
 
 interface ComponentPickerModalProps {
   onSelect: (component: ComponentRow) => void
-  onAdHocSelect: (title: string, description?: string, durationMinutes?: number) => void
   onClose: () => void
   existingIds?: Set<string>
 }
 
 // ── Main modal ────────────────────────────────────────────────
 
-export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose, existingIds }: ComponentPickerModalProps) {
+export default function ComponentPickerModal({ onSelect, onClose, existingIds }: ComponentPickerModalProps) {
   const [components, setComponents] = useState<ComponentRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [typeFilter, setTypeFilter] = useState<TabValue>(_lastTypeFilter)
+  const [typeFilter, setTypeFilter] = useState<ComponentType>(_lastTypeFilter)
   const [curriculumFilter, setCurriculumFilter] = useState('')
   const [curriculumSheetOpen, setCurriculumSheetOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [curriculums, setCurriculums] = useState<CurriculumRow[]>([])
   const [mounted, setMounted] = useState(false)
-  // Detail preview — delegated to the unified ComponentDetailSheet
   const [preview, setPreview] = useState<ComponentRow | null>(null)
-  // Create Your Own state
-  const [adHocTitle, setAdHocTitle] = useState('')
-  const [adHocDescription, setAdHocDescription] = useState('')
-  const [adHocDuration, setAdHocDuration] = useState<number | null>(null)
-  // Transient confirmation: flips the CTA to a green "Added to plan" panel
-  // for ~1.8s after an add, then resets so the coach can dictate the next.
-  const [adHocAddState, setAdHocAddState] = useState<'idle' | 'added'>('idle')
-  const { voiceState, transcript, startRecording, stopRecording, parseComponent, reset: resetVoice, isSupported, errorMessage } = useVoiceNote()
-  // Snapshot of ad-hoc fields taken when coach taps mic after a prior fill.
-  const existingRef = useRef<{ title: string; description: string; durationMinutes: number | null } | null>(null)
 
   useEffect(() => {
     setMounted(true)
@@ -69,121 +53,20 @@ export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose,
       .then(({ data }) => setCurriculums((data as CurriculumRow[]) ?? []))
   }, [])
 
-  function handleTypeChange(tab: TabValue) {
+  function handleTypeChange(tab: ComponentType) {
     _lastTypeFilter = tab
     setTypeFilter(tab)
     setSearch('')
-    if (tab !== 'custom') resetVoice()
   }
 
-  function handleStartOver() {
-    existingRef.current = null
-    resetVoice()
-    setAdHocTitle('')
-    setAdHocDescription('')
-    setAdHocDuration(null)
-    startRecording()
-  }
-
-  async function handleMicToggle() {
-    // Fresh recording — clear fields and start from scratch
-    if (voiceState === 'idle' || voiceState === 'error') {
-      existingRef.current = null
-      resetVoice()
-      setAdHocTitle('')
-      setAdHocDescription('')
-      setAdHocDuration(null)
-      startRecording()
-      return
-    }
-
-    // Refine recording — snapshot current fields, keep them visible while recording
-    if (voiceState === 'done') {
-      existingRef.current = { title: adHocTitle, description: adHocDescription, durationMinutes: adHocDuration }
-      resetVoice()
-      startRecording()
-      return
-    }
-
-    if (voiceState === 'recording') {
-      stopRecording()
-      const existing = existingRef.current
-      const result = await parseComponent('station', [], existing ?? undefined)
-      if (result.title) setAdHocTitle(result.title)
-      if (result.description) setAdHocDescription(result.description)
-      setAdHocDuration(result.durationMinutes ?? null)
-      existingRef.current = null
-    }
-  }
-
-  function handleAdHocAdd() {
-    const t = adHocTitle.trim()
-    if (!t) return
-    onAdHocSelect(t, adHocDescription.trim() || undefined, adHocDuration ?? undefined)
-    setAdHocTitle('')
-    setAdHocDescription('')
-    setAdHocDuration(null)
-    resetVoice()
-    // Flip CTA to the green "Added to plan" confirmation — mirrors the library
-    // path's ComponentDetailSheet so all three add flows feel the same.
-    setAdHocAddState('added')
-    setTimeout(() => setAdHocAddState('idle'), 1800)
-  }
-
-  let filtered = components
-  if (typeFilter !== 'custom') {
-    filtered = filtered.filter((c) => c.type === (typeFilter as ComponentType))
-    if (curriculumFilter) filtered = filtered.filter((c) => c.curriculum === curriculumFilter)
-    if (search) {
-      const q = search.toLowerCase()
-      filtered = filtered.filter((c) => c.title.toLowerCase().includes(q))
-    }
-  }
+  const filtered = components
+    .filter((c) => c.type === typeFilter)
+    .filter((c) => !curriculumFilter || c.curriculum === curriculumFilter)
+    .filter((c) => !search || c.title.toLowerCase().includes(search.toLowerCase()))
 
   function handleItemSelect(component: ComponentRow) {
     if (existingIds?.has(component.id)) return
     onSelect(component)
-  }
-
-  // ── Compact mic icon (matches PlanItemSheet) ────────────────────────
-  const micIcon = () => {
-    if (voiceState === 'recording') {
-      return (
-        <svg className="w-5 h-5 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zM8 11a4 4 0 008 0h2a6 6 0 01-5 5.91V19h3v2H8v-2h3v-2.09A6 6 0 016 11h2z"/>
-        </svg>
-      )
-    }
-    if (voiceState === 'processing') {
-      return <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-    }
-    if (voiceState === 'done') {
-      return (
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-        </svg>
-      )
-    }
-    if (voiceState === 'error') {
-      return (
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M12 3a9 9 0 100 18A9 9 0 0012 3z" />
-        </svg>
-      )
-    }
-    return (
-      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-        <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zM8 11a4 4 0 008 0h2a6 6 0 01-5 5.91V19h3v2H8v-2h3v-2.09A6 6 0 016 11h2z"/>
-      </svg>
-    )
-  }
-
-  const micColors: Record<string, string> = {
-    idle: 'bg-bg-input border border-bg-border text-text-muted hover:bg-white/5',
-    recording: 'bg-accent-fire text-white shadow-glow-fire',
-    processing: 'bg-bg-input border border-bg-border text-text-dim',
-    done: 'bg-accent-green/20 border border-accent-green/40 text-accent-green',
-    error: 'bg-red-900/30 border border-red-500/40 text-red-400',
   }
 
   if (!mounted) return null
@@ -235,210 +118,73 @@ export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose,
         ))}
       </div>
 
-      {/* Search + curriculum filter — hidden on Custom tab */}
-      {typeFilter !== 'custom' && (
-        <div className="px-4 pt-3 pb-3 flex-shrink-0 flex items-center gap-2 border-b border-bg-border/50">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search…"
-            className="flex-1 bg-bg-input border border-bg-border rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-dim focus:outline-none focus:border-accent-fire/50 transition-colors"
-          />
-          <button
-            type="button"
-            onClick={() => setCurriculumSheetOpen(true)}
-            className="inline-flex items-center gap-1.5 flex-shrink-0 bg-bg-input border border-bg-border rounded-xl pl-3 pr-2.5 py-2 text-sm text-text-muted hover:border-accent-fire/40 hover:text-text-primary transition-colors"
-            aria-haspopup="dialog"
-            aria-expanded={curriculumSheetOpen}
-          >
-            <span className="whitespace-nowrap">{curriculums.find((c) => c.age_group === curriculumFilter)?.label ?? 'All'}</span>
-            <svg className="w-3.5 h-3.5 text-text-dim flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-        </div>
-      )}
+      {/* Search + curriculum filter */}
+      <div className="px-4 pt-3 pb-3 flex-shrink-0 flex items-center gap-2 border-b border-bg-border/50">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search…"
+          className="flex-1 bg-bg-input border border-bg-border rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-dim focus:outline-none focus:border-accent-fire/50 transition-colors"
+        />
+        <button
+          type="button"
+          onClick={() => setCurriculumSheetOpen(true)}
+          className="inline-flex items-center gap-1.5 flex-shrink-0 bg-bg-input border border-bg-border rounded-xl pl-3 pr-2.5 py-2 text-sm text-text-muted hover:border-accent-fire/40 hover:text-text-primary transition-colors"
+          aria-haspopup="dialog"
+          aria-expanded={curriculumSheetOpen}
+        >
+          <span className="whitespace-nowrap">{curriculums.find((c) => c.age_group === curriculumFilter)?.label ?? 'All'}</span>
+          <svg className="w-3.5 h-3.5 text-text-dim flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+      </div>
 
-      {/* ═══════════════════════════════════════════════════════════ */}
-      {/* Custom tab                                                  */}
-      {/* ═══════════════════════════════════════════════════════════ */}
-      {typeFilter === 'custom' ? (
-        <div className="flex-1 overflow-y-auto px-4 pt-4 pb-6 flex flex-col gap-3">
-          {/* Compact mic row — matches PlanItemSheet pattern */}
-          {isSupported && (
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={handleMicToggle}
-                disabled={voiceState === 'processing'}
-                className={[
-                  'w-11 h-11 flex items-center justify-center rounded-full transition-all flex-shrink-0',
-                  micColors[voiceState],
-                  voiceState === 'processing' ? 'cursor-not-allowed' : '',
-                ].join(' ')}
-                aria-label={voiceState === 'recording' ? 'Stop recording' : 'Start recording'}
-              >
-                {micIcon()}
-              </button>
-              <div className="flex-1 min-w-0">
-                {voiceState === 'recording' && (
-                  <p className="text-xs text-accent-fire animate-pulse">Listening… tap mic to stop</p>
-                )}
-                {voiceState === 'processing' && (
-                  <p className="text-xs text-text-dim">Generating…</p>
-                )}
-                {voiceState === 'done' && (
-                  <div className="flex items-center gap-2">
-                    <p className="text-xs text-accent-green">Filled ✓ — tap to refine</p>
-                    <button
-                      type="button"
-                      onClick={handleStartOver}
-                      aria-label="Start voice over from scratch"
-                      className="text-xs text-text-dim hover:text-text-primary active:opacity-60 transition-colors min-h-[44px] px-4 py-2.5 focus-visible:ring-1 focus-visible:ring-white/30 rounded"
-                    >
-                      ↺ Start over
-                    </button>
-                  </div>
-                )}
-                {voiceState === 'error' && errorMessage && (
-                  <p className="text-xs text-accent-fire">{errorMessage}</p>
-                )}
-                {voiceState === 'idle' && (
-                  <p className="text-xs text-text-dim">Tap mic and describe the activity — or fill fields below</p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Live transcript preview while recording */}
-          {voiceState === 'recording' && transcript && (
-            <p className="text-xs text-text-dim italic leading-relaxed px-1">
-              &ldquo;{transcript}&rdquo;
-            </p>
-          )}
-
-          {/* Title input */}
-          <input
-            type="text"
-            value={adHocTitle}
-            onChange={(e) => setAdHocTitle(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) handleAdHocAdd() }}
-            placeholder="Activity name…"
-            className="w-full bg-bg-input border border-bg-border rounded-xl px-4 py-3 text-base text-text-primary placeholder:text-text-dim focus:outline-none focus:border-accent-fire/50 transition-colors"
-          />
-
-          {/* Description textarea */}
-          <textarea
-            value={adHocDescription}
-            onChange={(e) => setAdHocDescription(e.target.value)}
-            placeholder="Coaching cues… (optional)"
-            rows={3}
-            className="w-full bg-bg-input border border-bg-border rounded-xl px-4 py-3 text-sm text-text-primary placeholder:text-text-dim focus:outline-none focus:border-accent-fire/50 transition-colors resize-none leading-relaxed"
-          />
-
-          {/* Duration chip — only shown if voice extracted one */}
-          {adHocDuration && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-heading text-text-dim">Duration</span>
-              <span className="flex items-center gap-1.5 px-2.5 py-1 bg-accent-fire/10 border border-accent-fire/20 rounded-full text-xs font-heading text-accent-fire">
-                {adHocDuration} min
-                <button
-                  type="button"
-                  onClick={() => setAdHocDuration(null)}
-                  className="text-accent-fire/60 hover:text-accent-fire transition-colors"
-                  aria-label="Clear duration"
+      {/* Library list */}
+      <div className="flex-1 overflow-y-auto">
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
+            <div className="w-8 h-8 border-2 border-accent-fire border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-16">
+            <p className="font-heading text-text-muted">No components found</p>
+            {(search || curriculumFilter) && (
+              <p className="text-xs text-text-dim mt-1">Try clearing filters or search</p>
+            )}
+          </div>
+        ) : (
+          <div className="px-3 py-3 flex flex-col gap-2">
+            {filtered.map((component) => {
+              const inPlan = existingIds?.has(component.id) ?? false
+              return (
+                <div
+                  key={component.id}
+                  className={inPlan ? 'opacity-60 pointer-events-none' : ''}
                 >
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </span>
-            </div>
-          )}
+                  <ComponentCard
+                    component={component}
+                    onClick={inPlan ? undefined : () => setPreview(component)}
+                    trailing={
+                      inPlan ? (
+                        <div className="flex items-center gap-1 text-accent-green">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span className="text-[10px] font-heading uppercase tracking-wide">In plan</span>
+                        </div>
+                      ) : undefined
+                    }
+                  />
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
 
-          {/* Add-to-plan CTA — flips to green confirmation after tap, mirrors
-              the library path (ComponentDetailSheet) so every add flow in the
-              app confirms the same way. */}
-          {adHocAddState === 'added' ? (
-            <div className="mt-1 w-full flex items-center gap-2.5 py-3.5 px-5 rounded-xl bg-accent-green/15 border border-accent-green/30 min-h-[52px]">
-              <svg
-                className="w-5 h-5 text-accent-green flex-shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2.5}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-              <span className="flex-1 font-heading text-[14px] text-accent-green tracking-wide">
-                Added to plan
-              </span>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={handleAdHocAdd}
-              disabled={!adHocTitle.trim()}
-              className={[
-                'mt-1 w-full py-3.5 rounded-xl font-heading text-base transition-all min-h-[52px]',
-                adHocTitle.trim()
-                  ? 'bg-accent-fire text-white shadow-glow-fire active:scale-[0.98]'
-                  : 'bg-bg-card text-text-dim border border-bg-border cursor-not-allowed',
-              ].join(' ')}
-            >
-              Add to plan
-            </button>
-          )}
-        </div>
-      ) : (
-        /* ═══════════════════════════════════════════════════════════ */
-        /* Library list                                                */
-        /* ═══════════════════════════════════════════════════════════ */
-        <div className="flex-1 overflow-y-auto">
-          {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <div className="w-8 h-8 border-2 border-accent-fire border-t-transparent rounded-full animate-spin" />
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="text-center py-16">
-              <p className="font-heading text-text-muted">No components found</p>
-              {(search || curriculumFilter) && (
-                <p className="text-xs text-text-dim mt-1">Try clearing filters or search</p>
-              )}
-            </div>
-          ) : (
-            <div className="px-3 py-3 flex flex-col gap-2">
-              {filtered.map((component) => {
-                const inPlan = existingIds?.has(component.id) ?? false
-                return (
-                  <div
-                    key={component.id}
-                    className={inPlan ? 'opacity-60 pointer-events-none' : ''}
-                  >
-                    <ComponentCard
-                      component={component}
-                      onClick={inPlan ? undefined : () => setPreview(component)}
-                      trailing={
-                        inPlan ? (
-                          <div className="flex items-center gap-1 text-accent-green">
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                            </svg>
-                            <span className="text-[10px] font-heading uppercase tracking-wide">In plan</span>
-                          </div>
-                        ) : undefined
-                      }
-                    />
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Component detail sheet — unified editorial view ─────────── */}
+      {/* Component detail sheet */}
       {preview && (
         <ComponentDetailSheet
           component={preview}
@@ -448,7 +194,7 @@ export default function ComponentPickerModal({ onSelect, onAdHocSelect, onClose,
         />
       )}
 
-      {/* ── Curriculum choice sheet (replaces native <select>) ─────── */}
+      {/* Curriculum choice sheet */}
       <ChoiceSheet
         visible={curriculumSheetOpen}
         title="Filter by curriculum"
