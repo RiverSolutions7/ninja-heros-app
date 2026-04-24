@@ -70,11 +70,6 @@ function dateToIso(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-function formatWeekRange(start: Date): string {
-  const end = addDays(start, 6)
-  return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-}
-
 function formatShortDay(iso: string): string {
   return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 }
@@ -824,35 +819,42 @@ export default function TodaysPlanClient() {
 
         {/* Title */}
         <div className="flex-1 min-w-0">
-          <h1 className="font-heading text-xl text-text-primary leading-none truncate">
-            {viewMode === 'editing' && editingPlanLabel
-              ? editingPlanLabel
-              : formatSelectedDayLabel(selectedDayIso, todayIso)}
-          </h1>
-          {/* Save indicator — only while editing an existing saved plan */}
-          {viewMode === 'editing' && editingPlanId && saveStatus !== 'idle' && (
-            <p className={[
-              'text-[10px] font-heading uppercase tracking-wider leading-none mt-1.5 transition-opacity',
-              saveStatus === 'saving' ? 'text-text-dim' : 'text-accent-green',
-            ].join(' ')}>
-              {saveStatus === 'saving' ? 'Saving…' : '✓ Saved'}
-            </p>
+          {viewMode === 'dashboard' ? (
+            /* Dashboard: date chip — taps to open calendar browse */
+            <button
+              type="button"
+              onClick={() => setShowCalendar(true)}
+              className="inline-flex items-center gap-1 active:opacity-70 transition-opacity"
+              aria-label="Open calendar"
+            >
+              <h1 className="font-heading text-xl text-text-primary leading-none truncate">
+                {formatSelectedDayLabel(selectedDayIso, todayIso)}
+              </h1>
+              <svg className="w-4 h-4 text-text-dim flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          ) : (
+            /* Editing: plain plan label */
+            <div>
+              <h1 className="font-heading text-xl text-text-primary leading-none truncate">
+                {editingPlanLabel ?? formatSelectedDayLabel(selectedDayIso, todayIso)}
+              </h1>
+              {/* Save indicator — only while editing an existing saved plan */}
+              {editingPlanId && saveStatus !== 'idle' && (
+                <p className={[
+                  'text-[10px] font-heading uppercase tracking-wider leading-none mt-1.5 transition-opacity',
+                  saveStatus === 'saving' ? 'text-text-dim' : 'text-accent-green',
+                ].join(' ')}>
+                  {saveStatus === 'saving' ? 'Saving…' : '✓ Saved'}
+                </p>
+              )}
+            </div>
           )}
         </div>
 
         {/* Right actions */}
         <div className="flex items-center gap-2 flex-shrink-0">
-          {/* Calendar icon — opens month browse */}
-          <button
-            type="button"
-            onClick={() => setShowCalendar(true)}
-            className="w-10 h-10 flex items-center justify-center rounded-xl border border-bg-border text-text-muted hover:bg-white/5 active:scale-95 transition-all"
-            aria-label="View calendar"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          </button>
           {/* Share — editing mode only */}
           {viewMode === 'editing' && sharePlanId && items.length > 0 && (
             <button
@@ -870,6 +872,19 @@ export default function TodaysPlanClient() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
                 </svg>
               )}
+            </button>
+          )}
+          {/* Overflow three-dot — editing mode, saved plan only */}
+          {viewMode === 'editing' && editingPlanId && (
+            <button
+              type="button"
+              onClick={() => setShowPlanOptions(true)}
+              className="w-10 h-10 flex items-center justify-center rounded-xl border border-bg-border text-text-muted hover:bg-white/5 active:scale-95 transition-all"
+              aria-label="Plan options"
+            >
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>
+              </svg>
             </button>
           )}
         </div>
@@ -932,7 +947,6 @@ export default function TodaysPlanClient() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                 </svg>
               </button>
-              <p className="text-xs font-heading text-text-dim">{formatWeekRange(weekStart)}</p>
               <button
                 type="button"
                 onClick={nextWeek}
@@ -973,7 +987,7 @@ export default function TodaysPlanClient() {
                     ].join(' ')}>{num}</span>
                     <span className={[
                       'w-1 h-1 rounded-full mt-1.5',
-                      hasPlan ? (isSelected ? 'bg-white/70' : 'bg-accent-fire/60') : 'invisible',
+                      hasPlan && !isSelected ? 'bg-accent-fire/60' : 'invisible',
                     ].join(' ')} />
                   </button>
                 )
@@ -985,14 +999,6 @@ export default function TodaysPlanClient() {
           <div className="px-4 mt-4">
             <div className="flex items-center gap-1.5 mb-3">
               <p className="text-[11px] font-heading uppercase tracking-wider text-text-dim">Planned</p>
-              {selectedDayPlans.length > 0 && (
-                <>
-                  <span className="text-text-dim/40 text-[11px]">·</span>
-                  <span className="text-[11px] font-heading uppercase tracking-wider text-text-dim/60">
-                    {selectedDayPlans.length}
-                  </span>
-                </>
-              )}
             </div>
 
             {selectedDayLoading && (
@@ -1109,12 +1115,12 @@ export default function TodaysPlanClient() {
             </DndContext>
           )}
 
-          {/* ── Add component (dashed, below items) ── */}
+          {/* ── Add component (solid, below items) ── */}
           {items.length > 0 && (
             <button
               type="button"
               onClick={() => setShowPicker(true)}
-              className="mx-4 mt-3 w-[calc(100%-2rem)] flex items-center justify-center gap-1.5 bg-transparent border border-dashed border-bg-border text-text-dim hover:text-text-primary hover:border-text-muted font-heading text-sm px-4 py-3 rounded-xl transition-colors"
+              className="mx-4 mt-3 w-[calc(100%-2rem)] flex items-center justify-center gap-1.5 bg-accent-fire text-white font-heading text-sm px-4 py-3 rounded-xl active:scale-[0.98] transition-all"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -1123,33 +1129,16 @@ export default function TodaysPlanClient() {
             </button>
           )}
 
-          {/* ── Bottom action area ── */}
-          {items.length > 0 && (
+          {/* ── Bottom action area — new plan only (saved plans auto-save) ── */}
+          {items.length > 0 && !editingPlanId && (
             <div className="px-4 pt-5 pb-2">
-              {editingPlanId ? (
-                /* Saved plan: subtle bordered pill — findable without being loud */
-                <div className="flex justify-center">
-                  <button
-                    type="button"
-                    onClick={() => setShowPlanOptions(true)}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-bg-border font-heading text-xs uppercase tracking-wider text-text-muted hover:bg-white/5 hover:border-text-dim active:scale-95 transition-all"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                      <circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>
-                    </svg>
-                    Plan options
-                  </button>
-                </div>
-              ) : (
-                /* New plan: single primary CTA */
-                <button
-                  type="button"
-                  onClick={() => setShowDatePicker(true)}
-                  className="w-full font-heading text-base px-4 py-3.5 rounded-xl bg-accent-fire text-white active:scale-[0.98] transition-all min-h-[52px]"
-                >
-                  Save to calendar
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setShowDatePicker(true)}
+                className="w-full font-heading text-base px-4 py-3.5 rounded-xl bg-accent-fire text-white active:scale-[0.98] transition-all min-h-[52px]"
+              >
+                Save to calendar
+              </button>
             </div>
           )}
 

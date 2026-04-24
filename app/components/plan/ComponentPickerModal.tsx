@@ -30,7 +30,6 @@ export default function ComponentPickerModal({ onSelect, onClose, existingIds }:
   const [typeFilter, setTypeFilter] = useState<ComponentType>(_lastTypeFilter)
   const [curriculumFilter, setCurriculumFilter] = useState('')
   const [curriculumSheetOpen, setCurriculumSheetOpen] = useState(false)
-  const [search, setSearch] = useState('')
   const [curriculums, setCurriculums] = useState<CurriculumRow[]>([])
   const [mounted, setMounted] = useState(false)
   const [preview, setPreview] = useState<ComponentRow | null>(null)
@@ -56,13 +55,11 @@ export default function ComponentPickerModal({ onSelect, onClose, existingIds }:
   function handleTypeChange(tab: ComponentType) {
     _lastTypeFilter = tab
     setTypeFilter(tab)
-    setSearch('')
   }
 
   const filtered = components
     .filter((c) => c.type === typeFilter)
     .filter((c) => !curriculumFilter || c.curriculum === curriculumFilter)
-    .filter((c) => !search || c.title.toLowerCase().includes(search.toLowerCase()))
 
   function handleItemSelect(component: ComponentRow) {
     if (existingIds?.has(component.id)) return
@@ -118,23 +115,16 @@ export default function ComponentPickerModal({ onSelect, onClose, existingIds }:
         ))}
       </div>
 
-      {/* Search + curriculum filter */}
+      {/* Curriculum filter */}
       <div className="px-4 pt-3 pb-3 flex-shrink-0 flex items-center gap-2 border-b border-bg-border/50">
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search…"
-          className="flex-1 bg-bg-input border border-bg-border rounded-xl px-3 py-2 text-sm text-text-primary placeholder:text-text-dim focus:outline-none focus:border-accent-fire/50 transition-colors"
-        />
         <button
           type="button"
           onClick={() => setCurriculumSheetOpen(true)}
-          className="inline-flex items-center gap-1.5 flex-shrink-0 bg-bg-input border border-bg-border rounded-xl pl-3 pr-2.5 py-2 text-sm text-text-muted hover:border-accent-fire/40 hover:text-text-primary transition-colors"
+          className="inline-flex items-center gap-1.5 bg-bg-input border border-bg-border rounded-xl pl-3 pr-2.5 py-2 text-sm text-text-muted hover:border-accent-fire/40 hover:text-text-primary transition-colors"
           aria-haspopup="dialog"
           aria-expanded={curriculumSheetOpen}
         >
-          <span className="whitespace-nowrap">{curriculums.find((c) => c.age_group === curriculumFilter)?.label ?? 'All'}</span>
+          <span className="whitespace-nowrap">{curriculums.find((c) => c.age_group === curriculumFilter)?.label ?? 'All curricula'}</span>
           <svg className="w-3.5 h-3.5 text-text-dim flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
           </svg>
@@ -150,8 +140,8 @@ export default function ComponentPickerModal({ onSelect, onClose, existingIds }:
         ) : filtered.length === 0 ? (
           <div className="text-center py-16">
             <p className="font-heading text-text-muted">No components found</p>
-            {(search || curriculumFilter) && (
-              <p className="text-xs text-text-dim mt-1">Try clearing filters or search</p>
+            {curriculumFilter && (
+              <p className="text-xs text-text-dim mt-1">Try clearing the curriculum filter</p>
             )}
           </div>
         ) : (
@@ -159,24 +149,36 @@ export default function ComponentPickerModal({ onSelect, onClose, existingIds }:
             {filtered.map((component) => {
               const inPlan = existingIds?.has(component.id) ?? false
               return (
-                <div
-                  key={component.id}
-                  className={inPlan ? 'opacity-60 pointer-events-none' : ''}
-                >
-                  <ComponentCard
-                    component={component}
-                    onClick={inPlan ? undefined : () => setPreview(component)}
-                    trailing={
-                      inPlan ? (
-                        <div className="flex items-center gap-1 text-accent-green">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span className="text-[10px] font-heading uppercase tracking-wide">In plan</span>
-                        </div>
-                      ) : undefined
-                    }
-                  />
+                <div key={component.id} className="flex items-stretch gap-2">
+                  {/* Card body — taps to preview */}
+                  <div className="flex-1 min-w-0">
+                    <ComponentCard
+                      component={component}
+                      onClick={() => setPreview(component)}
+                    />
+                  </div>
+                  {/* Add / in-plan toggle button */}
+                  <button
+                    type="button"
+                    onClick={inPlan ? undefined : () => handleItemSelect(component)}
+                    className={[
+                      'flex-shrink-0 w-11 flex items-center justify-center rounded-xl border transition-all',
+                      inPlan
+                        ? 'border-accent-green/30 text-accent-green bg-accent-green/10 cursor-default'
+                        : 'border-bg-border text-text-dim hover:border-accent-fire/50 hover:text-accent-fire active:scale-95',
+                    ].join(' ')}
+                    aria-label={inPlan ? 'Already in plan' : `Add ${component.title} to plan`}
+                  >
+                    {inPlan ? (
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                      </svg>
+                    )}
+                  </button>
                 </div>
               )
             })}
@@ -184,13 +186,11 @@ export default function ComponentPickerModal({ onSelect, onClose, existingIds }:
         )}
       </div>
 
-      {/* Component detail sheet */}
+      {/* Component detail sheet — no onAdd so the CTA is hidden in picker context */}
       {preview && (
         <ComponentDetailSheet
           component={preview}
           onClose={() => setPreview(null)}
-          onAdd={() => { handleItemSelect(preview); setPreview(null) }}
-          isInPlan={existingIds?.has(preview.id) ?? false}
         />
       )}
 
