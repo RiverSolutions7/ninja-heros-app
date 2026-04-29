@@ -64,8 +64,8 @@ interface ComponentCardProps {
   trailing?: React.ReactNode
 }
 
-// 48px thumbnail — compact card target ~64px tall
-const THUMB = 48
+// 76px thumbnail — card target ~100px tall
+const THUMB = 76
 
 export default function ComponentCard({ component, showMenu = false, onClick, trailing }: ComponentCardProps) {
   const meta = TYPE_META[component.type]
@@ -76,7 +76,7 @@ export default function ComponentCard({ component, showMenu = false, onClick, tr
   return (
     <div
       onClick={onClick}
-      className="relative flex items-center gap-3 px-3 py-2 rounded-xl bg-bg-card cursor-pointer active:bg-white/[0.02] transition-colors"
+      className="relative flex items-center gap-4 px-4 py-3 rounded-xl bg-bg-card cursor-pointer active:bg-white/[0.02] transition-colors"
     >
       {/* ─── Thumbnail — always shown, colored placeholder when no photo ── */}
       <div
@@ -132,7 +132,7 @@ export default function ComponentCard({ component, showMenu = false, onClick, tr
             </>
           )}
         </div>
-        <p className="font-heading text-[15px] uppercase text-text-primary leading-tight truncate mt-0.5">
+        <p className="font-heading text-[15px] uppercase text-text-primary leading-tight truncate mt-1.5">
           {component.title}
         </p>
       </div>
