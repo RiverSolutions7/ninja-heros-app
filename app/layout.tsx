@@ -44,7 +44,7 @@ export default function RootLayout({
       <body className="bg-bg-primary font-body text-text-primary min-h-screen">
         {process.env.NODE_ENV !== 'production' && <DevErrorForwarder />}
         <ToastProvider>
-          <div className="max-w-2xl mx-auto px-4 pb-24 pt-4">
+          <div className="max-w-2xl mx-auto px-4 pb-28 pt-4">
             {children}
           </div>
           <TabNav />

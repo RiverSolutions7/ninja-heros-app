@@ -1,21 +1,19 @@
 import Link from 'next/link'
 import { Suspense } from 'react'
 import { fetchComponents, countComponents } from '@/app/lib/queries'
-import ComponentFilters from '@/app/components/library/ComponentFilters'
 import ComponentListClient from '@/app/components/library/ComponentListClient'
 
 interface LibraryPageProps {
   searchParams: Promise<{
-    ccurriculum?: string
     dismiss?: string
   }>
 }
 
-async function ComponentList({ activeCurriculum }: { activeCurriculum: string }) {
+async function ComponentList() {
   let components = []
 
   try {
-    components = await fetchComponents(undefined, activeCurriculum || undefined)
+    components = await fetchComponents()
   } catch {
     return (
       <div className="text-center py-12">
@@ -30,7 +28,7 @@ async function ComponentList({ activeCurriculum }: { activeCurriculum: string })
       <div className="text-center py-16">
         <p className="font-heading text-text-muted text-lg">No components yet</p>
         <p className="text-text-dim text-sm mt-2">
-          Tap &quot;+ Log Component&quot; to add your first game or station
+          Tap &quot;+&quot; to add your first game or station
         </p>
       </div>
     )
@@ -41,7 +39,6 @@ async function ComponentList({ activeCurriculum }: { activeCurriculum: string })
 
 export default async function LibraryPage({ searchParams }: LibraryPageProps) {
   const params = await searchParams
-  const activeCurriculum = params.ccurriculum ?? ''
 
   // Welcome screen for first-run (no components yet)
   if (params.dismiss !== '1') {
@@ -126,31 +123,8 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
   return (
     <div>
       {/* Page header */}
-      <div className="relative flex items-center justify-between mb-5 pt-2">
-        <div className="absolute inset-x-0 -top-4 h-24 bg-gradient-to-b from-accent-fire/[0.07] to-transparent pointer-events-none rounded-2xl -z-10" />
-        <div>
-          <h1 className="font-heading text-2xl text-text-primary leading-none">Component Library</h1>
-          <p className="flex items-center gap-1.5 text-text-dim text-xs mt-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-accent-fire inline-block opacity-60" />
-            Just Tumble · Ninja H.E.R.O.S.
-          </p>
-        </div>
-        <Link
-          href="/library/log-component"
-          className="inline-flex items-center gap-1.5 bg-accent-fire text-white font-heading text-sm px-4 py-2.5 rounded-xl active:scale-95 transition-all shadow-glow-fire min-h-[44px]"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-          Log Component
-        </Link>
-      </div>
-
-      {/* Filter dropdowns */}
-      <div className="mb-5">
-        <Suspense fallback={null}>
-          <ComponentFilters activeCurriculum={activeCurriculum} />
-        </Suspense>
+      <div className="mb-5 pt-2">
+        <h1 className="font-heading text-2xl uppercase text-text-primary leading-none">Component Library</h1>
       </div>
 
       {/* Component list */}
@@ -161,7 +135,7 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
           </div>
         }
       >
-        <ComponentList activeCurriculum={activeCurriculum} />
+        <ComponentList />
       </Suspense>
     </div>
   )

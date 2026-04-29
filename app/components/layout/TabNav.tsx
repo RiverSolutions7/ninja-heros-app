@@ -43,34 +43,59 @@ export default function TabNav() {
   if (/^\/plan\/[^/]+/.test(pathname)) return null
 
   return (
-    <nav className="fixed bottom-0 inset-x-0 z-50 glass safe-area-pb">
-      <div className="max-w-2xl mx-auto flex">
-        {tabs.map((tab) => {
-          const active =
-            pathname === tab.href || pathname.startsWith(tab.href + '/')
-          return (
-            <Link
-              key={tab.href}
-              href={tab.href}
-              className={`relative flex-1 flex flex-col items-center justify-center py-4 gap-1 transition-all duration-200 ${
-                active ? 'text-accent-fire' : 'text-text-dim hover:text-text-muted'
-              }`}
-            >
-              {/* Active indicator — fire line at top of tab */}
-              <span
-                className={`absolute top-0 left-1/2 -translate-x-1/2 h-0.5 rounded-full bg-accent-fire transition-all duration-300 ${
-                  active ? 'w-8 opacity-100' : 'w-0 opacity-0'
-                }`}
-              />
-              {tab.icon(active)}
-              <span className={`text-xs font-heading tracking-wide transition-colors duration-200 ${
-                active ? 'text-accent-fire' : 'text-text-dim'
-              }`}>
-                {tab.label}
-              </span>
-            </Link>
-          )
-        })}
+    <nav className="fixed bottom-0 inset-x-0 z-50 pointer-events-none">
+      <div
+        className="max-w-2xl mx-auto flex justify-center items-end px-6"
+        style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom, 0px))' }}
+      >
+        <div className="pointer-events-auto flex items-center gap-3">
+
+          {/* Floating pill */}
+          <div
+            className="flex items-center rounded-full px-1.5 py-1.5 gap-0.5"
+            style={{
+              background: 'rgba(15,22,41,0.88)',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              boxShadow: '0 4px 24px rgba(0,0,0,0.5)',
+            }}
+          >
+            {tabs.map((tab) => {
+              const active =
+                pathname === tab.href || pathname.startsWith(tab.href + '/')
+              return (
+                <Link
+                  key={tab.href}
+                  href={tab.href}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-full transition-all duration-200 min-h-0 ${
+                    active
+                      ? 'bg-accent-fire/[0.13] text-accent-fire'
+                      : 'text-text-dim hover:text-text-muted'
+                  }`}
+                >
+                  {tab.icon(active)}
+                  {active && (
+                    <span className="text-[11px] font-heading tracking-wide">
+                      {tab.label}
+                    </span>
+                  )}
+                </Link>
+              )
+            })}
+          </div>
+
+          {/* FAB */}
+          <Link
+            href="/library/log-component"
+            className="w-14 h-14 rounded-full bg-accent-fire flex items-center justify-center shadow-glow-fire active:scale-95 transition-transform min-h-0"
+          >
+            <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+          </Link>
+
+        </div>
       </div>
     </nav>
   )

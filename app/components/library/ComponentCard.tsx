@@ -81,7 +81,7 @@ export default function ComponentCard({ component, showMenu = false, onClick, tr
     <div
       onClick={onClick}
       className={[
-        'relative flex items-center gap-3 px-3 py-2.5 rounded-xl bg-bg-card',
+        'relative flex items-center gap-3 px-3 py-2 rounded-xl bg-bg-card',
         'border-l-4',
         meta.border,
         'cursor-pointer active:bg-white/[0.02] transition-colors',
@@ -137,12 +137,6 @@ export default function ComponentCard({ component, showMenu = false, onClick, tr
             <>
               <span className="text-text-dim/40">·</span>
               <span className="text-text-dim truncate">{component.curriculum}</span>
-            </>
-          )}
-          {component.duration_minutes != null && (
-            <>
-              <span className="text-text-dim/40">·</span>
-              <span className="text-text-dim">{component.duration_minutes} min</span>
             </>
           )}
         </div>
