@@ -30,6 +30,7 @@ export default function ComponentListClient({ components }: ComponentListClientP
   }, [searchOpen])
 
   const filtered = components
+    .filter(c => c.type === 'station' || c.type === 'game')
     .filter(c => activeType === 'all' || c.type === activeType)
     .filter(c => !searchQuery || c.title.toLowerCase().includes(searchQuery.toLowerCase()))
 
