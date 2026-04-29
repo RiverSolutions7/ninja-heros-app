@@ -61,15 +61,11 @@ interface ComponentCardProps {
   component: ComponentRow
   showMenu?: boolean
   onClick?: () => void
-  /** Optional node rendered in the right-side slot of the card. Takes precedence
-   * over showMenu when provided. Used by pickers to show inline status badges
-   * (e.g., "In plan") inside the flex row so the title truncates around it. */
   trailing?: React.ReactNode
 }
 
-// 72px thumbnail — inline styles so dimensions don't depend on Tailwind JIT
-// picking up arbitrary values. Keeps photo and icon variants identical in size.
-const THUMB = 72
+// 48px thumbnail — compact card target ~64px tall
+const THUMB = 48
 
 export default function ComponentCard({ component, showMenu = false, onClick, trailing }: ComponentCardProps) {
   const meta = TYPE_META[component.type]
@@ -80,54 +76,50 @@ export default function ComponentCard({ component, showMenu = false, onClick, tr
   return (
     <div
       onClick={onClick}
-      className={[
-        'relative flex items-center gap-3 px-3 py-2 rounded-xl bg-bg-card',
-        'border-l-4',
-        meta.border,
-        'cursor-pointer active:bg-white/[0.02] transition-colors',
-      ].join(' ')}
+      className="relative flex items-center gap-3 px-3 py-2 rounded-xl bg-bg-card cursor-pointer active:bg-white/[0.02] transition-colors"
     >
-      {/* ─── Thumbnail slot — only rendered when photo or video exists ── */}
-      {(firstPhoto || hasVideo) && (
-        <div
-          style={{ width: THUMB, height: THUMB, minWidth: THUMB }}
-          className="relative shrink-0 rounded-lg overflow-hidden"
-        >
-          {firstPhoto ? (
-            <>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={firstPhoto}
-                alt={component.title}
-                style={{ width: THUMB, height: THUMB }}
-                className="object-cover block"
-              />
-              {hasVideo && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                  <svg className="w-5 h-5 text-white drop-shadow" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M8 5.14v14l11-7-11-7z" />
-                  </svg>
-                </div>
-              )}
-              {photos.length > 1 && (
-                <span className="absolute bottom-0.5 right-0.5 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">
-                  +{photos.length - 1}
-                </span>
-              )}
-            </>
-          ) : (
-            // Video-only — play icon on dark background
-            <div
+      {/* ─── Thumbnail — always shown, colored placeholder when no photo ── */}
+      <div
+        style={{ width: THUMB, height: THUMB, minWidth: THUMB }}
+        className="relative shrink-0 rounded-lg overflow-hidden"
+      >
+        {firstPhoto ? (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={firstPhoto}
+              alt={component.title}
               style={{ width: THUMB, height: THUMB }}
-              className="flex items-center justify-center bg-bg-primary"
-            >
-              <svg className="w-7 h-7 text-text-dim/50" fill="currentColor" viewBox="0 0 24 24">
+              className="object-cover block"
+            />
+            {hasVideo && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                <svg className="w-4 h-4 text-white drop-shadow" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5.14v14l11-7-11-7z" />
+                </svg>
+              </div>
+            )}
+            {photos.length > 1 && (
+              <span className="absolute bottom-0.5 right-0.5 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">
+                +{photos.length - 1}
+              </span>
+            )}
+          </>
+        ) : (
+          <div
+            style={{ width: THUMB, height: THUMB }}
+            className={`flex items-center justify-center ${meta.placeholderBg}`}
+          >
+            {hasVideo ? (
+              <svg className="w-5 h-5 text-white/60" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5.14v14l11-7-11-7z" />
               </svg>
-            </div>
-          )}
-        </div>
-      )}
+            ) : (
+              <TypeIcon type={component.type} className="w-5 h-5 text-white/50" />
+            )}
+          </div>
+        )}
+      </div>
 
       {/* ─── Info stack ────────────────────────────────────────── */}
       <div className="flex-1 min-w-0">
@@ -140,7 +132,7 @@ export default function ComponentCard({ component, showMenu = false, onClick, tr
             </>
           )}
         </div>
-        <p className="font-heading text-[15px] text-text-primary leading-tight truncate mt-0.5">
+        <p className="font-heading text-[15px] uppercase text-text-primary leading-tight truncate mt-0.5">
           {component.title}
         </p>
       </div>
