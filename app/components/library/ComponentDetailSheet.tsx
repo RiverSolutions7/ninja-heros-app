@@ -224,7 +224,7 @@ export default function ComponentDetailSheet({
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
       <div
         className="relative w-full overflow-hidden"
-        style={{ height: '42vh' }}
+        style={{ height: '52vh' }}
         onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX }}
         onTouchEnd={handleSwipe}
       >
@@ -258,7 +258,7 @@ export default function ComponentDetailSheet({
         )}
 
         {/* Legibility gradient: dark at bottom for title, clear at top */}
-        <div className="absolute inset-x-0 bottom-0 h-3/5 bg-gradient-to-t from-bg-primary via-bg-primary/80 to-transparent pointer-events-none" />
+        <div className="absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-bg-primary via-bg-primary/80 to-transparent pointer-events-none" />
 
         {/* Back button — floating, glass */}
         <button
