@@ -54,7 +54,7 @@ export default function TabNav() {
           <div
             className="flex items-center rounded-full px-1.5 py-1.5 gap-0.5"
             style={{
-              background: 'rgba(15,22,41,0.88)',
+              background: 'rgba(20,28,50,0.92)',
               backdropFilter: 'blur(20px)',
               WebkitBackdropFilter: 'blur(20px)',
               border: '1px solid rgba(255,255,255,0.08)',

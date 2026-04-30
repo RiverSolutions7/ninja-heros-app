@@ -12,7 +12,7 @@ const config: Config = {
       },
       colors: {
         bg: {
-          primary: '#080c1a',
+          primary: '#0f1629',
           secondary: '#0f1629',
           card: '#141c32',
           input: '#0b1020',
