@@ -409,25 +409,23 @@ export default function ComponentDetailSheet({
           </div>
         )}
 
-        {/* Skills — fire-red chip pills */}
+        {/* Skills — fire-red chip pills, no header label */}
         {skills.length > 0 && (
-          <Section label="Skills">
-            <div className="flex flex-wrap gap-2">
-              {skills.map((s) => (
-                <span
-                  key={s}
-                  className="px-3 py-1.5 rounded-full border border-accent-fire/60 text-accent-fire text-[12px] font-heading tracking-wide"
-                >
-                  {s}
-                </span>
-              ))}
-            </div>
-          </Section>
+          <div className="pt-7 flex flex-wrap gap-2">
+            {skills.map((s) => (
+              <span
+                key={s}
+                className="px-3 py-1.5 rounded-full border border-accent-fire/60 text-accent-fire text-[12px] font-heading tracking-wide"
+              >
+                {s}
+              </span>
+            ))}
+          </div>
         )}
 
-        {/* Description — numbered steps with dotted connector */}
+        {/* Description — numbered steps, no header label */}
         {component.description && (
-          <Section label="How it runs">
+          <div className="pt-7">
             {(() => {
               const steps = component.description!.split('\n').map(s => s.trim().replace(/^[•\-*]\s*/, '')).filter(Boolean)
               return (
@@ -451,7 +449,7 @@ export default function ComponentDetailSheet({
                 </div>
               )
             })()}
-          </Section>
+          </div>
         )}
 
         {/* Equipment — prose */}
