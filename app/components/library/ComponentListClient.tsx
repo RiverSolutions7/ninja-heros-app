@@ -92,7 +92,7 @@ export default function ComponentListClient({ components }: ComponentListClientP
               onClick={() => setFilterOpen(true)}
               className="flex items-center gap-1.5 text-text-muted active:text-text-primary transition-colors min-h-0"
             >
-              <span className="font-heading text-sm">{filterLabel} · {filtered.length}</span>
+              <span className="text-sm">{filterLabel} · {filtered.length}</span>
               <svg className="w-3.5 h-3.5 text-text-dim flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
               </svg>

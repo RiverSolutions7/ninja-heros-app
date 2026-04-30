@@ -128,7 +128,8 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
           className="font-heading uppercase text-text-primary"
           style={{ fontSize: 'clamp(44px, 12vw, 56px)', lineHeight: 1.04 }}
         >
-          Component Library
+          <span className="block">Component</span>
+          <span className="block">Library</span>
         </h1>
       </div>
 
