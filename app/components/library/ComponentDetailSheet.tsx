@@ -107,6 +107,9 @@ export default function ComponentDetailSheet({
   const [overflowOpen, setOverflowOpen] = useState(false)
   const [deleteState, setDeleteState] = useState<'idle' | 'confirm' | 'deleting'>('idle')
 
+  // Photo lightbox
+  const [lightboxOpen, setLightboxOpen] = useState(false)
+
   // In picker context, isInPlan comes from the prop. Library context has no
   // in-plan detection (the library is reference-only, not an add surface).
   const isInPlan = isInPlanProp ?? false
@@ -230,8 +233,9 @@ export default function ComponentDetailSheet({
           <img
             src={photos[photoIndex]}
             alt={`${component.title} photo ${photoIndex + 1}`}
-            className="absolute inset-0 w-full h-full object-cover"
+            className="absolute inset-0 w-full h-full object-cover cursor-pointer"
             draggable={false}
+            onClick={(e) => { e.stopPropagation(); setLightboxOpen(true) }}
           />
         ) : (
           // No-photo fallback — composed gradient, never a flat empty box
@@ -622,7 +626,57 @@ export default function ComponentDetailSheet({
     </div>
   )
 
-  return typeof window !== 'undefined' ? createPortal(sheet, document.body) : null
+  // ── Photo lightbox ────────────────────────────────────────────────────────
+  const lightbox = lightboxOpen && photos.length > 0 ? (
+    <div
+      className="fixed inset-0 bg-black flex items-center justify-center"
+      style={{ zIndex: 10050 }}
+      onClick={() => setLightboxOpen(false)}
+      onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX }}
+      onTouchEnd={handleSwipe}
+    >
+      {/* X close */}
+      <button
+        type="button"
+        onClick={() => setLightboxOpen(false)}
+        aria-label="Close photo"
+        className="absolute top-4 left-4 w-11 h-11 flex items-center justify-center text-white active:opacity-60 transition-opacity"
+        style={{ zIndex: 10051 }}
+      >
+        <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+
+      {/* Photo — object-contain so full image is always visible */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={photos[photoIndex]}
+        alt={`${component.title} photo ${photoIndex + 1}`}
+        className="w-full h-full object-contain"
+        draggable={false}
+        onClick={(e) => e.stopPropagation()}
+      />
+
+      {/* Counter — only when multiple photos */}
+      {photos.length > 1 && (
+        <p
+          className="absolute font-heading text-white/80 text-sm tracking-widest"
+          style={{ bottom: 'max(2rem, env(safe-area-inset-bottom, 2rem))' }}
+        >
+          {photoIndex + 1} / {photos.length}
+        </p>
+      )}
+    </div>
+  ) : null
+
+  if (typeof window === 'undefined') return null
+  return (
+    <>
+      {createPortal(sheet, document.body)}
+      {lightbox && createPortal(lightbox, document.body)}
+    </>
+  )
 }
 
 // ── Stat primitive — no borders, no box; type does the work ──────────────────
