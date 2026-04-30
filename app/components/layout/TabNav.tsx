@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 const tabs = [
   {
@@ -37,9 +37,13 @@ const tabs = [
 export default function TabNav() {
   const pathname = usePathname()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const choiceOpen = searchParams.get('choice') === 'open'
 
   function handleFab() {
-    if (pathname === '/library' || pathname.startsWith('/library/')) {
+    if (choiceOpen) {
+      router.replace('/library')
+    } else if (pathname === '/library' || pathname.startsWith('/library/')) {
       router.push('/library?choice=open')
     } else {
       router.push('/library/log-component')
@@ -94,13 +98,19 @@ export default function TabNav() {
             })}
           </div>
 
-          {/* FAB — opens choice sheet on /library, goes direct elsewhere */}
+          {/* FAB — + morphs to × when choice overlay is open */}
           <button
             type="button"
             onClick={handleFab}
             className="w-14 h-14 rounded-full bg-accent-fire flex items-center justify-center shadow-glow-fire active:scale-95 transition-transform min-h-0"
           >
-            <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <svg
+              className={`w-6 h-6 text-white transition-transform duration-200 ease-in-out ${choiceOpen ? 'rotate-45' : 'rotate-0'}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2.5}
+            >
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
             </svg>
           </button>

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Russo_One, Nunito } from 'next/font/google'
+import { Suspense } from 'react'
 import './globals.css'
 import TabNav from './components/layout/TabNav'
 import DevErrorForwarder from './components/DevErrorForwarder'
@@ -47,7 +48,7 @@ export default function RootLayout({
           <div className="max-w-2xl mx-auto px-4 pb-28 pt-4">
             {children}
           </div>
-          <TabNav />
+          <Suspense fallback={null}><TabNav /></Suspense>
         </ToastProvider>
       </body>
     </html>

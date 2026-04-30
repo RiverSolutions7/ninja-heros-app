@@ -184,16 +184,6 @@ export default function ComponentListClient({ components }: ComponentListClientP
             </button>
           </div>
 
-          {/* Close X FAB */}
-          <button
-            type="button"
-            onClick={dismissChoice}
-            className="w-14 h-14 rounded-full bg-bg-card border border-white/[0.10] flex items-center justify-center text-text-muted active:text-text-primary active:scale-95 transition-all"
-          >
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
         </div>
       )}
     </>
