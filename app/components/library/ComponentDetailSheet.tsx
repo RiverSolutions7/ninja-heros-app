@@ -25,6 +25,7 @@ import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import type { ComponentRow } from '@/app/lib/database.types'
 import { fetchComponentUsage, type ComponentUsage } from '@/app/lib/queries'
+import { supabase } from '@/app/lib/supabase'
 
 interface ComponentDetailSheetProps {
   component: ComponentRow
@@ -102,6 +103,10 @@ export default function ComponentDetailSheet({
   // Share confirmation — transient "Link copied" flash on the share button
   const [shareCopied, setShareCopied] = useState(false)
 
+  // Overflow menu + delete flow
+  const [overflowOpen, setOverflowOpen] = useState(false)
+  const [deleteState, setDeleteState] = useState<'idle' | 'confirm' | 'deleting'>('idle')
+
   // In picker context, isInPlan comes from the prop. Library context has no
   // in-plan detection (the library is reference-only, not an add surface).
   const isInPlan = isInPlanProp ?? false
@@ -114,6 +119,10 @@ export default function ComponentDetailSheet({
     return () => { cancelled = true }
   }, [component.id])
 
+  useEffect(() => {
+    if (!overflowOpen) setDeleteState('idle')
+  }, [overflowOpen])
+
   function handleSwipe(e: React.TouchEvent) {
     if (photos.length < 2) return
     const diff = touchStartX.current - e.changedTouches[0].clientX
@@ -124,6 +133,13 @@ export default function ComponentDetailSheet({
   function handleEdit() {
     router.push(`/library/log-component/${component.id}`)
     onClose()
+  }
+
+  async function handleDelete() {
+    setDeleteState('deleting')
+    await supabase.from('components').delete().eq('id', component.id)
+    onClose()
+    router.refresh()
   }
 
   /**
@@ -181,7 +197,8 @@ export default function ComponentDetailSheet({
   const sheet = (
     <div
       style={{ position: 'fixed', inset: 0, zIndex: 10000 }}
-      className="bg-bg-primary overflow-y-auto"
+      className="bg-bg-primary overflow-y-auto animate-slide-in-right"
+      onClick={() => setOverflowOpen(false)}
     >
       {/* ── Celebration header (afterSave only) ──────────────────────────── */}
       {/* Editorial Strava-style stat block. Big fire-red number, thin uppercase
@@ -204,7 +221,7 @@ export default function ComponentDetailSheet({
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
       <div
         className="relative w-full overflow-hidden"
-        style={{ aspectRatio: '4 / 5', maxHeight: '78vh' }}
+        style={{ height: '42vh' }}
         onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX }}
         onTouchEnd={handleSwipe}
       >
@@ -262,66 +279,79 @@ export default function ComponentDetailSheet({
           </svg>
         </button>
 
-        {/* Top-right action cluster: Share + Edit */}
-        <div className="absolute top-4 right-4 flex items-center gap-2">
-          {/* Share — copies /component/[id] URL or opens native share sheet */}
+        {/* Three-dot overflow menu */}
+        <div className="absolute top-4 right-4" onClick={(e) => e.stopPropagation()}>
           <button
             type="button"
-            onClick={handleShare}
-            aria-label={shareCopied ? 'Link copied' : 'Share component'}
-            className={[
-              'w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-95',
-              shareCopied
-                ? 'bg-accent-green/30 text-white'
-                : 'bg-black/40 text-white/95 hover:bg-black/60',
-            ].join(' ')}
-            style={{
-              backdropFilter: 'blur(10px)',
-              WebkitBackdropFilter: 'blur(10px)',
-              minHeight: '40px',
-            }}
-          >
-            {shareCopied ? (
-              <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-            ) : (
-              <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
-                />
-              </svg>
-            )}
-          </button>
-
-          {/* Edit pencil — discreet, mirror of back button */}
-          <button
-            type="button"
-            onClick={handleEdit}
-            aria-label="Edit component"
+            onClick={() => setOverflowOpen((o) => !o)}
+            aria-label="More options"
             className="w-10 h-10 rounded-full bg-black/40 flex items-center justify-center text-white/95 hover:bg-black/60 active:scale-95 transition-all"
-            style={{
-              backdropFilter: 'blur(10px)',
-              WebkitBackdropFilter: 'blur(10px)',
-              minHeight: '40px',
-            }}
+            style={{ backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', minHeight: '40px' }}
           >
-            <svg
-              className="w-[18px] h-[18px]"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-              />
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+              <circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" />
             </svg>
           </button>
+
+          {overflowOpen && (
+            <div
+              className="absolute right-0 top-12 w-44 rounded-2xl overflow-hidden"
+              style={{
+                background: 'rgba(20,28,50,0.96)',
+                backdropFilter: 'blur(20px)',
+                WebkitBackdropFilter: 'blur(20px)',
+                border: '1px solid rgba(255,255,255,0.10)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+              }}
+            >
+              {deleteState === 'confirm' || deleteState === 'deleting' ? (
+                <div className="px-4 py-4 flex flex-col gap-3">
+                  <p className="text-white text-[13px] font-heading leading-snug">
+                    Delete &ldquo;{component.title}&rdquo;? This can&rsquo;t be undone.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={deleteState === 'deleting'}
+                    className="w-full py-2.5 rounded-xl bg-accent-fire text-white font-heading text-[13px] tracking-wide active:opacity-80 disabled:opacity-60"
+                  >
+                    {deleteState === 'deleting' ? 'Deleting…' : 'Delete'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteState('idle')}
+                    className="w-full py-2 text-text-muted font-heading text-[12px] tracking-wide"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleEdit}
+                    className="w-full flex items-center gap-3 px-4 py-3.5 text-white/90 hover:bg-white/[0.06] active:bg-white/[0.10] transition-colors"
+                  >
+                    <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    <span className="font-heading text-[13px] tracking-wide">Edit</span>
+                  </button>
+                  <div className="border-t border-white/[0.06]" />
+                  <button
+                    type="button"
+                    onClick={() => setDeleteState('confirm')}
+                    className="w-full flex items-center gap-3 px-4 py-3.5 text-accent-fire hover:bg-accent-fire/[0.08] active:bg-accent-fire/[0.14] transition-colors"
+                  >
+                    <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    <span className="font-heading text-[13px] tracking-wide">Delete</span>
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Dot indicators — only if multiple photos */}
@@ -341,57 +371,82 @@ export default function ComponentDetailSheet({
           </div>
         )}
 
-        {/* Title block — overlaid bottom-left */}
-        <div className="absolute inset-x-0 bottom-0 px-6 pb-7">
-          <p className="text-accent-fire text-[10px] font-heading tracking-[0.22em] mb-3">
-            {metaLine}
-          </p>
-          <h1
-            className="font-heading text-white leading-[1.02]"
-            style={{ fontSize: 'clamp(30px, 8.5vw, 44px)' }}
-          >
-            {component.title}
-          </h1>
-        </div>
+      </div>
+
+      {/* ── Title + meta — below hero ─────────────────────────────────────── */}
+      <div className="px-6 pt-5 pb-2">
+        <p className="text-accent-fire text-[10px] font-heading tracking-[0.22em] mb-2">
+          {metaLine}
+        </p>
+        <h1
+          className="font-heading text-white leading-[1.02]"
+          style={{ fontSize: 'clamp(28px, 7.5vw, 40px)' }}
+        >
+          {component.title}
+        </h1>
       </div>
 
       {/* ── Body ─────────────────────────────────────────────────────────── */}
       {/* pb-32 only when the sticky footer is present (afterSave or picker);
-          pb-8 in library-browse context where the footer is absent. */}
-      <div className={`px-6 pt-2 ${mode === 'afterSave' || onAdd !== undefined ? 'pb-32' : 'pb-8'}`}>
-        {/* Stat row — 3-up, no per-stat borders, one thin divider below */}
-        <div className="grid grid-cols-3 gap-3 pb-7 border-b border-white/[0.06]">
-          <Stat value={durationValue} label={durationLabel} />
-          <Stat
-            value={formatDateAdded(component.created_at)}
-            label="Added"
-          />
-          <Stat
-            value={usage ? formatDaysSince(usage.daysSince) : '—'}
-            label="Last used"
-          />
-        </div>
+          pb-28 in library-browse context to clear the Share FAB. */}
+      <div className={`px-6 pt-2 ${mode === 'afterSave' || onAdd !== undefined ? 'pb-32' : 'pb-28'}`}>
+        {/* Stat row — shown only in picker / afterSave context, not library browse */}
+        {(mode === 'afterSave' || onAdd !== undefined) && (
+          <div className="grid grid-cols-3 gap-3 pb-7 border-b border-white/[0.06]">
+            <Stat value={durationValue} label={durationLabel} />
+            <Stat
+              value={formatDateAdded(component.created_at)}
+              label="Added"
+            />
+            <Stat
+              value={usage ? formatDaysSince(usage.daysSince) : '—'}
+              label="Last used"
+            />
+          </div>
+        )}
 
-        {/* Skills — single prose line, dot-separated */}
+        {/* Skills — fire-red chip pills */}
         {skills.length > 0 && (
           <Section label="Skills">
-            <p className="text-text-primary text-[15px] leading-relaxed">
-              {skills.map((s, i) => (
-                <span key={s}>
-                  {i > 0 && <span className="text-text-dim/50 mx-2 select-none">·</span>}
-                  <span>{s}</span>
+            <div className="flex flex-wrap gap-2">
+              {skills.map((s) => (
+                <span
+                  key={s}
+                  className="px-3 py-1.5 rounded-full border border-accent-fire/60 text-accent-fire text-[12px] font-heading tracking-wide"
+                >
+                  {s}
                 </span>
               ))}
-            </p>
+            </div>
           </Section>
         )}
 
-        {/* Description — editorial prose */}
+        {/* Description — numbered steps with dotted connector */}
         {component.description && (
           <Section label="How it runs">
-            <p className="text-text-primary text-[16px] leading-[1.7] whitespace-pre-wrap">
-              {component.description}
-            </p>
+            {(() => {
+              const steps = component.description!.split('\n').map(s => s.trim()).filter(Boolean)
+              return (
+                <div className="flex flex-col">
+                  {steps.map((step, i) => (
+                    <div key={i} className="flex gap-3">
+                      <div className="flex flex-col items-center flex-shrink-0">
+                        <div className="w-7 h-7 rounded-full border border-accent-fire flex items-center justify-center">
+                          <span className="font-heading text-accent-fire text-[12px]">{i + 1}</span>
+                        </div>
+                        {i < steps.length - 1 && (
+                          <div
+                            className="flex-1 border-l border-dashed border-accent-fire/30 my-1"
+                            style={{ minHeight: '20px' }}
+                          />
+                        )}
+                      </div>
+                      <p className="text-text-primary text-[15px] leading-relaxed pb-4 flex-1">{step}</p>
+                    </div>
+                  ))}
+                </div>
+              )
+            })()}
           </Section>
         )}
 
@@ -444,6 +499,30 @@ export default function ComponentDetailSheet({
           </Section>
         )}
       </div>
+
+      {/* ── Share FAB — library browse context only ──────────────────────── */}
+      {mode === 'default' && onAdd === undefined && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); handleShare() }}
+          aria-label={shareCopied ? 'Link copied' : 'Share component'}
+          className={[
+            'fixed bottom-8 right-6 w-14 h-14 rounded-full flex items-center justify-center shadow-glow-fire transition-all active:scale-95',
+            shareCopied ? 'bg-accent-green' : 'bg-accent-fire',
+          ].join(' ')}
+          style={{ zIndex: 10010 }}
+        >
+          {shareCopied ? (
+            <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          ) : (
+            <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+            </svg>
+          )}
+        </button>
+      )}
 
       {/* ── Sticky CTA footer ────────────────────────────────────────────── */}
       {/* Shown only in picker context (onAdd provided) or after a save.

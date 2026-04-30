@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import type { ComponentRow, ComponentType } from '@/app/lib/database.types'
 import ComponentCard from './ComponentCard'
 import ComponentDetailSheet from './ComponentDetailSheet'
@@ -12,12 +13,20 @@ interface ComponentListClientProps {
 }
 
 export default function ComponentListClient({ components }: ComponentListClientProps) {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const choiceOpen = searchParams.get('choice') === 'open'
+
   const [selected, setSelected] = useState<ComponentRow | null>(null)
   const [activeType, setActiveType] = useState<'all' | ComponentType>('all')
   const [filterOpen, setFilterOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
+
+  function dismissChoice() {
+    router.replace('/library')
+  }
 
   useEffect(() => {
     if (searchOpen) searchRef.current?.focus()
@@ -140,6 +149,52 @@ export default function ComponentListClient({ components }: ComponentListClientP
           component={selected}
           onClose={() => setSelected(null)}
         />
+      )}
+
+      {/* Logging choice overlay */}
+      {choiceOpen && (
+        <div
+          className="fixed inset-0 z-[9999] flex flex-col items-center justify-end pb-8 px-4"
+          style={{ background: 'rgba(8,12,26,0.75)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }}
+          onClick={dismissChoice}
+        >
+          <div
+            className="w-full max-w-sm flex flex-col gap-3 mb-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Log One Component */}
+            <button
+              type="button"
+              onClick={() => router.push('/library/log-component')}
+              className="w-full text-left px-5 py-5 rounded-2xl bg-bg-card border border-white/[0.08] active:bg-white/[0.06] transition-colors"
+            >
+              <p className="font-heading text-text-primary text-[15px] tracking-wide uppercase">Log One Component</p>
+              <p className="text-text-muted text-[12px] mt-1 leading-snug">Quick capture. One station, one game, one update.</p>
+            </button>
+
+            {/* Walkthrough My Gym — Phase 3 stub */}
+            <button
+              type="button"
+              disabled
+              className="w-full text-left px-5 py-5 rounded-2xl bg-bg-card border border-white/[0.08] opacity-50 cursor-not-allowed"
+            >
+              <p className="font-heading text-text-primary text-[15px] tracking-wide uppercase">Walkthrough My Gym</p>
+              <p className="text-text-muted text-[12px] mt-1 leading-snug">Record multiple stations in one session. Best for setup days.</p>
+              <p className="text-accent-fire/70 text-[10px] font-heading tracking-widest uppercase mt-2">Coming soon</p>
+            </button>
+          </div>
+
+          {/* Close X FAB */}
+          <button
+            type="button"
+            onClick={dismissChoice}
+            className="w-14 h-14 rounded-full bg-bg-card border border-white/[0.10] flex items-center justify-center text-text-muted active:text-text-primary active:scale-95 transition-all"
+          >
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
       )}
     </>
   )

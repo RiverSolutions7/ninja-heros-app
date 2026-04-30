@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 
 const tabs = [
   {
@@ -36,6 +36,15 @@ const tabs = [
 
 export default function TabNav() {
   const pathname = usePathname()
+  const router = useRouter()
+
+  function handleFab() {
+    if (pathname === '/library' || pathname.startsWith('/library/')) {
+      router.push('/library?choice=open')
+    } else {
+      router.push('/library/log-component')
+    }
+  }
 
   // Hide nav on public share pages
   if (pathname.startsWith('/class/')) return null
@@ -85,15 +94,16 @@ export default function TabNav() {
             })}
           </div>
 
-          {/* FAB */}
-          <Link
-            href="/library/log-component"
+          {/* FAB — opens choice sheet on /library, goes direct elsewhere */}
+          <button
+            type="button"
+            onClick={handleFab}
             className="w-14 h-14 rounded-full bg-accent-fire flex items-center justify-center shadow-glow-fire active:scale-95 transition-transform min-h-0"
           >
             <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
             </svg>
-          </Link>
+          </button>
 
         </div>
       </div>

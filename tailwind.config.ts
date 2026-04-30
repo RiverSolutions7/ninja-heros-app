@@ -59,11 +59,16 @@ const config: Config = {
           '40%':  { boxShadow: '0 0 0 6px rgba(255, 90, 31, 0.22)' },
           '100%': { boxShadow: '0 0 0 0 rgba(255, 90, 31, 0)' },
         },
+        'slide-in-right': {
+          '0%':   { transform: 'translateX(100%)' },
+          '100%': { transform: 'translateX(0)' },
+        },
       },
       animation: {
         'fade-in': 'fade-in 0.2s ease-out',
         'slide-up': 'slide-up 0.25s ease-out',
         'fill-pulse': 'fill-pulse 1.2s ease-out',
+        'slide-in-right': 'slide-in-right 0.3s ease',
       },
       transitionTimingFunction: {
         'spring': 'cubic-bezier(0.34, 1.56, 0.64, 1)',
