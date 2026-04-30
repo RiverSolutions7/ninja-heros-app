@@ -425,7 +425,7 @@ export default function ComponentDetailSheet({
         {component.description && (
           <Section label="How it runs">
             {(() => {
-              const steps = component.description!.split('\n').map(s => s.trim()).filter(Boolean)
+              const steps = component.description!.split('\n').map(s => s.trim().replace(/^[•\-*]\s*/, '')).filter(Boolean)
               return (
                 <div className="flex flex-col">
                   {steps.map((step, i) => (
