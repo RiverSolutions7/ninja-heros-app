@@ -76,7 +76,7 @@ export default function ComponentCard({ component, showMenu = false, onClick, tr
   return (
     <div
       onClick={onClick}
-      className="relative flex items-center gap-4 px-4 py-3 border-l-4 border-accent-fire cursor-pointer active:bg-white/[0.02] transition-colors"
+      className="relative flex items-center gap-4 px-4 py-3 cursor-pointer active:bg-white/[0.02] transition-colors"
     >
       {/* ─── Thumbnail — always shown, colored placeholder when no photo ── */}
       <div
