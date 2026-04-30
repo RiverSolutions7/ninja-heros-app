@@ -22,8 +22,8 @@ const config: Config = {
           fire: '#ff5a1f',
           orange: '#ff5a1f',
           gold: '#f59e0b',
-          green: '#64748b',
-          blue: '#64748b',
+          green: '#22c55e',
+          blue: '#3b82f6',
           purple: '#a855f7',
         },
         text: {
