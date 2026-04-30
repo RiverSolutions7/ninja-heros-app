@@ -154,12 +154,17 @@ export default function ComponentListClient({ components }: ComponentListClientP
       {/* Logging choice overlay */}
       {choiceOpen && (
         <div
-          className="fixed inset-0 z-[9999] flex flex-col items-center justify-end pb-8 px-4"
-          style={{ background: 'rgba(8,12,26,0.75)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }}
+          className="fixed inset-0 z-[9999] flex flex-col items-center justify-end px-4"
+          style={{
+            background: 'rgba(8,12,26,0.82)',
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
+            paddingBottom: 'calc(96px + env(safe-area-inset-bottom, 0px))',
+          }}
           onClick={dismissChoice}
         >
           <div
-            className="w-full max-w-sm flex flex-col gap-3 mb-5"
+            className="w-full max-w-sm flex flex-col gap-3"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Log One Component */}

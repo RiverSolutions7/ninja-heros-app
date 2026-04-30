@@ -56,7 +56,7 @@ export default function TabNav() {
   if (/^\/plan\/[^/]+/.test(pathname)) return null
 
   return (
-    <nav className="fixed bottom-0 inset-x-0 z-50 pointer-events-none">
+    <nav className="fixed bottom-0 inset-x-0 z-[10000] pointer-events-none">
       <div
         className="max-w-2xl mx-auto flex justify-center items-end px-6"
         style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom, 0px))' }}
