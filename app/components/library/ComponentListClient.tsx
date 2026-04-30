@@ -11,12 +11,6 @@ interface ComponentListClientProps {
   components: ComponentRow[]
 }
 
-const FILTER_OPTIONS: ChoiceOption[] = [
-  { value: 'all',     label: 'All' },
-  { value: 'station', label: 'Stations' },
-  { value: 'game',    label: 'Games' },
-]
-
 export default function ComponentListClient({ components }: ComponentListClientProps) {
   const [selected, setSelected] = useState<ComponentRow | null>(null)
   const [activeType, setActiveType] = useState<'all' | ComponentType>('all')
@@ -29,8 +23,17 @@ export default function ComponentListClient({ components }: ComponentListClientP
     if (searchOpen) searchRef.current?.focus()
   }, [searchOpen])
 
-  const filtered = components
-    .filter(c => c.type === 'station' || c.type === 'game')
+  const validComponents = components.filter(c => c.type === 'station' || c.type === 'game')
+  const stationCount = validComponents.filter(c => c.type === 'station').length
+  const gameCount = validComponents.filter(c => c.type === 'game').length
+
+  const FILTER_OPTIONS: ChoiceOption[] = [
+    { value: 'all',     label: 'All Components', sublabel: 'Stations and games together', count: validComponents.length, dotClass: 'bg-accent-fire' },
+    { value: 'station', label: 'Stations',        sublabel: 'Skill stations and circuits',  count: stationCount,          dotClass: 'bg-accent-blue' },
+    { value: 'game',    label: 'Games',           sublabel: 'Group games and warm-ups',     count: gameCount,             dotClass: 'bg-accent-green' },
+  ]
+
+  const filtered = validComponents
     .filter(c => activeType === 'all' || c.type === activeType)
     .filter(c => !searchQuery || c.title.toLowerCase().includes(searchQuery.toLowerCase()))
 

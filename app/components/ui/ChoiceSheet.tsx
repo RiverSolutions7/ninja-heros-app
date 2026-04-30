@@ -1,14 +1,3 @@
-// ============================================================
-// ChoiceSheet — single-select picker on a bottom sheet.
-// ------------------------------------------------------------
-// Replaces native <select> elements and any one-off "pick one
-// of these" lists. Renders each option as a big tappable row
-// with label + optional sublabel + selected-state checkmark.
-// Emits onSelect(value) and auto-closes via onClose.
-//
-// Intentionally presentational + dumb: parent owns the state.
-// ============================================================
-
 'use client'
 
 import BottomSheet from './BottomSheet'
@@ -17,6 +6,8 @@ export interface ChoiceOption<T extends string = string> {
   value: T
   label: string
   sublabel?: string
+  dotClass?: string  // e.g. 'bg-accent-blue' — colored dot indicator
+  count?: number     // right-side count badge
 }
 
 interface ChoiceSheetProps<T extends string = string> {
@@ -38,7 +29,7 @@ export default function ChoiceSheet<T extends string = string>({
 }: ChoiceSheetProps<T>) {
   return (
     <BottomSheet visible={visible} onClose={onClose} title={title}>
-      <div className="px-4 pt-2 pb-6 flex flex-col gap-2">
+      <div className="pt-1 pb-6 flex flex-col divide-y divide-white/[0.06]">
         {options.map((opt) => {
           const isSelected = selectedValue === opt.value
           return (
@@ -47,24 +38,33 @@ export default function ChoiceSheet<T extends string = string>({
               type="button"
               onClick={() => onSelect(opt.value)}
               className={[
-                'w-full flex items-center gap-3 rounded-xl px-4 py-3 text-left transition-all',
+                'w-full flex items-center gap-3 py-4 pr-5 text-left transition-colors',
                 isSelected
-                  ? 'bg-accent-fire/10 border border-accent-fire/40'
-                  : 'bg-bg-input border border-bg-border hover:border-accent-fire/30 active:scale-[0.99]',
+                  ? 'border-l-4 border-accent-fire pl-4 bg-accent-fire/[0.05]'
+                  : 'border-l-4 border-transparent pl-4',
               ].join(' ')}
             >
+              {opt.dotClass && (
+                <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${opt.dotClass}`} />
+              )}
               <div className="flex-1 min-w-0">
-                <p className={['font-heading text-[15px] leading-tight', isSelected ? 'text-accent-fire' : 'text-text-primary'].join(' ')}>
+                <p className={[
+                  'font-heading text-sm uppercase leading-tight',
+                  isSelected ? 'text-text-primary' : 'text-text-muted',
+                ].join(' ')}>
                   {opt.label}
                 </p>
                 {opt.sublabel && (
                   <p className="text-[11px] text-text-dim mt-0.5">{opt.sublabel}</p>
                 )}
               </div>
-              {isSelected && (
-                <svg className="w-5 h-5 text-accent-fire flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
+              {opt.count !== undefined && (
+                <span className={[
+                  'font-heading text-[11px] px-1.5 py-0.5 rounded flex-shrink-0',
+                  isSelected ? 'bg-accent-fire/20 text-accent-fire' : 'bg-white/10 text-text-dim',
+                ].join(' ')}>
+                  {opt.count}
+                </span>
               )}
             </button>
           )
