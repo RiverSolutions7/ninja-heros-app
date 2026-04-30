@@ -123,8 +123,13 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
   return (
     <div>
       {/* Page header */}
-      <div className="mb-5 pt-2">
-        <h1 className="font-heading text-2xl uppercase text-text-primary leading-none">Component Library</h1>
+      <div className="mb-7 pt-4">
+        <h1
+          className="font-heading uppercase text-text-primary"
+          style={{ fontSize: 'clamp(44px, 12vw, 56px)', lineHeight: 1.04 }}
+        >
+          Component Library
+        </h1>
       </div>
 
       {/* Component list */}
