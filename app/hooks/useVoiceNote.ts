@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import { parseComponentTranscript } from '@/app/lib/parseComponent'
 
 // Minimal type definitions for the Web Speech API (not in standard TS lib)
 interface SpeechRecognitionEvent extends Event {
@@ -167,23 +168,10 @@ export function useVoiceNote() {
     devLog('parse-component', { chars: text.length, type: componentType, refine: !!existing })
 
     try {
-      const res = await fetch('/api/parse-component', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcript: text, componentType, availableSkills, ...(existing ? { existing } : {}) }),
-      })
-
-      if (!res.ok) throw new Error(`api ${res.status}`)
-
-      const data = (await res.json()) as { title: string; description: string; skills: string[]; duration_minutes: number | null }
-      devLog('parse-component-done', { skills: (data.skills ?? []).length, duration: data.duration_minutes ?? 0 })
+      const result = await parseComponentTranscript(text, componentType, availableSkills, existing)
+      devLog('parse-component-done', { skills: result.skills.length, duration: result.durationMinutes ?? 0 })
       setVoiceState('done')
-      return {
-        title: data.title ?? '',
-        description: data.description ?? '',
-        skills: data.skills ?? [],
-        durationMinutes: data.duration_minutes ?? null,
-      }
+      return result
     } catch {
       devLog('parse-component-fail')
       setVoiceState('error')

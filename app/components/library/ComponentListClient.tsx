@@ -177,15 +177,14 @@ export default function ComponentListClient({ components }: ComponentListClientP
               <p className="text-text-muted text-[12px] mt-1 leading-snug">Quick capture. One station, one game, one update.</p>
             </button>
 
-            {/* Walkthrough My Gym — Phase 3 stub */}
+            {/* Walkthrough My Gym */}
             <button
               type="button"
-              disabled
-              className="w-full text-left px-5 py-5 rounded-2xl bg-bg-card border border-white/[0.08] opacity-50 cursor-not-allowed"
+              onClick={() => router.push('/library/walkthrough')}
+              className="w-full text-left px-5 py-5 rounded-2xl bg-bg-card border border-white/[0.08] active:bg-white/[0.06] transition-colors"
             >
               <p className="font-heading text-text-primary text-[15px] tracking-wide uppercase">Walkthrough My Gym</p>
               <p className="text-text-muted text-[12px] mt-1 leading-snug">Record multiple stations in one session. Best for setup days.</p>
-              <p className="text-accent-fire/70 text-[10px] font-heading tracking-widest uppercase mt-2">Coming soon</p>
             </button>
           </div>
 
