@@ -166,6 +166,7 @@ function StepRow({ n, text, isLast, isEditing, onTap, onChange, onBlur, onDelete
         {...handlers}
         role="button"
         tabIndex={0}
+        aria-label={`Edit step ${n}`}
         style={{
           ...rowStyle,
           display: 'flex',
@@ -674,6 +675,7 @@ export default function EditSheetW({ station, onClose, onSave }: Props) {
                 marginTop: steps.length > 0 ? 14 : 0,
                 padding: 0,
                 minHeight: 44,
+                minWidth: 44,
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
