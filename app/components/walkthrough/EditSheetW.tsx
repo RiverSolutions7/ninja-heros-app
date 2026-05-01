@@ -128,6 +128,7 @@ function StepRow({ n, text, isLast, isEditing, onTap, onChange, onBlur, onDelete
       >
         <button
           type="button"
+          aria-label="Delete step"
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => { e.stopPropagation(); onDelete() }}
           style={{
@@ -139,7 +140,10 @@ function StepRow({ n, text, isLast, isEditing, onTap, onChange, onBlur, onDelete
             alignItems: 'center',
             gap: 4,
             cursor: 'pointer',
-            padding: 8,
+            minWidth: 44,
+            minHeight: 44,
+            justifyContent: 'center',
+            padding: 0,
           }}
         >
           <TrashIcon />
@@ -160,6 +164,8 @@ function StepRow({ n, text, isLast, isEditing, onTap, onChange, onBlur, onDelete
       {/* Foreground row — slides left to reveal delete zone */}
       <div
         {...handlers}
+        role="button"
+        tabIndex={0}
         style={{
           ...rowStyle,
           display: 'flex',
@@ -170,6 +176,7 @@ function StepRow({ n, text, isLast, isEditing, onTap, onChange, onBlur, onDelete
           background: BG,
         }}
         onClick={(e) => { e.stopPropagation(); onTap() }}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onTap() } }}
       >
         {/* Number badge + dotted connector line */}
         <div
@@ -217,6 +224,7 @@ function StepRow({ n, text, isLast, isEditing, onTap, onChange, onBlur, onDelete
         {isEditing ? (
           <input
             ref={inputRef}
+            aria-label={`Step ${n}`}
             value={text}
             onChange={(e) => onChange(e.target.value)}
             onBlur={onBlur}
@@ -255,15 +263,20 @@ function StepRow({ n, text, isLast, isEditing, onTap, onChange, onBlur, onDelete
   )
 }
 
+interface Step { id: number; text: string }
+
 export default function EditSheetW({ station, onClose, onSave }: Props) {
   const initial = station.parsed!
   const [title, setTitle] = useState(initial.title)
   const [durationStr, setDurationStr] = useState(initial.durationMinutes ? String(initial.durationMinutes) : '')
-  const [steps, setSteps] = useState<string[]>(() => splitSteps(initial.description))
+  const nextId = useRef(0)
+  const [steps, setSteps] = useState<Step[]>(() =>
+    splitSteps(initial.description).map((text) => ({ id: nextId.current++, text }))
+  )
   const [skills, setSkills] = useState<string[]>(initial.skills)
 
   const [activeField, setActiveField] = useState<Field>(null)
-  const [editingStepIndex, setEditingStepIndex] = useState<number | null>(null)
+  const [editingStepId, setEditingStepId] = useState<number | null>(null)
 
   const titleRef = useRef<HTMLTextAreaElement>(null)
   const durRef = useRef<HTMLInputElement>(null)
@@ -281,30 +294,30 @@ export default function EditSheetW({ station, onClose, onSave }: Props) {
     const minutes = Number.parseInt(durationStr, 10)
     onSave({
       title: title.trim(),
-      description: steps.filter((s) => s.trim().length > 0).join('\n'),
+      description: steps.filter((s) => s.text.trim().length > 0).map((s) => s.text).join('\n'),
       skills,
       durationMinutes: Number.isFinite(minutes) && minutes > 0 ? minutes : null,
     })
   }
 
-  function handleStepChange(index: number, val: string) {
-    setSteps((prev) => prev.map((s, i) => (i === index ? val : s)))
+  function handleStepChange(id: number, val: string) {
+    setSteps((prev) => prev.map((s) => s.id === id ? { ...s, text: val } : s))
   }
 
   function handleStepBlur() {
-    setEditingStepIndex(null)
+    setEditingStepId(null)
   }
 
-  function handleDeleteStep(index: number) {
-    setEditingStepIndex(null)
-    setSteps((prev) => prev.filter((_, i) => i !== index))
+  function handleDeleteStep(id: number) {
+    setEditingStepId(null)
+    setSteps((prev) => prev.filter((s) => s.id !== id))
   }
 
   function handleAddStep() {
     setActiveField(null)
-    const newIndex = steps.length
-    setSteps((prev) => [...prev, ''])
-    setEditingStepIndex(newIndex)
+    const newId = nextId.current++
+    setSteps((prev) => [...prev, { id: newId, text: '' }])
+    setEditingStepId(newId)
   }
 
   function sectionStyle(id: Field): React.CSSProperties {
@@ -326,8 +339,8 @@ export default function EditSheetW({ station, onClose, onSave }: Props) {
     padding: '12px 14px',
     marginLeft: -14,
     marginRight: -14,
-    background: editingStepIndex !== null ? `${ACCENT}0d` : 'transparent',
-    borderLeft: `2px solid ${editingStepIndex !== null ? ACCENT : 'transparent'}`,
+    background: editingStepId !== null ? `${ACCENT}0d` : 'transparent',
+    borderLeft: `2px solid ${editingStepId !== null ? ACCENT : 'transparent'}`,
     transition: 'background 160ms, border-color 160ms',
   }
 
@@ -416,7 +429,7 @@ export default function EditSheetW({ station, onClose, onSave }: Props) {
 
         <div
           style={{ flex: 1, overflowY: 'auto', padding: '18px 20px 0' }}
-          onClick={() => { setActiveField(null); setEditingStepIndex(null) }}
+          onClick={() => { setActiveField(null); setEditingStepId(null) }}
         >
           <div
             style={{
@@ -435,7 +448,7 @@ export default function EditSheetW({ station, onClose, onSave }: Props) {
           <div
             onClick={(e) => {
               e.stopPropagation()
-              setEditingStepIndex(null)
+              setEditingStepId(null)
               setActiveField('title')
             }}
             style={sectionStyle('title')}
@@ -484,7 +497,7 @@ export default function EditSheetW({ station, onClose, onSave }: Props) {
           <div
             onClick={(e) => {
               e.stopPropagation()
-              setEditingStepIndex(null)
+              setEditingStepId(null)
               setActiveField('skills')
             }}
             style={sectionStyle('skills')}
@@ -541,7 +554,7 @@ export default function EditSheetW({ station, onClose, onSave }: Props) {
               <div
                 onClick={(e) => {
                   e.stopPropagation()
-                  setEditingStepIndex(null)
+                  setEditingStepId(null)
                   setActiveField('duration')
                 }}
                 style={sectionStyle('duration')}
@@ -593,7 +606,7 @@ export default function EditSheetW({ station, onClose, onSave }: Props) {
               <div
                 onClick={(e) => {
                   e.stopPropagation()
-                  setEditingStepIndex(null)
+                  setEditingStepId(null)
                   setActiveField('duration')
                 }}
                 style={sectionStyle('duration')}
@@ -622,7 +635,7 @@ export default function EditSheetW({ station, onClose, onSave }: Props) {
             onClick={(e) => { e.stopPropagation(); setActiveField(null) }}
             style={sequenceSectionStyle}
           >
-            {steps.length === 0 && editingStepIndex === null ? (
+            {steps.length === 0 && editingStepId === null ? (
               <div
                 style={{
                   fontFamily: 'var(--font-nunito), sans-serif',
@@ -635,17 +648,17 @@ export default function EditSheetW({ station, onClose, onSave }: Props) {
                 Tap + Add step to describe this station.
               </div>
             ) : (
-              steps.map((stepText, i) => (
+              steps.map((step, i) => (
                 <StepRow
-                  key={i}
+                  key={step.id}
                   n={i + 1}
-                  text={stepText}
+                  text={step.text}
                   isLast={i === steps.length - 1}
-                  isEditing={editingStepIndex === i}
-                  onTap={() => { setActiveField(null); setEditingStepIndex(i) }}
-                  onChange={(val) => handleStepChange(i, val)}
+                  isEditing={step.id === editingStepId}
+                  onTap={() => { setActiveField(null); setEditingStepId(step.id) }}
+                  onChange={(val) => handleStepChange(step.id, val)}
                   onBlur={handleStepBlur}
-                  onDelete={() => handleDeleteStep(i)}
+                  onDelete={() => handleDeleteStep(step.id)}
                 />
               ))
             )}
@@ -660,6 +673,7 @@ export default function EditSheetW({ station, onClose, onSave }: Props) {
                 gap: 10,
                 marginTop: steps.length > 0 ? 14 : 0,
                 padding: 0,
+                minHeight: 44,
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
