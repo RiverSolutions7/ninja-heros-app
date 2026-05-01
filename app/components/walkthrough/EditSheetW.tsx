@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { WalkthroughParsed, WalkthroughStation } from './types'
+import { useSwipeReveal, REVEAL_WIDTH_DEFAULT } from '../../hooks/useSwipeReveal'
 
 interface Props {
   station: WalkthroughStation
@@ -16,7 +17,7 @@ const FAINT = '#3e4d70'
 const DIM = '#6b7da3'
 const HAIRLINE = 'rgba(255,255,255,0.08)'
 
-type Field = 'title' | 'duration' | 'sequence' | 'skills' | null
+type Field = 'title' | 'duration' | 'skills' | null
 
 function splitSteps(desc: string): string[] {
   if (!desc) return []
@@ -74,68 +75,181 @@ function SkillPill({ label }: { label: string }) {
   )
 }
 
-function SequenceStep({ n, text, isLast }: { n: number; text: string; isLast: boolean }) {
+function TrashIcon() {
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'flex-start',
-        gap: 14,
-        paddingBottom: isLast ? 0 : 14,
-        position: 'relative',
-      }}
-    >
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6l-1 14H6L5 6" />
+      <path d="M10 11v6M14 11v6" />
+      <path d="M9 6V4h6v2" />
+    </svg>
+  )
+}
+
+interface StepRowProps {
+  n: number
+  text: string
+  isLast: boolean
+  isEditing: boolean
+  onTap: () => void
+  onChange: (val: string) => void
+  onBlur: () => void
+  onDelete: () => void
+}
+
+function StepRow({ n, text, isLast, isEditing, onTap, onChange, onBlur, onDelete }: StepRowProps) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const { handlers, rowStyle } = useSwipeReveal({ onDelete })
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus()
+      const len = inputRef.current.value.length
+      inputRef.current.setSelectionRange(len, len)
+    }
+  }, [isEditing])
+
+  return (
+    <div style={{ position: 'relative', overflow: 'hidden' }}>
+      {/* Delete zone — revealed by swiping left */}
       <div
         style={{
-          flexShrink: 0,
+          position: 'absolute',
+          top: 0,
+          bottom: 0,
+          right: 0,
+          width: REVEAL_WIDTH_DEFAULT,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          alignSelf: 'stretch',
+          justifyContent: 'center',
+          background: '#c0392b',
         }}
       >
-        <div
+        <button
+          type="button"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); onDelete() }}
           style={{
-            width: 26,
-            height: 26,
-            borderRadius: '50%',
-            border: `1.5px solid ${ACCENT}`,
-            color: ACCENT,
+            background: 'none',
+            border: 'none',
+            color: '#fff',
             display: 'flex',
+            flexDirection: 'column',
             alignItems: 'center',
-            justifyContent: 'center',
-            fontFamily: 'var(--font-russo), sans-serif',
-            fontSize: 12,
-            fontVariantNumeric: 'tabular-nums',
-            flexShrink: 0,
+            gap: 4,
+            cursor: 'pointer',
+            padding: 8,
           }}
         >
-          {n}
+          <TrashIcon />
+          <span
+            style={{
+              fontFamily: 'var(--font-russo), sans-serif',
+              fontSize: 9,
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              color: '#fff',
+            }}
+          >
+            Delete
+          </span>
+        </button>
+      </div>
+
+      {/* Foreground row — slides left to reveal delete zone */}
+      <div
+        {...handlers}
+        style={{
+          ...rowStyle,
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 14,
+          paddingBottom: isLast ? 0 : 14,
+          position: 'relative',
+          background: BG,
+        }}
+        onClick={(e) => { e.stopPropagation(); onTap() }}
+      >
+        {/* Number badge + dotted connector line */}
+        <div
+          style={{
+            flexShrink: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            alignSelf: 'stretch',
+          }}
+        >
+          <div
+            style={{
+              width: 26,
+              height: 26,
+              borderRadius: '50%',
+              border: `1.5px solid ${ACCENT}`,
+              color: ACCENT,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontFamily: 'var(--font-russo), sans-serif',
+              fontSize: 12,
+              fontVariantNumeric: 'tabular-nums',
+              flexShrink: 0,
+            }}
+          >
+            {n}
+          </div>
+          {!isLast && (
+            <div
+              style={{
+                flex: 1,
+                width: 0,
+                borderLeft: `1.5px dotted ${ACCENT}66`,
+                marginTop: 4,
+                marginBottom: 4,
+                minHeight: 12,
+              }}
+            />
+          )}
         </div>
-        {!isLast && (
+
+        {/* Step text or inline input */}
+        {isEditing ? (
+          <input
+            ref={inputRef}
+            value={text}
+            onChange={(e) => onChange(e.target.value)}
+            onBlur={onBlur}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              flex: 1,
+              background: 'transparent',
+              border: 'none',
+              borderBottom: `1px solid ${ACCENT}88`,
+              outline: 'none',
+              fontFamily: 'var(--font-nunito), sans-serif',
+              fontSize: 14.5,
+              color: '#fff',
+              lineHeight: 1.5,
+              paddingTop: 3,
+              paddingBottom: 6,
+            }}
+          />
+        ) : (
           <div
             style={{
               flex: 1,
-              width: 0,
-              borderLeft: `1.5px dotted ${ACCENT}66`,
-              marginTop: 4,
-              marginBottom: 4,
-              minHeight: 12,
+              fontFamily: 'var(--font-nunito), sans-serif',
+              fontSize: 14.5,
+              color: text.trim() ? '#fff' : DIM,
+              lineHeight: 1.5,
+              paddingTop: 3,
+              fontStyle: text.trim() ? 'normal' : 'italic',
             }}
-          />
+          >
+            {text.trim() || 'Empty — swipe to delete'}
+          </div>
         )}
-      </div>
-      <div
-        style={{
-          flex: 1,
-          fontFamily: 'var(--font-nunito), sans-serif',
-          fontSize: 14.5,
-          color: '#fff',
-          lineHeight: 1.5,
-          paddingTop: 3,
-        }}
-      >
-        {text}
       </div>
     </div>
   )
@@ -145,33 +259,52 @@ export default function EditSheetW({ station, onClose, onSave }: Props) {
   const initial = station.parsed!
   const [title, setTitle] = useState(initial.title)
   const [durationStr, setDurationStr] = useState(initial.durationMinutes ? String(initial.durationMinutes) : '')
-  const [desc, setDesc] = useState(initial.description)
+  const [steps, setSteps] = useState<string[]>(() => splitSteps(initial.description))
   const [skills, setSkills] = useState<string[]>(initial.skills)
 
   const [activeField, setActiveField] = useState<Field>(null)
+  const [editingStepIndex, setEditingStepIndex] = useState<number | null>(null)
+
   const titleRef = useRef<HTMLTextAreaElement>(null)
   const durRef = useRef<HTMLInputElement>(null)
-  const descRef = useRef<HTMLTextAreaElement>(null)
   const skillRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (activeField === 'title' && titleRef.current) titleRef.current.focus()
     if (activeField === 'duration' && durRef.current) durRef.current.focus()
-    if (activeField === 'sequence' && descRef.current) descRef.current.focus()
     if (activeField === 'skills' && skillRef.current) skillRef.current.focus()
   }, [activeField])
 
-  const steps = splitSteps(desc)
   const hasDuration = durationStr.trim().length > 0
 
   function handleSave() {
     const minutes = Number.parseInt(durationStr, 10)
     onSave({
       title: title.trim(),
-      description: desc.trim(),
+      description: steps.filter((s) => s.trim().length > 0).join('\n'),
       skills,
       durationMinutes: Number.isFinite(minutes) && minutes > 0 ? minutes : null,
     })
+  }
+
+  function handleStepChange(index: number, val: string) {
+    setSteps((prev) => prev.map((s, i) => (i === index ? val : s)))
+  }
+
+  function handleStepBlur() {
+    setEditingStepIndex(null)
+  }
+
+  function handleDeleteStep(index: number) {
+    setEditingStepIndex(null)
+    setSteps((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  function handleAddStep() {
+    setActiveField(null)
+    const newIndex = steps.length
+    setSteps((prev) => [...prev, ''])
+    setEditingStepIndex(newIndex)
   }
 
   function sectionStyle(id: Field): React.CSSProperties {
@@ -186,6 +319,16 @@ export default function EditSheetW({ station, onClose, onSave }: Props) {
       transition: 'background 160ms, border-color 160ms',
       cursor: isActive ? 'text' : 'pointer',
     }
+  }
+
+  const sequenceSectionStyle: React.CSSProperties = {
+    position: 'relative',
+    padding: '12px 14px',
+    marginLeft: -14,
+    marginRight: -14,
+    background: editingStepIndex !== null ? `${ACCENT}0d` : 'transparent',
+    borderLeft: `2px solid ${editingStepIndex !== null ? ACCENT : 'transparent'}`,
+    transition: 'background 160ms, border-color 160ms',
   }
 
   return (
@@ -273,7 +416,7 @@ export default function EditSheetW({ station, onClose, onSave }: Props) {
 
         <div
           style={{ flex: 1, overflowY: 'auto', padding: '18px 20px 0' }}
-          onClick={() => setActiveField(null)}
+          onClick={() => { setActiveField(null); setEditingStepIndex(null) }}
         >
           <div
             style={{
@@ -288,9 +431,11 @@ export default function EditSheetW({ station, onClose, onSave }: Props) {
             Station
           </div>
 
+          {/* Title */}
           <div
             onClick={(e) => {
               e.stopPropagation()
+              setEditingStepIndex(null)
               setActiveField('title')
             }}
             style={sectionStyle('title')}
@@ -335,9 +480,11 @@ export default function EditSheetW({ station, onClose, onSave }: Props) {
 
           <div style={{ height: 14 }} />
 
+          {/* Skills */}
           <div
             onClick={(e) => {
               e.stopPropagation()
+              setEditingStepIndex(null)
               setActiveField('skills')
             }}
             style={sectionStyle('skills')}
@@ -387,12 +534,14 @@ export default function EditSheetW({ station, onClose, onSave }: Props) {
             )}
           </div>
 
+          {/* Duration */}
           {hasDuration || activeField === 'duration' ? (
             <>
               <div style={{ height: 16 }} />
               <div
                 onClick={(e) => {
                   e.stopPropagation()
+                  setEditingStepIndex(null)
                   setActiveField('duration')
                 }}
                 style={sectionStyle('duration')}
@@ -444,6 +593,7 @@ export default function EditSheetW({ station, onClose, onSave }: Props) {
               <div
                 onClick={(e) => {
                   e.stopPropagation()
+                  setEditingStepIndex(null)
                   setActiveField('duration')
                 }}
                 style={sectionStyle('duration')}
@@ -467,68 +617,82 @@ export default function EditSheetW({ station, onClose, onSave }: Props) {
 
           <div style={{ height: 16 }} />
 
+          {/* Steps sequence — each row is individually tap-to-edit + swipe-to-delete */}
           <div
-            onClick={(e) => {
-              e.stopPropagation()
-              setActiveField('sequence')
-            }}
-            style={sectionStyle('sequence')}
+            onClick={(e) => { e.stopPropagation(); setActiveField(null) }}
+            style={sequenceSectionStyle}
           >
-            {activeField === 'sequence' ? (
-              <div onClick={(e) => e.stopPropagation()}>
-                <textarea
-                  ref={descRef}
-                  value={desc}
-                  onChange={(e) => setDesc(e.target.value)}
-                  rows={Math.max(4, steps.length + 1)}
-                  placeholder="One sentence per step. Each sentence becomes a numbered step."
-                  style={{
-                    width: '100%',
-                    background: 'transparent',
-                    border: `1px solid ${ACCENT}66`,
-                    outline: 'none',
-                    resize: 'vertical',
-                    fontFamily: 'var(--font-nunito), sans-serif',
-                    fontSize: 14,
-                    lineHeight: 1.55,
-                    color: '#fff',
-                    padding: 12,
-                    boxSizing: 'border-box',
-                  }}
-                />
-                <div
-                  style={{
-                    marginTop: 6,
-                    fontFamily: 'var(--font-russo), sans-serif',
-                    fontSize: 9,
-                    letterSpacing: '0.22em',
-                    color: FAINT,
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  {steps.length} step{steps.length === 1 ? '' : 's'} · split on sentence
-                </div>
+            {steps.length === 0 && editingStepIndex === null ? (
+              <div
+                style={{
+                  fontFamily: 'var(--font-nunito), sans-serif',
+                  fontSize: 13,
+                  color: DIM,
+                  fontStyle: 'italic',
+                  marginBottom: 12,
+                }}
+              >
+                Tap + Add step to describe this station.
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {steps.length === 0 ? (
-                  <div
-                    style={{
-                      fontFamily: 'var(--font-nunito), sans-serif',
-                      fontSize: 13,
-                      color: DIM,
-                      fontStyle: 'italic',
-                    }}
-                  >
-                    Tap to add the steps for this station.
-                  </div>
-                ) : (
-                  steps.map((s, i) => (
-                    <SequenceStep key={i} n={i + 1} text={s} isLast={i === steps.length - 1} />
-                  ))
-                )}
-              </div>
+              steps.map((stepText, i) => (
+                <StepRow
+                  key={i}
+                  n={i + 1}
+                  text={stepText}
+                  isLast={i === steps.length - 1}
+                  isEditing={editingStepIndex === i}
+                  onTap={() => { setActiveField(null); setEditingStepIndex(i) }}
+                  onChange={(val) => handleStepChange(i, val)}
+                  onBlur={handleStepBlur}
+                  onDelete={() => handleDeleteStep(i)}
+                />
+              ))
             )}
+
+            {/* Add step button */}
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); handleAddStep() }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                marginTop: steps.length > 0 ? 14 : 0,
+                padding: 0,
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              <div
+                style={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: '50%',
+                  border: `1.5px dashed ${ACCENT}55`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={`${ACCENT}88`} strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </div>
+              <span
+                style={{
+                  fontFamily: 'var(--font-russo), sans-serif',
+                  fontSize: 10,
+                  letterSpacing: '0.18em',
+                  textTransform: 'uppercase',
+                  color: `${ACCENT}88`,
+                }}
+              >
+                Add step
+              </span>
+            </button>
           </div>
 
           <div style={{ height: 24 }} />
