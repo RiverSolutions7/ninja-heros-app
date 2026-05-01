@@ -20,7 +20,17 @@ type Field = 'title' | 'duration' | 'sequence' | 'skills' | null
 
 function splitSteps(desc: string): string[] {
   if (!desc) return []
-  return desc.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean)
+  // Strip a single leading bullet, then split on newlines or bullet markers.
+  const normalized = desc.replace(/^\s*[•·\-]\s*/, '')
+  const parts = normalized
+    .split(/\n+|\s+[•·]\s+/g)
+    .map((s) => s.replace(/^[•·\-]\s*/, '').trim())
+    .filter(Boolean)
+  if (parts.length > 1) return parts
+  // No multi-item structure detected — try sentence splitting on the
+  // bullet-stripped string so the first sentence isn't prefixed with •.
+  const sentences = normalized.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean)
+  return sentences.length > 0 ? sentences : []
 }
 
 function ClockIcon({ color, size = 14 }: { color: string; size?: number }) {
@@ -225,15 +235,22 @@ export default function EditSheetW({ station, onClose, onSave }: Props) {
             top: 14,
             right: 14,
             zIndex: 5,
-            padding: 6,
+            width: 36,
+            height: 36,
+            borderRadius: '50%',
+            background: 'rgba(0,0,0,0.55)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            border: '1px solid rgba(255,255,255,0.18)',
             display: 'flex',
-            background: 'transparent',
-            border: 'none',
+            alignItems: 'center',
+            justifyContent: 'center',
             cursor: 'pointer',
+            padding: 0,
           }}
           aria-label="Close edit sheet"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={MUTED} strokeWidth="1.8" strokeLinecap="square">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="square">
             <path d="M6 6l12 12M18 6L6 18" />
           </svg>
         </button>

@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { randomId } from '@/app/lib/uuid'
 import type { WalkthroughParsed, WalkthroughStation } from './types'
 
@@ -18,6 +18,22 @@ const Ctx = createContext<WalkthroughCtx | null>(null)
 export function WalkthroughProvider({ children }: { children: React.ReactNode }) {
   const [stations, setStations] = useState<WalkthroughStation[]>([])
   const objectUrls = useRef<Set<string>>(new Set())
+
+  // Disable iOS pull-to-refresh while inside a walkthrough session — a
+  // refresh would wipe the in-memory stations (File blobs aren't
+  // serializable to storage) and dump the coach back at the intro.
+  useEffect(() => {
+    const html = document.documentElement
+    const body = document.body
+    const prevHtml = html.style.overscrollBehavior
+    const prevBody = body.style.overscrollBehavior
+    html.style.overscrollBehavior = 'none'
+    body.style.overscrollBehavior = 'none'
+    return () => {
+      html.style.overscrollBehavior = prevHtml
+      body.style.overscrollBehavior = prevBody
+    }
+  }, [])
 
   const addStation = useCallback((photoFile: File, transcript: string) => {
     const id = randomId()
