@@ -112,7 +112,6 @@ export default function W3Ready({ station, photoUrl, stations, newStationId, onR
           color: 'rgba(255,255,255,0.85)',
           textTransform: 'uppercase',
           textShadow: '0 2px 12px rgba(0,0,0,0.6)',
-          padding: '0 24px',
         }}
       >
         Tap to describe how this station runs
