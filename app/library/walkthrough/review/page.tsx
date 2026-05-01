@@ -10,14 +10,26 @@ import W5Review from '@/app/components/walkthrough/W5Review'
 
 export default function WalkthroughReviewPage() {
   const router = useRouter()
-  const { stations, setParsed, setParseError, clearAll } = useWalkthrough()
+  const { stations, setParsed, setParseError } = useWalkthrough()
   const [saving, setSaving] = useState(false)
   const parseStartedRef = useRef(false)
+  // Tracks whether the empty-stations redirect was already evaluated on
+  // mount. Without this ref the redirect fires *every* time `stations`
+  // becomes empty — including the one beat between the save loop's
+  // success and the navigation to /success — which races the push and
+  // dumps the coach back on the intro screen.
+  const emptyCheckDoneRef = useRef(false)
+  // Set to true once we've kicked off the navigation to /success so the
+  // page stops responding to context changes while React unmounts it.
+  const completingRef = useRef(false)
 
   useEffect(() => {
-    if (stations.length === 0) {
-      router.replace('/library/walkthrough')
-      return
+    if (!emptyCheckDoneRef.current) {
+      emptyCheckDoneRef.current = true
+      if (stations.length === 0) {
+        router.replace('/library/walkthrough')
+        return
+      }
     }
     if (parseStartedRef.current) return
     parseStartedRef.current = true
@@ -47,28 +59,44 @@ export default function WalkthroughReviewPage() {
       for (const station of stations) {
         if (!station.parsed) continue
         const photoUrl = await uploadStationPhoto(station.photoFile)
-        const { error } = await supabase.from('components').insert({
+        const insertPayload = {
           type: 'station',
-          title: station.parsed.title || 'Untitled station',
-          description: station.parsed.description,
-          skills: station.parsed.skills,
-          duration_minutes: station.parsed.durationMinutes,
-          photos: [photoUrl],
+          title: station.parsed.title.trim() || 'Untitled station',
           curriculum: null,
-          in_handoff: false,
-        })
-        if (error) throw error
+          description: station.parsed.description.trim() || null,
+          skills: station.parsed.skills.length > 0 ? station.parsed.skills : null,
+          photos: [photoUrl],
+          duration_minutes: station.parsed.durationMinutes,
+        }
+        const { error } = await supabase.from('components').insert(insertPayload)
+        if (error) {
+          console.error('[walkthrough] insert error', {
+            message: error.message,
+            code: error.code,
+            details: error.details,
+            hint: error.hint,
+            payload: insertPayload,
+          })
+          throw new Error(error.message || 'Insert failed')
+        }
       }
       const count = stations.length
-      clearAll()
+      // Mark complete BEFORE navigating so the success page (which calls
+      // clearAll on mount) won't trigger our empty-stations redirect.
+      completingRef.current = true
       router.push(`/library/walkthrough/success?n=${count}`)
     } catch (err) {
-      console.error('[walkthrough] save failed', err)
+      const message = err instanceof Error ? err.message : 'Save failed'
+      console.error('[walkthrough] save failed:', message, err)
       setSaving(false)
+      alert(`Save failed: ${message}`)
     }
   }
 
-  if (stations.length === 0) return null
+  // Only block the initial render when we landed here with no stations
+  // and haven't yet started saving. Once saving completes, completingRef
+  // is true and the page just unmounts as it navigates to /success.
+  if (stations.length === 0 && !completingRef.current) return null
 
   return (
     <W5Review
