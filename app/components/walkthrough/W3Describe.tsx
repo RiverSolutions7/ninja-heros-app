@@ -267,6 +267,7 @@ export default function W3Describe({ station, photoUrl, stations, newStationId, 
                 borderRadius: '50%',
                 border: `2px solid ${RED}`,
                 animation: 'lbPulseRing 1.6s ease-out infinite',
+                pointerEvents: 'none',
               }}
             />
             <div
@@ -277,6 +278,7 @@ export default function W3Describe({ station, photoUrl, stations, newStationId, 
                 borderRadius: '50%',
                 border: `2px solid ${RED}`,
                 animation: 'lbPulseRing 1.6s ease-out 0.6s infinite',
+                pointerEvents: 'none',
               }}
             />
             <button
