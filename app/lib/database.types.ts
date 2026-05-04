@@ -62,6 +62,7 @@ export interface ComponentRow {
   type: ComponentType
   title: string
   curriculum: string | null
+  curriculums: string[]
   description: string | null
   equipment: string | null
   skills: string[] | null

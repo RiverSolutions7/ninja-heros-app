@@ -24,7 +24,7 @@ export async function fetchFolders(): Promise<FolderRow[]> {
 
 export async function countComponents(ageGroup?: string): Promise<number> {
   let query = supabase.from('components').select('*', { count: 'exact', head: true })
-  if (ageGroup) query = query.eq('curriculum', ageGroup)
+  if (ageGroup) query = query.contains('curriculums', [ageGroup])
   const { count, error } = await query
   if (error) throw error
   return count ?? 0
@@ -39,7 +39,7 @@ export async function fetchComponents(type?: string, curriculum?: string): Promi
     query = query.eq('type', type)
   }
   if (curriculum) {
-    query = query.eq('curriculum', curriculum)
+    query = query.contains('curriculums', [curriculum])
   }
   const { data, error } = await query
   if (error) throw error

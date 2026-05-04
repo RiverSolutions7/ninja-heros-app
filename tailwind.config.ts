@@ -31,6 +31,13 @@ const config: Config = {
           muted: '#94a3b8',
           dim: '#475569',
         },
+        log: {
+          bg: '#0a1232',
+          card: '#0f1734',
+          muted: '#8ea0c4',
+          dim: '#6b7da3',
+          faint: '#3e4d70',
+        },
       },
       borderRadius: {
         'xl': '0.75rem',

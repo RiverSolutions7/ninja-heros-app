@@ -324,6 +324,7 @@ export default function EditComponentPage() {
       const { error: updateErr } = await supabase.from('components').update({
         title: title.trim(),
         curriculum: curriculum || null,
+        curriculums: curriculum ? [curriculum] : [],
         description: description.trim() || null,
         skills: skills.length > 0 ? skills : null,
         photos: photoUrls,

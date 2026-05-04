@@ -1,0 +1,52 @@
+@keyframes lf-rise-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes lf-ripple {
+  from { transform: translate(-50%, -50%) scale(0); opacity: 0.5; }
+  to   { transform: translate(-50%, -50%) scale(50); opacity: 0; }
+}
+@keyframes lf-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes lf-slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+@keyframes lf-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 90, 31, 0); }
+  50%      { box-shadow: 0 0 0 8px rgba(255, 90, 31, 0.08); }
+}
+@keyframes lf-pulse-ring {
+  from { transform: scale(1);   opacity: 0.8; }
+  to   { transform: scale(1.8); opacity: 0; }
+}
+@keyframes lf-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes lf-dot {
+  0%, 100% { transform: scaleY(0.4); }
+  50%      { transform: scaleY(1.4); }
+}
+@keyframes lf-wave {
+  from { transform: scaleY(0.4); }
+  to   { transform: scaleY(1.2); }
+}
+@keyframes lf-flicker {
+  0%, 100% { opacity: 1;    transform: scale(1); }
+  45%      { opacity: 0.85; transform: scale(0.985); }
+  55%      { opacity: 1;    transform: scale(1.005); }
+}
+@keyframes lf-torch-in {
+  from { opacity: 0; transform: translateY(28px) scale(0.9); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+@keyframes lf-line-grow {
+  from { width: 0%;  opacity: 0; }
+  to   { width: 60%; opacity: 1; }
+}
+@keyframes lf-blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0; }
+}
