@@ -68,6 +68,16 @@ interface ComponentCardProps {
 // 76px thumbnail — card target ~100px tall
 const THUMB = 76
 
+// Shared frosted-glass button style for both play and stop
+const BTN_STYLE: React.CSSProperties = {
+  width: 28, height: 28, borderRadius: '50%',
+  background: 'rgba(0,0,0,0.50)',
+  backdropFilter: 'blur(8px)',
+  WebkitBackdropFilter: 'blur(8px)',
+  border: '1.5px solid rgba(255,255,255,0.32)',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+}
+
 export default function ComponentCard({ component, showMenu = false, onClick, trailing }: ComponentCardProps) {
   const meta = TYPE_META[component.type]
   const photos = component.photos ?? []
@@ -76,6 +86,7 @@ export default function ComponentCard({ component, showMenu = false, onClick, tr
   const hasVideo = !!(component.video_link || component.video_url)
 
   const [previewing, setPreviewing] = useState(false)
+  const [videoError, setVideoError] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
@@ -96,7 +107,7 @@ export default function ComponentCard({ component, showMenu = false, onClick, tr
         style={{ width: THUMB, height: THUMB, minWidth: THUMB }}
         className="relative shrink-0 rounded-lg overflow-hidden"
       >
-        {hasVideoUrl ? (
+        {hasVideoUrl && !videoError ? (
           <>
             {/* First-frame thumbnail or live preview */}
             <video
@@ -108,6 +119,7 @@ export default function ComponentCard({ component, showMenu = false, onClick, tr
               playsInline
               loop={previewing}
               className="absolute inset-0 w-full h-full object-cover"
+              onError={() => setVideoError(true)}
             />
 
             {previewing ? (
@@ -117,46 +129,59 @@ export default function ComponentCard({ component, showMenu = false, onClick, tr
                 style={{ background: 'rgba(0,0,0,0.22)' }}
                 onClick={(e) => { e.stopPropagation(); setPreviewing(false) }}
               >
-                <div
-                  style={{
-                    width: 28, height: 28, borderRadius: '50%',
-                    background: 'rgba(0,0,0,0.55)',
-                    backdropFilter: 'blur(8px)',
-                    WebkitBackdropFilter: 'blur(8px)',
-                    border: '1px solid rgba(255,255,255,0.30)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}
-                >
-                  {/* Stop square */}
+                <div style={BTN_STYLE}>
                   <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
                     <rect x="1" y="1" width="7" height="7" rx="1" fill="#fff" />
                   </svg>
                 </div>
-              </div>
-            ) : (
-              /* Play overlay — tap to start preview */
-              <div
-                className="absolute inset-0 flex items-center justify-center"
-                style={{ background: 'rgba(0,0,0,0.22)' }}
-                onClick={(e) => { e.stopPropagation(); setPreviewing(true) }}
-              >
+                {/* Muted indicator — signals full audio is available in detail view */}
                 <div
+                  className="absolute top-1 right-1 flex items-center justify-center pointer-events-none"
                   style={{
-                    width: 28, height: 28, borderRadius: '50%',
-                    background: 'rgba(255,255,255,0.18)',
-                    backdropFilter: 'blur(8px)',
-                    WebkitBackdropFilter: 'blur(8px)',
-                    border: '1px solid rgba(255,255,255,0.40)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    width: 18, height: 18, borderRadius: '50%',
+                    background: 'rgba(0,0,0,0.50)',
+                    backdropFilter: 'blur(6px)',
+                    WebkitBackdropFilter: 'blur(6px)',
                   }}
                 >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 5L6 9H2v6h4l5 4V5z" />
+                    <line x1="23" y1="9" x2="17" y2="15" />
+                    <line x1="17" y1="9" x2="23" y2="15" />
+                  </svg>
+                </div>
+              </div>
+            ) : (
+              /* Play overlay — no scrim at rest so card matches photo cards */
+              <div
+                className="absolute inset-0 flex items-center justify-center"
+                onClick={(e) => { e.stopPropagation(); setPreviewing(true) }}
+              >
+                <div style={BTN_STYLE}>
                   <svg width="10" height="11" viewBox="0 0 10 11" fill="none">
                     <path d="M2 1.5l6.5 4L2 9.5V1.5z" fill="#fff" />
                   </svg>
                 </div>
               </div>
             )}
+
+            {/* Duration badge — hidden while previewing */}
+            {!previewing && !!component.duration_minutes && (
+              <span className="absolute bottom-0.5 right-0.5 bg-black/70 text-white text-[9px] font-heading px-1 py-0.5 rounded leading-none pointer-events-none">
+                {component.duration_minutes} min
+              </span>
+            )}
           </>
+        ) : hasVideoUrl && videoError ? (
+          /* Video failed to load — show play-icon placeholder */
+          <div
+            style={{ width: THUMB, height: THUMB }}
+            className={`flex items-center justify-center ${meta.placeholderBg}`}
+          >
+            <svg className="w-5 h-5 text-white/60" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5.14v14l11-7-11-7z" />
+            </svg>
+          </div>
         ) : firstPhoto ? (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
