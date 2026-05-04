@@ -84,6 +84,7 @@ export function Press({
         if (!interactive) return
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
+          e.stopPropagation()
           onClick?.(e as unknown as React.MouseEvent<HTMLDivElement>)
         }
       }}

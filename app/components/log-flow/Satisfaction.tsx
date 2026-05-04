@@ -195,7 +195,7 @@ export default function Satisfaction({
             color: LF.faint,
             textTransform: 'uppercase',
             cursor: 'pointer',
-            padding: '14px 0',
+            padding: '16px 0',
           }}
         >
           LOG ANOTHER

@@ -244,6 +244,7 @@ export default function LogComponentPage() {
     if (draft.photoPreviewUrl) URL.revokeObjectURL(draft.photoPreviewUrl)
     refineSnapshotRef.current = null
     voice.reset()
+    setError(null)
     setDraft(EMPTY_DRAFT)
     setStep('type')
   }

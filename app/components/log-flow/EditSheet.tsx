@@ -137,7 +137,7 @@ function EditableField({
               gap: 4,
             }}
           >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="square">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={LF.gameGreen} strokeWidth="2.5" strokeLinecap="square">
               <path d="M5 12l4 4L19 7" />
             </svg>
             <span
@@ -145,7 +145,7 @@ function EditableField({
                 fontFamily: LF.display,
                 fontSize: 9,
                 letterSpacing: '0.2em',
-                color: '#22c55e',
+                color: LF.gameGreen,
                 textTransform: 'uppercase',
               }}
             >
