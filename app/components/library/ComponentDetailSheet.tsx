@@ -233,32 +233,46 @@ export default function ComponentDetailSheet({
       >
         {component.video_url ? (
           videoPlaying ? (
-            <video
-              src={component.video_url}
-              autoPlay
-              playsInline
-              controls
-              className="absolute inset-0 w-full h-full object-cover bg-black"
-              onClick={(e) => e.stopPropagation()}
-            />
+            // Playing: full-bleed video, tap anywhere to stop
+            <div className="absolute inset-0" onClick={() => setVideoPlaying(false)}>
+              <video
+                src={component.video_url}
+                autoPlay
+                playsInline
+                className="absolute inset-0 w-full h-full object-cover bg-black"
+                onClick={(e) => e.stopPropagation()}
+              />
+              {/* Minimal stop button — top-right corner */}
+              <div
+                className="absolute top-4 right-14 flex items-center justify-center pointer-events-none"
+                style={{
+                  width: 34, height: 34, borderRadius: '50%',
+                  background: 'rgba(6,10,28,0.55)',
+                  backdropFilter: 'blur(10px)',
+                  WebkitBackdropFilter: 'blur(10px)',
+                  border: '1px solid rgba(255,255,255,0.18)',
+                }}
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                  <rect x="1" y="1" width="8" height="8" rx="1.5" fill="#fff" />
+                </svg>
+              </div>
+            </div>
           ) : (
-            // Paused: gradient thumbnail + frosted-glass play button
+            // Paused: actual video first frame + frosted-glass play button
             <div
               className="absolute inset-0 cursor-pointer"
               onClick={() => setVideoPlaying(true)}
             >
-              {/* Thumbnail background — same composed gradient as no-photo fallback */}
-              <div className="absolute inset-0 bg-gradient-to-br from-[#1a1540] via-[#0a0f24] to-[#2a1020]">
-                <div
-                  className="absolute inset-0"
-                  style={{ background: 'radial-gradient(circle at 72% 18%, rgba(232,64,64,0.38), transparent 58%)' }}
-                />
-                <div
-                  className="absolute inset-0 opacity-[0.04]"
-                  style={{ backgroundImage: 'repeating-linear-gradient(45deg, #fff 0, #fff 1px, transparent 1px, transparent 14px)' }}
-                />
-              </div>
-              {/* Dark scrim */}
+              {/* Real video thumbnail — first frame via #t=0.001 */}
+              <video
+                src={`${component.video_url}#t=0.001`}
+                preload="metadata"
+                muted
+                playsInline
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+              {/* Dark scrim over thumbnail */}
               <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.28)' }} />
               {/* Play button */}
               <div className="absolute inset-0 flex items-center justify-center">
