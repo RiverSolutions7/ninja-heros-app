@@ -56,6 +56,8 @@ export default function TabNav() {
   if (/^\/plan\/[^/]+/.test(pathname)) return null
   // Hide nav on walkthrough mode
   if (pathname.startsWith('/library/walkthrough')) return null
+  // Hide nav on log-component flow (full-screen immersive)
+  if (pathname.startsWith('/library/log-component')) return null
 
   return (
     <nav className="fixed bottom-0 inset-x-0 z-[10000] pointer-events-none">
