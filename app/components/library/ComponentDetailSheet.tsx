@@ -110,6 +110,9 @@ export default function ComponentDetailSheet({
   // Photo lightbox
   const [lightboxOpen, setLightboxOpen] = useState(false)
 
+  // Video hero play state
+  const [videoPlaying, setVideoPlaying] = useState(false)
+
   // In picker context, isInPlan comes from the prop. Library context has no
   // in-plan detection (the library is reference-only, not an add surface).
   const isInPlan = isInPlanProp ?? false
@@ -228,7 +231,90 @@ export default function ComponentDetailSheet({
         onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX }}
         onTouchEnd={handleSwipe}
       >
-        {photos.length > 0 ? (
+        {component.video_url ? (
+          videoPlaying ? (
+            <video
+              src={component.video_url}
+              autoPlay
+              playsInline
+              controls
+              className="absolute inset-0 w-full h-full object-cover bg-black"
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            // Paused: gradient thumbnail + frosted-glass play button
+            <div
+              className="absolute inset-0 cursor-pointer"
+              onClick={() => setVideoPlaying(true)}
+            >
+              {/* Thumbnail background — same composed gradient as no-photo fallback */}
+              <div className="absolute inset-0 bg-gradient-to-br from-[#1a1540] via-[#0a0f24] to-[#2a1020]">
+                <div
+                  className="absolute inset-0"
+                  style={{ background: 'radial-gradient(circle at 72% 18%, rgba(232,64,64,0.38), transparent 58%)' }}
+                />
+                <div
+                  className="absolute inset-0 opacity-[0.04]"
+                  style={{ backgroundImage: 'repeating-linear-gradient(45deg, #fff 0, #fff 1px, transparent 1px, transparent 14px)' }}
+                />
+              </div>
+              {/* Dark scrim */}
+              <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.28)' }} />
+              {/* Play button */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div
+                  style={{
+                    position: 'relative',
+                    zIndex: 1,
+                    width: 64,
+                    height: 64,
+                    borderRadius: '50%',
+                    background: 'rgba(255,255,255,0.18)',
+                    backdropFilter: 'blur(10px)',
+                    WebkitBackdropFilter: 'blur(10px)',
+                    border: '1.5px solid rgba(255,255,255,0.45)',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <svg width="22" height="24" viewBox="0 0 22 24" fill="none">
+                    <path d="M3 2l16 10L3 22V2z" fill="#fff" />
+                  </svg>
+                </div>
+              </div>
+              {/* VIDEO chip */}
+              <div
+                className="absolute left-0 right-0 flex justify-center"
+                style={{ bottom: 92 }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '4px 10px',
+                    background: 'rgba(6,10,28,0.62)',
+                    backdropFilter: 'blur(8px)',
+                    WebkitBackdropFilter: 'blur(8px)',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                  }}
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2" strokeLinecap="square">
+                    <rect x="2" y="2" width="20" height="20" /><path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 7h5M17 17h5" />
+                  </svg>
+                  <span
+                    className="font-heading"
+                    style={{ fontSize: 9, letterSpacing: '0.28em', color: 'rgba(255,255,255,0.75)', textTransform: 'uppercase' }}
+                  >
+                    Video
+                  </span>
+                </div>
+              </div>
+            </div>
+          )
+        ) : photos.length > 0 ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={photos[photoIndex]}
@@ -458,19 +544,6 @@ export default function ComponentDetailSheet({
             <p className="text-text-primary text-[15px] leading-relaxed">
               {component.equipment}
             </p>
-          </Section>
-        )}
-
-        {/* Uploaded video */}
-        {component.video_url && (
-          <Section label="Video">
-            <video
-              src={component.video_url}
-              controls
-              playsInline
-              className="w-full rounded-2xl bg-black"
-              style={{ maxHeight: '320px' }}
-            />
           </Section>
         )}
 
