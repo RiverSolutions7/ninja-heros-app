@@ -282,6 +282,7 @@ export default function LogComponentPage() {
           onNext={() => setStep('voice')}
           onBack={() => setStep('curriculum')}
           onClose={handleClose}
+          type={draft.type!}
         />
       )}
 
