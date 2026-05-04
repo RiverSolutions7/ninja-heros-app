@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useRef, useState } from 'react'
 import type { ComponentRow, ComponentType } from '@/app/lib/database.types'
 import ComponentCardMenu from './ComponentCardMenu'
 
@@ -71,19 +72,92 @@ export default function ComponentCard({ component, showMenu = false, onClick, tr
   const meta = TYPE_META[component.type]
   const photos = component.photos ?? []
   const firstPhoto = photos[0] ?? null
+  const hasVideoUrl = !!component.video_url
   const hasVideo = !!(component.video_link || component.video_url)
+
+  const [previewing, setPreviewing] = useState(false)
+  const videoRef = useRef<HTMLVideoElement>(null)
+
+  useEffect(() => {
+    if (previewing) {
+      videoRef.current?.play().catch(() => {})
+    } else {
+      videoRef.current?.pause()
+    }
+  }, [previewing])
 
   return (
     <div
       onClick={onClick}
       className="relative flex items-center gap-4 px-4 py-3 cursor-pointer active:bg-white/[0.02] transition-colors"
     >
-      {/* ─── Thumbnail — always shown, colored placeholder when no photo ── */}
+      {/* ─── Thumbnail ───────────────────────────────────────────────────── */}
       <div
         style={{ width: THUMB, height: THUMB, minWidth: THUMB }}
         className="relative shrink-0 rounded-lg overflow-hidden"
       >
-        {firstPhoto ? (
+        {hasVideoUrl ? (
+          <>
+            {/* First-frame thumbnail or live preview */}
+            <video
+              ref={videoRef}
+              src={previewing ? component.video_url! : `${component.video_url}#t=0.001`}
+              preload="metadata"
+              muted
+              autoPlay={previewing}
+              playsInline
+              loop={previewing}
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+
+            {previewing ? (
+              /* Stop overlay — tap to end preview */
+              <div
+                className="absolute inset-0 flex items-center justify-center"
+                style={{ background: 'rgba(0,0,0,0.22)' }}
+                onClick={(e) => { e.stopPropagation(); setPreviewing(false) }}
+              >
+                <div
+                  style={{
+                    width: 28, height: 28, borderRadius: '50%',
+                    background: 'rgba(0,0,0,0.55)',
+                    backdropFilter: 'blur(8px)',
+                    WebkitBackdropFilter: 'blur(8px)',
+                    border: '1px solid rgba(255,255,255,0.30)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  {/* Stop square */}
+                  <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
+                    <rect x="1" y="1" width="7" height="7" rx="1" fill="#fff" />
+                  </svg>
+                </div>
+              </div>
+            ) : (
+              /* Play overlay — tap to start preview */
+              <div
+                className="absolute inset-0 flex items-center justify-center"
+                style={{ background: 'rgba(0,0,0,0.22)' }}
+                onClick={(e) => { e.stopPropagation(); setPreviewing(true) }}
+              >
+                <div
+                  style={{
+                    width: 28, height: 28, borderRadius: '50%',
+                    background: 'rgba(255,255,255,0.18)',
+                    backdropFilter: 'blur(8px)',
+                    WebkitBackdropFilter: 'blur(8px)',
+                    border: '1px solid rgba(255,255,255,0.40)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  <svg width="10" height="11" viewBox="0 0 10 11" fill="none">
+                    <path d="M2 1.5l6.5 4L2 9.5V1.5z" fill="#fff" />
+                  </svg>
+                </div>
+              </div>
+            )}
+          </>
+        ) : firstPhoto ? (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
