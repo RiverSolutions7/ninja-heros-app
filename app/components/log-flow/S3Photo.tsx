@@ -1,20 +1,24 @@
 'use client'
 
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import type { ComponentType } from '@/app/lib/database.types'
 import { ACCENT, Chrome, LF, Press, PrimaryBtn, StatusBarLog } from './atoms'
 
+const MAX_PHOTOS = 5
+
 export default function S3Photo({
-  previewUrl,
+  previewUrls,
   onCapture,
+  onRemove,
   onNext,
   onBack,
   onClose,
   accent = ACCENT,
   type,
 }: {
-  previewUrl: string | null
+  previewUrls: string[]
   onCapture: (file: File) => void
+  onRemove: (index: number) => void
   onNext: () => void
   onBack: () => void
   onClose?: () => void
@@ -23,9 +27,10 @@ export default function S3Photo({
 }) {
   const cameraInputRef = useRef<HTMLInputElement | null>(null)
   const libraryInputRef = useRef<HTMLInputElement | null>(null)
+  const [addOpen, setAddOpen] = useState(false)
 
-  const openCamera = () => cameraInputRef.current?.click()
-  const openLibrary = () => libraryInputRef.current?.click()
+  const openCamera = () => { setAddOpen(false); cameraInputRef.current?.click() }
+  const openLibrary = () => { setAddOpen(false); libraryInputRef.current?.click() }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -34,6 +39,8 @@ export default function S3Photo({
   }
 
   const subjectLabel = type === 'game' ? 'game' : 'station'
+  const hasPhoots = previewUrls.length > 0
+  const canAddMore = previewUrls.length < MAX_PHOTOS
 
   return (
     <div style={{ position: 'absolute', inset: 0, background: LF.bg, color: '#fff', display: 'flex', flexDirection: 'column' }}>
@@ -47,7 +54,7 @@ export default function S3Photo({
           inset: 0,
           zIndex: 0,
           pointerEvents: 'none',
-          background: previewUrl ? `radial-gradient(ellipse 80% 50% at 50% 40%, ${accent}1a 0%, transparent 70%)` : 'none',
+          background: hasPhoots ? `radial-gradient(ellipse 80% 50% at 50% 40%, ${accent}1a 0%, transparent 70%)` : 'none',
           transition: 'background 600ms',
         }}
       />
@@ -78,9 +85,9 @@ export default function S3Photo({
         </div>
 
         <div style={{ marginTop: 28, flex: 1, display: 'flex', flexDirection: 'column' }}>
-          {!previewUrl ? (
+          {!hasPhoots ? (
+            /* ── Empty state: two-card picker ── */
             <div style={{ display: 'flex', gap: 10 }}>
-              {/* Camera card */}
               <Press
                 onClick={openCamera}
                 ariaLabel="Take a photo with camera"
@@ -97,16 +104,7 @@ export default function S3Photo({
                   animation: 'lf-rise-in 500ms 80ms both',
                 }}
               >
-                <div
-                  style={{
-                    width: 56,
-                    height: 56,
-                    border: `1.5px solid ${LF.faint}`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
+                <div style={{ width: 56, height: 56, border: `1.5px solid ${LF.faint}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={LF.muted} strokeWidth="1.4" strokeLinecap="square">
                     <path d="M3 7h4l2-2h6l2 2h4v13H3z" />
                     <circle cx="12" cy="13.5" r="3.5" />
@@ -114,14 +112,11 @@ export default function S3Photo({
                   </svg>
                 </div>
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontFamily: LF.display, fontSize: 10, letterSpacing: '0.28em', color: LF.dim, textTransform: 'uppercase' }}>
-                    Take photo
-                  </div>
+                  <div style={{ fontFamily: LF.display, fontSize: 10, letterSpacing: '0.28em', color: LF.dim, textTransform: 'uppercase' }}>Take photo</div>
                   <div style={{ fontFamily: LF.body, fontSize: 11, color: LF.faint, marginTop: 5 }}>Opens your camera</div>
                 </div>
               </Press>
 
-              {/* Library card */}
               <Press
                 onClick={openLibrary}
                 ariaLabel="Choose a photo from library"
@@ -138,16 +133,7 @@ export default function S3Photo({
                   animation: 'lf-rise-in 500ms 160ms both',
                 }}
               >
-                <div
-                  style={{
-                    width: 56,
-                    height: 56,
-                    border: `1.5px solid ${LF.faint}`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
+                <div style={{ width: 56, height: 56, border: `1.5px solid ${LF.faint}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={LF.muted} strokeWidth="1.4" strokeLinecap="square">
                     <rect x="3" y="4" width="18" height="16" />
                     <path d="M3 15l5-4 4 3 3-2 6 5" />
@@ -155,76 +141,159 @@ export default function S3Photo({
                   </svg>
                 </div>
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontFamily: LF.display, fontSize: 10, letterSpacing: '0.28em', color: LF.dim, textTransform: 'uppercase' }}>
-                    From library
-                  </div>
+                  <div style={{ fontFamily: LF.display, fontSize: 10, letterSpacing: '0.28em', color: LF.dim, textTransform: 'uppercase' }}>From library</div>
                   <div style={{ fontFamily: LF.body, fontSize: 11, color: LF.faint, marginTop: 5 }}>Choose existing photo</div>
                 </div>
               </Press>
             </div>
           ) : (
-            <div style={{ position: 'relative', width: '100%', height: 260, animation: 'lf-rise-in 300ms both' }}>
+            /* ── Filled state: thumbnail row + add ── */
+            <div style={{ animation: 'lf-rise-in 300ms both' }}>
+              {/* Thumbnail strip */}
               <div
-                aria-hidden
                 style={{
-                  position: 'absolute',
-                  inset: -2,
-                  border: `2px solid ${accent}`,
-                  boxShadow: `0 0 28px ${accent}55, inset 0 0 20px ${accent}0a`,
-                  zIndex: 2,
-                  pointerEvents: 'none',
+                  display: 'flex',
+                  gap: 8,
+                  overflowX: 'auto',
+                  paddingBottom: 4,
+                  scrollbarWidth: 'none',
+                  msOverflowStyle: 'none',
                 }}
-              />
-              <img
-                src={previewUrl}
-                alt={`Captured ${subjectLabel} setup`}
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-              />
-              {/* Retake (camera) + Replace (library) pills */}
-              <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 3, display: 'flex', gap: 8 }}>
-                <Press
-                  onClick={openCamera}
-                  ariaLabel="Retake photo with camera"
+              >
+                {previewUrls.map((url, i) => (
+                  <div
+                    key={url}
+                    style={{
+                      position: 'relative',
+                      width: 88,
+                      height: 88,
+                      flexShrink: 0,
+                      border: `2px solid ${accent}`,
+                      boxShadow: `0 0 14px ${accent}44`,
+                    }}
+                  >
+                    <img
+                      src={url}
+                      alt={`Photo ${i + 1}`}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    />
+                    {/* X button */}
+                    <Press
+                      onClick={() => onRemove(i)}
+                      ariaLabel={`Remove photo ${i + 1}`}
+                      rippleColor="rgba(0,0,0,0.3)"
+                      style={{
+                        position: 'absolute',
+                        top: 4,
+                        right: 4,
+                        width: 20,
+                        height: 20,
+                        background: 'rgba(6,10,28,0.85)',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="square">
+                        <path d="M6 6l12 12M18 6L6 18" />
+                      </svg>
+                    </Press>
+                  </div>
+                ))}
+
+                {/* Add more card — hidden at MAX_PHOTOS */}
+                {canAddMore && (
+                  <Press
+                    onClick={() => setAddOpen((o) => !o)}
+                    ariaLabel="Add another photo"
+                    style={{
+                      width: 88,
+                      height: 88,
+                      flexShrink: 0,
+                      border: `1.5px dashed ${addOpen ? accent : LF.faint}`,
+                      background: addOpen ? `${accent}0a` : 'rgba(255,255,255,0.015)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 5,
+                      transition: 'border-color 200ms, background 200ms',
+                    }}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={addOpen ? accent : LF.faint} strokeWidth="1.8" strokeLinecap="square">
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
+                    <div style={{ fontFamily: LF.display, fontSize: 8, letterSpacing: '0.2em', color: addOpen ? accent : LF.faint, textTransform: 'uppercase' }}>
+                      Add
+                    </div>
+                  </Press>
+                )}
+              </div>
+
+              {/* Inline camera/library choice — expands when Add is tapped */}
+              {addOpen && (
+                <div
                   style={{
-                    background: 'rgba(6,10,28,0.75)',
-                    backdropFilter: 'blur(10px)',
-                    padding: '7px 12px',
-                    border: '1px solid rgba(255,255,255,0.15)',
                     display: 'flex',
-                    alignItems: 'center',
-                    gap: 7,
+                    gap: 8,
+                    marginTop: 12,
+                    animation: 'lf-rise-in 200ms both',
                   }}
                 >
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="square">
-                    <path d="M1 4v6h6" />
-                    <path d="M23 20v-6h-6" />
-                    <path d="M20.49 9A9 9 0 005.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 013.51 15" />
-                  </svg>
-                  <span style={{ fontFamily: LF.display, fontSize: 9, letterSpacing: '0.22em', color: '#fff', textTransform: 'uppercase' }}>
-                    Retake
-                  </span>
-                </Press>
-                <Press
-                  onClick={openLibrary}
-                  ariaLabel="Replace photo from library"
-                  style={{
-                    background: 'rgba(6,10,28,0.75)',
-                    backdropFilter: 'blur(10px)',
-                    padding: '7px 12px',
-                    border: '1px solid rgba(255,255,255,0.15)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 7,
-                  }}
-                >
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="square">
-                    <rect x="3" y="4" width="18" height="16" />
-                    <path d="M3 15l5-4 4 3 3-2 6 5" />
-                  </svg>
-                  <span style={{ fontFamily: LF.display, fontSize: 9, letterSpacing: '0.22em', color: '#fff', textTransform: 'uppercase' }}>
-                    Replace
-                  </span>
-                </Press>
+                  <Press
+                    onClick={openCamera}
+                    ariaLabel="Take another photo with camera"
+                    rippleColor="rgba(0,0,0,0.2)"
+                    style={{
+                      flex: 1,
+                      height: 44,
+                      background: 'rgba(6,10,28,0.75)',
+                      border: '1px solid rgba(255,255,255,0.15)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                    }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={LF.muted} strokeWidth="1.6" strokeLinecap="square">
+                      <path d="M3 7h4l2-2h6l2 2h4v13H3z" />
+                      <circle cx="12" cy="13.5" r="3.5" />
+                    </svg>
+                    <span style={{ fontFamily: LF.display, fontSize: 9, letterSpacing: '0.22em', color: '#fff', textTransform: 'uppercase' }}>
+                      Camera
+                    </span>
+                  </Press>
+                  <Press
+                    onClick={openLibrary}
+                    ariaLabel="Choose another photo from library"
+                    rippleColor="rgba(0,0,0,0.2)"
+                    style={{
+                      flex: 1,
+                      height: 44,
+                      background: 'rgba(6,10,28,0.75)',
+                      border: '1px solid rgba(255,255,255,0.15)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                    }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={LF.muted} strokeWidth="1.6" strokeLinecap="square">
+                      <rect x="3" y="4" width="18" height="16" />
+                      <path d="M3 15l5-4 4 3 3-2 6 5" />
+                    </svg>
+                    <span style={{ fontFamily: LF.display, fontSize: 9, letterSpacing: '0.22em', color: '#fff', textTransform: 'uppercase' }}>
+                      Library
+                    </span>
+                  </Press>
+                </div>
+              )}
+
+              {/* Count label */}
+              <div style={{ marginTop: 14, fontFamily: LF.body, fontSize: 12, color: LF.faint }}>
+                {previewUrls.length} photo{previewUrls.length !== 1 ? 's' : ''} added
+                {canAddMore && ` · up to ${MAX_PHOTOS}`}
               </div>
             </div>
           )}
@@ -232,7 +301,7 @@ export default function S3Photo({
       </div>
 
       <div style={{ padding: '16px 24px 32px', position: 'relative', zIndex: 1 }}>
-        <PrimaryBtn accent={accent} onClick={onNext} disabled={!previewUrl}>
+        <PrimaryBtn accent={accent} onClick={onNext} disabled={!hasPhoots}>
           Continue
         </PrimaryBtn>
       </div>

@@ -15,7 +15,7 @@ function formatElapsed(seconds: number) {
 export default function VoiceScreen({
   state,
   type,
-  photoPreviewUrl,
+  photoPreviewUrls,
   transcript,
   onMicTap,
   onBack,
@@ -25,7 +25,7 @@ export default function VoiceScreen({
 }: {
   state: MicState
   type: ComponentType
-  photoPreviewUrl: string | null
+  photoPreviewUrls: string[]
   transcript: string
   onMicTap: () => void
   onBack: () => void
@@ -34,6 +34,9 @@ export default function VoiceScreen({
   accent?: string
 }) {
   const [elapsed, setElapsed] = useState(0)
+
+  const firstPhotoUrl = photoPreviewUrls[0] ?? null
+  const photoCount = photoPreviewUrls.length
 
   useEffect(() => {
     if (state !== 'recording') {
@@ -53,6 +56,8 @@ export default function VoiceScreen({
     state === 'parsing' ? 'STEP · 05 / PARSING' : state === 'recording' ? 'STEP · 04 / RECORDING' : 'STEP · 04 / VOICE'
 
   const transcriptWords = transcript.trim().length > 0 ? transcript.trim().split(/\s+/) : []
+
+  const photoReadyLabel = photoCount > 1 ? `${photoCount} photos ready` : 'Photo ready'
 
   return (
     <div style={{ position: 'absolute', inset: 0, background: LF.bg, color: '#fff', display: 'flex', flexDirection: 'column' }}>
@@ -94,9 +99,9 @@ export default function VoiceScreen({
               animation: 'lf-rise-in 300ms both',
             }}
           >
-            {photoPreviewUrl && (
+            {firstPhotoUrl && (
               <img
-                src={photoPreviewUrl}
+                src={firstPhotoUrl}
                 alt=""
                 aria-hidden
                 style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
@@ -116,9 +121,9 @@ export default function VoiceScreen({
               border: `1px solid ${accent}44`,
             }}
           >
-            {photoPreviewUrl && (
+            {firstPhotoUrl && (
               <img
-                src={photoPreviewUrl}
+                src={firstPhotoUrl}
                 alt=""
                 aria-hidden
                 style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
@@ -148,7 +153,7 @@ export default function VoiceScreen({
                   textTransform: 'uppercase',
                 }}
               >
-                Photo ready
+                {photoReadyLabel}
               </span>
             </div>
           </div>

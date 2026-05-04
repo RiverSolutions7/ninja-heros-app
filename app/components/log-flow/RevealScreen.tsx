@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { ComponentType, CurriculumRow } from '@/app/lib/database.types'
 import { ACCENT, Chrome, LF, Press, PrimaryBtn, StatusBarLog } from './atoms'
 import EditSheet, { type EditDraft } from './EditSheet'
@@ -16,7 +16,7 @@ export default function RevealScreen({
   type,
   curricula,
   curriculumRows,
-  photoPreviewUrl,
+  photoPreviewUrls,
   draft,
   onUpdateDraft,
   onSave,
@@ -28,7 +28,7 @@ export default function RevealScreen({
   type: ComponentType
   curricula: string[]
   curriculumRows: CurriculumRow[]
-  photoPreviewUrl: string | null
+  photoPreviewUrls: string[]
   draft: RevealDraft
   onUpdateDraft: (next: RevealDraft) => void
   onSave: () => void
@@ -38,6 +38,8 @@ export default function RevealScreen({
   accent?: string
 }) {
   const [editOpen, setEditOpen] = useState(false)
+  const [activePhoto, setActivePhoto] = useState(0)
+  const carouselRef = useRef<HTMLDivElement | null>(null)
 
   const typeLabel = type === 'game' ? 'Game' : 'Station'
   const currLabels = curricula
@@ -56,9 +58,17 @@ export default function RevealScreen({
     })
   }
 
+  const handleCarouselScroll = () => {
+    const el = carouselRef.current
+    if (!el) return
+    const index = Math.round(el.scrollLeft / el.clientWidth)
+    setActivePhoto(index)
+  }
+
   const titleDisplay = draft.title.trim() || 'Untitled component'
   const descDisplay = draft.description.trim()
   const skillList = draft.skills.filter(Boolean)
+  const multiPhoto = photoPreviewUrls.length > 1
 
   return (
     <div
@@ -137,23 +147,58 @@ export default function RevealScreen({
               display: 'block',
             }}
           >
+            {/* ── Photo carousel ── */}
             <div
               style={{
                 position: 'relative',
                 width: '100%',
-                height: 180,
-                overflow: 'hidden',
                 borderRadius: '12px 12px 0 0',
                 background: '#091230',
+                overflow: 'hidden',
               }}
             >
-              {photoPreviewUrl && (
-                <img
-                  src={photoPreviewUrl}
-                  alt={titleDisplay}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                />
-              )}
+              {/* Scrollable slides */}
+              <div
+                ref={carouselRef}
+                onScroll={handleCarouselScroll}
+                style={{
+                  display: 'flex',
+                  width: '100%',
+                  height: 180,
+                  overflowX: multiPhoto ? 'auto' : 'hidden',
+                  overflowY: 'hidden',
+                  scrollSnapType: 'x mandatory',
+                  scrollBehavior: 'smooth',
+                  WebkitOverflowScrolling: 'touch',
+                  scrollbarWidth: 'none',
+                  msOverflowStyle: 'none',
+                }}
+              >
+                {photoPreviewUrls.length > 0 ? (
+                  photoPreviewUrls.map((url, i) => (
+                    <div
+                      key={url}
+                      style={{
+                        minWidth: '100%',
+                        height: 180,
+                        scrollSnapAlign: 'start',
+                        flexShrink: 0,
+                        background: '#091230',
+                      }}
+                    >
+                      <img
+                        src={url}
+                        alt={`Photo ${i + 1} of ${titleDisplay}`}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                      />
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ minWidth: '100%', height: 180, background: '#091230' }} />
+                )}
+              </div>
+
+              {/* "Tap to edit" pill — always top-right */}
               <div
                 style={{
                   position: 'absolute',
@@ -167,6 +212,7 @@ export default function RevealScreen({
                   gap: 5,
                   border: '1px solid rgba(255,255,255,0.10)',
                   borderRadius: 2,
+                  zIndex: 2,
                 }}
               >
                 <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="1.8" strokeLinecap="square">
@@ -185,6 +231,36 @@ export default function RevealScreen({
                   Tap to edit
                 </span>
               </div>
+
+              {/* Dot indicators — only when multiple photos */}
+              {multiPhoto && (
+                <div
+                  aria-hidden
+                  style={{
+                    position: 'absolute',
+                    bottom: 10,
+                    left: 0,
+                    right: 0,
+                    display: 'flex',
+                    justifyContent: 'center',
+                    gap: 5,
+                    zIndex: 2,
+                  }}
+                >
+                  {photoPreviewUrls.map((_, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        width: 5,
+                        height: 5,
+                        borderRadius: '50%',
+                        background: i === activePhoto ? '#fff' : 'rgba(255,255,255,0.35)',
+                        transition: 'background 200ms',
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
 
             <div style={{ padding: '14px 16px 16px' }}>
@@ -309,7 +385,7 @@ export default function RevealScreen({
             skills: draft.skills,
             durationMinutes: draft.durationMinutes,
           }}
-          photoPreviewUrl={photoPreviewUrl}
+          photoPreviewUrl={photoPreviewUrls[0] ?? null}
           onClose={() => setEditOpen(false)}
           onCommit={handleCommit}
         />

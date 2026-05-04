@@ -24,8 +24,8 @@ type LogStep = 'type' | 'curriculum' | 'photo' | 'voice' | 'reveal' | 'satisfact
 interface LogDraft {
   type: ComponentType | null
   curriculums: string[]
-  photoFile: File | null
-  photoPreviewUrl: string | null
+  photoFiles: File[]
+  photoPreviewUrls: string[]
   title: string
   description: string
   skills: string[]
@@ -35,8 +35,8 @@ interface LogDraft {
 const EMPTY_DRAFT: LogDraft = {
   type: null,
   curriculums: [],
-  photoFile: null,
-  photoPreviewUrl: null,
+  photoFiles: [],
+  photoPreviewUrls: [],
   title: '',
   description: '',
   skills: [],
@@ -88,12 +88,14 @@ export default function LogComponentPage() {
       })
   }, [draft.curriculums])
 
-  // Revoke preview URL on unmount or replace
+  // Revoke all preview URLs on unmount
   useEffect(() => {
+    const urls = draft.photoPreviewUrls
     return () => {
-      if (draft.photoPreviewUrl) URL.revokeObjectURL(draft.photoPreviewUrl)
+      urls.forEach((url) => URL.revokeObjectURL(url))
     }
-  }, [draft.photoPreviewUrl])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Voice-not-supported fallback — skip voice step entirely on unsupported browsers
   useEffect(() => {
@@ -109,7 +111,7 @@ export default function LogComponentPage() {
     return (
       draft.type !== null ||
       draft.curriculums.length > 0 ||
-      draft.photoFile !== null ||
+      draft.photoFiles.length > 0 ||
       draft.title.trim() !== '' ||
       draft.description.trim() !== '' ||
       draft.skills.length > 0 ||
@@ -138,7 +140,6 @@ export default function LogComponentPage() {
       try {
         const result = await voice.parseComponent(draft.type, availableSkills, refineSnapshotRef.current ?? undefined)
         if (!result.title && !result.description && result.skills.length === 0 && result.durationMinutes == null) {
-          // Empty result — error toast already set by hook
           return
         }
         setDraft((d) => ({
@@ -171,9 +172,22 @@ export default function LogComponentPage() {
   // ── Photo handlers ─────────────────────────────────────────────────────────
 
   const handleCapturePhoto = (file: File) => {
+    const url = URL.createObjectURL(file)
+    setDraft((d) => ({
+      ...d,
+      photoFiles: [...d.photoFiles, file],
+      photoPreviewUrls: [...d.photoPreviewUrls, url],
+    }))
+  }
+
+  const handleRemovePhoto = (index: number) => {
     setDraft((d) => {
-      if (d.photoPreviewUrl) URL.revokeObjectURL(d.photoPreviewUrl)
-      return { ...d, photoFile: file, photoPreviewUrl: URL.createObjectURL(file) }
+      URL.revokeObjectURL(d.photoPreviewUrls[index])
+      return {
+        ...d,
+        photoFiles: d.photoFiles.filter((_, i) => i !== index),
+        photoPreviewUrls: d.photoPreviewUrls.filter((_, i) => i !== index),
+      }
     })
   }
 
@@ -191,13 +205,13 @@ export default function LogComponentPage() {
   // ── Save ──────────────────────────────────────────────────────────────────
 
   const handleSave = async () => {
-    if (!draft.type || draft.curriculums.length === 0 || !draft.photoFile || !draft.title.trim()) {
+    if (!draft.type || draft.curriculums.length === 0 || draft.photoFiles.length === 0 || !draft.title.trim()) {
       setError('Missing required fields')
       return
     }
     setSaving(true)
     try {
-      const photoUrl = await uploadStationPhoto(draft.photoFile)
+      const photoUrls = await Promise.all(draft.photoFiles.map(uploadStationPhoto))
 
       const { error: insertErr } = await supabase.from('components').insert({
         type: draft.type,
@@ -206,7 +220,7 @@ export default function LogComponentPage() {
         curriculums: draft.curriculums,
         description: draft.description.trim() || null,
         skills: draft.skills,
-        photos: [photoUrl],
+        photos: photoUrls,
         video_url: null,
         video_link: null,
         duration_minutes: draft.durationMinutes,
@@ -241,7 +255,7 @@ export default function LogComponentPage() {
   }
 
   const handleLogAnother = () => {
-    if (draft.photoPreviewUrl) URL.revokeObjectURL(draft.photoPreviewUrl)
+    draft.photoPreviewUrls.forEach((url) => URL.revokeObjectURL(url))
     refineSnapshotRef.current = null
     voice.reset()
     setError(null)
@@ -277,8 +291,9 @@ export default function LogComponentPage() {
 
       {step === 'photo' && (
         <S3Photo
-          previewUrl={draft.photoPreviewUrl}
+          previewUrls={draft.photoPreviewUrls}
           onCapture={handleCapturePhoto}
+          onRemove={handleRemovePhoto}
           onNext={() => setStep('voice')}
           onBack={() => setStep('curriculum')}
           onClose={handleClose}
@@ -290,7 +305,7 @@ export default function LogComponentPage() {
         <VoiceScreen
           state={micState}
           type={draft.type}
-          photoPreviewUrl={draft.photoPreviewUrl}
+          photoPreviewUrls={draft.photoPreviewUrls}
           transcript={voice.transcript}
           onMicTap={handleMicTap}
           onBack={() => {
@@ -307,7 +322,7 @@ export default function LogComponentPage() {
           type={draft.type}
           curricula={draft.curriculums}
           curriculumRows={curriculumRows}
-          photoPreviewUrl={draft.photoPreviewUrl}
+          photoPreviewUrls={draft.photoPreviewUrls}
           draft={{
             title: draft.title,
             description: draft.description,
@@ -325,7 +340,7 @@ export default function LogComponentPage() {
           }
           onSave={handleSave}
           onSpeakMore={handleSpeakMore}
-          onBack={handleClose}
+          onBack={() => { voice.reset(); setStep('voice') }}
           saving={saving}
         />
       )}
@@ -360,7 +375,6 @@ export default function LogComponentPage() {
           type="error"
           onDismiss={() => {
             setError(null)
-            // hook clears its own error on next start
           }}
         />
       )}
