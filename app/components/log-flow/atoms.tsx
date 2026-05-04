@@ -70,13 +70,22 @@ export function Press({
 }) {
   const { launch, render } = useRipple()
   const [pressed, setPressed] = useState(false)
+  const interactive = !!onClick
   return (
     <div
-      role={role ?? (onClick ? 'button' : undefined)}
+      role={role ?? (interactive ? 'button' : undefined)}
       aria-label={ariaLabel}
+      tabIndex={interactive ? 0 : undefined}
       onClick={(e) => {
         if (ripple) launch(e)
         onClick?.(e)
+      }}
+      onKeyDown={(e) => {
+        if (!interactive) return
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onClick?.(e as unknown as React.MouseEvent<HTMLDivElement>)
+        }
       }}
       onMouseDown={() => setPressed(true)}
       onMouseUp={() => setPressed(false)}
@@ -88,7 +97,7 @@ export function Press({
         overflow: 'hidden',
         transform: pressed ? 'scale(0.985)' : 'scale(1)',
         transition: 'transform 140ms ease',
-        cursor: onClick ? 'pointer' : 'default',
+        cursor: interactive ? 'pointer' : 'default',
         ...style,
       }}
     >
@@ -242,7 +251,10 @@ export function Chrome({
               fontFamily: LF.display,
               fontSize: 10,
               letterSpacing: '0.2em',
-              padding: 0,
+              minHeight: 44,
+              minWidth: 44,
+              padding: '12px 8px',
+              margin: '-12px -8px',
               display: 'flex',
               alignItems: 'center',
               gap: 6,
@@ -267,9 +279,13 @@ export function Chrome({
                 background: 'transparent',
                 border: 'none',
                 cursor: 'pointer',
-                padding: 4,
-                margin: -4,
+                minHeight: 44,
+                minWidth: 44,
+                padding: 15,
+                margin: -15,
                 display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={LF.muted} strokeWidth="1.8" strokeLinecap="square">

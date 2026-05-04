@@ -94,8 +94,10 @@ function EditableField({
               background: 'transparent',
               border: 'none',
               cursor: 'pointer',
-              padding: 4,
-              margin: -4,
+              minHeight: 44,
+              minWidth: 44,
+              padding: '12px 10px',
+              margin: '-12px -10px',
               display: 'flex',
               alignItems: 'center',
               gap: 4,
@@ -126,8 +128,10 @@ function EditableField({
               background: 'transparent',
               border: 'none',
               cursor: 'pointer',
-              padding: 4,
-              margin: -4,
+              minHeight: 44,
+              minWidth: 44,
+              padding: '12px 10px',
+              margin: '-12px -10px',
               display: 'flex',
               alignItems: 'center',
               gap: 4,
@@ -310,7 +314,18 @@ export default function EditSheet({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4, display: 'flex' }}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              minHeight: 44,
+              minWidth: 44,
+              padding: 14,
+              margin: -14,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={LF.muted} strokeWidth="1.8" strokeLinecap="square">
               <path d="M6 6l12 12M18 6L6 18" />

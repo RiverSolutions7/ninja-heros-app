@@ -95,6 +95,14 @@ export default function LogComponentPage() {
     }
   }, [draft.photoPreviewUrl])
 
+  // Voice-not-supported fallback — skip voice step entirely on unsupported browsers
+  useEffect(() => {
+    if (step !== 'voice') return
+    if (voice.isSupported) return
+    setError("Voice isn't supported on this browser. Tap the card to type details.")
+    setStep('reveal')
+  }, [step, voice.isSupported])
+
   // Dirty detection — anything captured beyond the empty draft
   const isDirty = useMemo(() => {
     if (step === 'satisfaction') return false
@@ -116,6 +124,11 @@ export default function LogComponentPage() {
 
   const handleMicTap = async () => {
     if (!draft.type) return
+    if (!voice.isSupported) {
+      setError("Voice isn't supported on this browser. Tap the card to type details.")
+      setStep('reveal')
+      return
+    }
     if (voice.voiceState === 'idle' || voice.voiceState === 'done' || voice.voiceState === 'error') {
       voice.startRecording()
       return

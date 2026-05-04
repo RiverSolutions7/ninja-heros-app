@@ -185,7 +185,8 @@ export default function Satisfaction({
             display: 'block',
             width: '100%',
             textAlign: 'center',
-            marginTop: 18,
+            marginTop: 6,
+            minHeight: 44,
             background: 'transparent',
             border: 'none',
             fontFamily: LF.display,
@@ -194,7 +195,7 @@ export default function Satisfaction({
             color: LF.faint,
             textTransform: 'uppercase',
             cursor: 'pointer',
-            padding: 0,
+            padding: '14px 0',
           }}
         >
           LOG ANOTHER
