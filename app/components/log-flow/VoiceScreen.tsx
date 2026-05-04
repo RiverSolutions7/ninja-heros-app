@@ -92,11 +92,12 @@ export default function VoiceScreen({
           <div
             style={{
               width: '100%',
-              height: 90,
+              height: 120,
               marginBottom: 24,
               flexShrink: 0,
               position: 'relative',
               animation: 'lf-rise-in 300ms both',
+              background: LF.bgDeep,
             }}
           >
             {firstPhotoUrl && (
@@ -104,7 +105,7 @@ export default function VoiceScreen({
                 src={firstPhotoUrl}
                 alt=""
                 aria-hidden
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
               />
             )}
             <div style={{ position: 'absolute', inset: 0, border: `1px solid ${accent}55` }} />
@@ -113,12 +114,13 @@ export default function VoiceScreen({
           <div
             style={{
               width: 'calc(100% - 48px)',
-              height: 64,
+              height: 120,
               marginBottom: 28,
               flexShrink: 0,
               position: 'relative',
               animation: 'lf-rise-in 600ms both',
               border: `1px solid ${accent}44`,
+              background: LF.bgDeep,
             }}
           >
             {firstPhotoUrl && (
@@ -126,7 +128,7 @@ export default function VoiceScreen({
                 src={firstPhotoUrl}
                 alt=""
                 aria-hidden
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
               />
             )}
             <div style={{ position: 'absolute', inset: 0, background: 'rgba(6,10,28,0.35)' }} />
