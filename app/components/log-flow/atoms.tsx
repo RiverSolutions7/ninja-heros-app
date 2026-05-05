@@ -1,6 +1,6 @@
 'use client'
 
-import { CSSProperties, ReactNode, useState } from 'react'
+import { CSSProperties, ReactNode, useEffect, useRef, useState } from 'react'
 
 export const LF = {
   bg: '#0a1232',
@@ -381,7 +381,8 @@ export function MicButton({ state, accent = ACCENT, onClick }: { state: MicState
 }
 
 export function Waveform({ accent = ACCENT, active }: { accent?: string; active: boolean }) {
-  const bars = 24
+  const bars = 16
+  const durations = [0.85, 1.1, 0.75, 1.3, 0.95, 1.15, 0.8, 1.0, 1.25, 0.9, 1.05, 0.7, 1.2, 0.88, 1.4, 1.0]
   return (
     <div
       aria-hidden
@@ -389,9 +390,8 @@ export function Waveform({ accent = ACCENT, active }: { accent?: string; active:
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 3,
-        height: 36,
-        marginTop: 8,
+        gap: 5,
+        height: 40,
       }}
     >
       {Array.from({ length: bars }).map((_, i) => (
@@ -399,11 +399,12 @@ export function Waveform({ accent = ACCENT, active }: { accent?: string; active:
           key={i}
           style={{
             width: 3,
+            borderRadius: 2,
             background: accent,
-            height: active ? `${6 + Math.abs(Math.sin((i + 1) * 0.7)) * 28}px` : 2,
-            animation: active ? `lf-wave 1.1s ${i * 0.04}s ease-in-out infinite alternate` : 'none',
-            opacity: active ? 1 : 0.2,
-            transition: 'opacity 300ms',
+            height: active ? `${4 + Math.abs(Math.sin((i + 1) * 0.9)) * 28}px` : '6px',
+            animation: active ? `lf-wave ${durations[i]}s ${(i * 0.09) % 0.9}s ease-in-out infinite alternate` : 'none',
+            opacity: active ? 0.85 : 0.25,
+            transition: 'opacity 400ms',
           }}
         />
       ))}
@@ -412,37 +413,176 @@ export function Waveform({ accent = ACCENT, active }: { accent?: string; active:
 }
 
 export function LiveTranscript({ accent = ACCENT, words }: { accent?: string; words: string[] }) {
+  const bottomRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [words.length])
+
   return (
     <div
       style={{
-        marginTop: 24,
-        minHeight: 72,
-        maxWidth: 300,
-        textAlign: 'center',
-        padding: '14px 16px',
-        border: '1px solid rgba(255,255,255,0.08)',
-        background: 'rgba(255,255,255,0.03)',
-        animation: 'lf-rise-in 300ms both',
+        width: '100%',
+        maxHeight: 220,
+        overflowY: 'auto',
+        padding: '0 24px',
+        scrollbarWidth: 'none',
+        msOverflowStyle: 'none',
       }}
     >
-      <div style={{ fontFamily: LF.body, fontSize: 15, color: '#fff', lineHeight: 1.6, fontWeight: 500 }}>
+      <div
+        style={{
+          fontFamily: LF.display,
+          fontSize: 22,
+          lineHeight: 1.35,
+          letterSpacing: '-0.01em',
+          textTransform: 'uppercase',
+        }}
+      >
         {words.map((w, i) => (
-          <span key={i} style={{ display: 'inline-block', marginRight: 5 }}>
+          <span
+            key={i}
+            style={{
+              display: 'inline-block',
+              marginRight: 6,
+              color: i === words.length - 1 ? accent : '#fff',
+              transition: 'color 120ms',
+              animation: 'lf-word-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both',
+            }}
+          >
             {w}
           </span>
         ))}
-        <span
-          style={{
-            display: 'inline-block',
-            width: 2,
-            height: 14,
-            background: accent,
-            marginLeft: 2,
-            verticalAlign: 'middle',
-            animation: 'lf-blink 1s step-end infinite',
-          }}
-        />
       </div>
+      <div ref={bottomRef} style={{ height: 1 }} />
+    </div>
+  )
+}
+
+export function VoiceControlBar({
+  state,
+  accent = ACCENT,
+  onStart,
+  onStop,
+}: {
+  state: MicState
+  accent?: string
+  onStart: () => void
+  onStop: () => void
+}) {
+  if (state === 'idle') {
+    return (
+      <div style={{ padding: '12px 24px 40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Press
+          onClick={onStart}
+          ariaLabel="Start recording"
+          rippleColor={`${accent}22`}
+          style={{
+            height: 52,
+            paddingLeft: 36,
+            paddingRight: 36,
+            border: `1.5px solid ${accent}`,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="1.8">
+            <rect x="9" y="3" width="6" height="12" rx="3" />
+            <path d="M5 11a7 7 0 0014 0" strokeLinecap="square" />
+            <line x1="12" y1="18" x2="12" y2="21" strokeLinecap="square" />
+          </svg>
+          <span style={{ fontFamily: LF.display, fontSize: 11, letterSpacing: '0.24em', color: accent, textTransform: 'uppercase' }}>
+            Tap to speak
+          </span>
+        </Press>
+      </div>
+    )
+  }
+
+  if (state === 'parsing') {
+    return (
+      <div style={{ padding: '12px 24px 40px', display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{ width: 44, height: 44, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div
+            style={{
+              width: 20,
+              height: 20,
+              borderRadius: '50%',
+              border: `1.5px solid ${accent}33`,
+              borderTopColor: accent,
+              animation: 'lf-spin 1.2s linear infinite',
+            }}
+          />
+        </div>
+        <div style={{ flex: 1 }}>
+          <Waveform accent={accent} active={false} />
+        </div>
+        <div
+          style={{
+            width: 52,
+            height: 52,
+            flexShrink: 0,
+            borderRadius: '50%',
+            background: `${accent}22`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={`${accent}55`} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        </div>
+      </div>
+    )
+  }
+
+  // recording state
+  return (
+    <div style={{ padding: '12px 24px 40px', display: 'flex', alignItems: 'center', gap: 16 }}>
+      <Press
+        onClick={onStop}
+        ariaLabel="Pause recording"
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: '50%',
+          border: '1px solid rgba(255,255,255,0.18)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+        }}
+      >
+        <svg width="10" height="13" viewBox="0 0 10 13" fill="none">
+          <rect x="0" y="0" width="3.5" height="13" rx="1" fill="white" />
+          <rect x="6.5" y="0" width="3.5" height="13" rx="1" fill="white" />
+        </svg>
+      </Press>
+      <div style={{ flex: 1 }}>
+        <Waveform accent={accent} active />
+      </div>
+      <Press
+        onClick={onStop}
+        ariaLabel="Done recording"
+        rippleColor="rgba(0,0,0,0.2)"
+        style={{
+          width: 52,
+          height: 52,
+          borderRadius: '50%',
+          background: accent,
+          boxShadow: `0 0 24px ${accent}66`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+        }}
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      </Press>
     </div>
   )
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import type { ComponentType } from '@/app/lib/database.types'
-import { ACCENT, Chrome, LF, LiveTranscript, MicButton, MicState, StatusBarLog, Waveform } from './atoms'
+import { ACCENT, Chrome, LF, LiveTranscript, MicState, StatusBarLog, VoiceControlBar } from './atoms'
 
 function formatElapsed(seconds: number) {
   const m = Math.floor(seconds / 60)
@@ -48,22 +48,19 @@ export default function VoiceScreen({
     return () => clearInterval(tick)
   }, [state])
 
-  const promptHeading = state === 'parsing' ? 'Reading your notes…' : `Describe your ${type === 'game' ? 'game' : 'station'}.`
-  const promptSub =
-    state === 'parsing' ? 'Pulling out title, duration, cues.' : "No fields. Just talk. We'll fill the form."
-
   const chromeLabel =
     state === 'parsing' ? 'STEP · 05 / PARSING' : state === 'recording' ? 'STEP · 04 / RECORDING' : 'STEP · 04 / VOICE'
 
   const transcriptWords = transcript.trim().length > 0 ? transcript.trim().split(/\s+/) : []
-
   const photoReadyLabel = photoCount > 1 ? `${photoCount} photos ready` : 'Photo ready'
+  const subjectLabel = type === 'game' ? 'game' : 'station'
 
   return (
     <div style={{ position: 'absolute', inset: 0, background: LF.bg, color: '#fff', display: 'flex', flexDirection: 'column' }}>
       <StatusBarLog />
       <Chrome step={step} total={5} accent={accent} label={chromeLabel} onBack={onBack} onClose={onClose ?? onBack} />
 
+      {/* Ambient gradient */}
       <div
         aria-hidden
         style={{
@@ -76,18 +73,19 @@ export default function VoiceScreen({
         }}
       />
 
+      {/* Content */}
       <div
         style={{
           flex: 1,
           display: 'flex',
           flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '100px 0 0',
+          padding: '88px 0 0',
           position: 'relative',
           zIndex: 1,
+          overflow: 'hidden',
         }}
       >
+        {/* Photo strip */}
         {state === 'recording' ? (
           <div
             style={{
@@ -113,6 +111,7 @@ export default function VoiceScreen({
         ) : (
           <div
             style={{
+              alignSelf: 'center',
               width: 'calc(100% - 48px)',
               height: 120,
               marginBottom: 28,
@@ -161,64 +160,74 @@ export default function VoiceScreen({
           </div>
         )}
 
-        <div style={{ animation: 'lf-rise-in 600ms 120ms both', padding: '0 24px' }}>
-          <MicButton state={state} accent={accent} onClick={onMicTap} />
-        </div>
-
-        <div style={{ width: '100%', padding: '0 24px' }}>
-          <Waveform accent={accent} active={state === 'recording'} />
-        </div>
-
-        {state === 'recording' && (
-          <div style={{ width: '100%', padding: '0 24px', display: 'flex', justifyContent: 'center' }}>
+        {/* Middle content — transcript or heading */}
+        <div
+          style={{
+            flex: 1,
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: state === 'recording' ? 'flex-start' : 'center',
+          }}
+        >
+          {state === 'recording' ? (
             <LiveTranscript accent={accent} words={transcriptWords} />
-          </div>
-        )}
+          ) : (
+            <div style={{ padding: '0 24px', animation: 'lf-rise-in 600ms 120ms both' }}>
+              <div
+                style={{
+                  fontFamily: LF.display,
+                  fontSize: 28,
+                  lineHeight: 1.05,
+                  letterSpacing: '-0.01em',
+                  textTransform: 'uppercase',
+                  color: state === 'parsing' ? accent : '#fff',
+                }}
+              >
+                {state === 'parsing' ? (
+                  <>Reading your<br />notes…</>
+                ) : (
+                  <>Describe your<br />{subjectLabel}.</>
+                )}
+              </div>
+              <div
+                style={{
+                  fontFamily: LF.body,
+                  fontSize: 13,
+                  color: LF.muted,
+                  marginTop: 10,
+                  lineHeight: 1.5,
+                }}
+              >
+                {state === 'parsing'
+                  ? 'Pulling out title, duration, cues.'
+                  : "No fields. Just talk. We'll fill the form."}
+              </div>
+            </div>
+          )}
+        </div>
 
-        {state !== 'recording' && (
-          <div style={{ marginTop: 28, textAlign: 'center', animation: 'lf-rise-in 600ms 220ms both', padding: '0 24px' }}>
+        {/* Elapsed — recording only */}
+        {state === 'recording' && (
+          <div style={{ padding: '8px 24px 4px', flexShrink: 0, textAlign: 'center' }}>
             <div
               style={{
                 fontFamily: LF.display,
-                fontSize: 22,
-                color: '#fff',
+                fontSize: 10,
+                letterSpacing: '0.24em',
+                color: LF.faint,
                 textTransform: 'uppercase',
-                letterSpacing: '-0.01em',
               }}
             >
-              {promptHeading}
-            </div>
-            <div
-              style={{
-                fontFamily: LF.body,
-                fontSize: 13,
-                color: LF.muted,
-                marginTop: 10,
-                maxWidth: 280,
-                marginInline: 'auto',
-                lineHeight: 1.5,
-              }}
-            >
-              {promptSub}
+              {formatElapsed(elapsed)} · Listening… just talk
             </div>
           </div>
         )}
       </div>
 
-      <div style={{ padding: '0 24px 32px', textAlign: 'center' }}>
-        <div
-          style={{
-            fontFamily: LF.display,
-            fontSize: 10,
-            letterSpacing: '0.24em',
-            color: LF.faint,
-            textTransform: 'uppercase',
-          }}
-        >
-          {state === 'idle' && 'TAP MIC TO BEGIN'}
-          {state === 'recording' && `${formatElapsed(elapsed)} · TAP MIC TO STOP`}
-          {state === 'parsing' && 'WORKING ON IT…'}
-        </div>
+      {/* Bottom controls */}
+      <div style={{ position: 'relative', zIndex: 1, flexShrink: 0 }}>
+        <VoiceControlBar state={state} accent={accent} onStart={onMicTap} onStop={onMicTap} />
       </div>
     </div>
   )
