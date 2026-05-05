@@ -1,9 +1,9 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ComponentType, CurriculumRow } from '@/app/lib/database.types'
-import { ACCENT, Chrome, LF, Press, PrimaryBtn, StatusBarLog } from './atoms'
-import EditSheet, { type EditDraft } from './EditSheet'
+import { ACCENT, Chrome, LF, StatusBarLog } from './atoms'
+import { useSwipeReveal, REVEAL_WIDTH_DEFAULT } from '../../hooks/useSwipeReveal'
 
 export interface RevealDraft {
   title: string
@@ -12,16 +12,242 @@ export interface RevealDraft {
   durationMinutes: number | null
 }
 
+type Field = 'title' | 'duration' | 'skills' | null
+
+function splitSteps(desc: string): string[] {
+  if (!desc) return []
+  const normalized = desc.replace(/^\s*[•·\-]\s*/, '')
+  const parts = normalized
+    .split(/\n+|\s+[•·]\s+/g)
+    .map((s) => s.replace(/^[•·\-]\s*/, '').trim())
+    .filter(Boolean)
+  if (parts.length > 1) return parts
+  const sentences = normalized.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean)
+  return sentences.length > 0 ? sentences : []
+}
+
+function ClockIcon({ color, size = 14 }: { color: string; size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ flexShrink: 0 }}
+    >
+      <circle cx="12" cy="12" r="9.5" />
+      <path d="M12 7v5l3.2 2" />
+    </svg>
+  )
+}
+
+function SkillPill({ label, accent }: { label: string; accent: string }) {
+  return (
+    <div
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        padding: '6px 14px',
+        borderRadius: 999,
+        border: `1.5px solid ${accent}`,
+        color: accent,
+        fontFamily: LF.display,
+        fontSize: 11,
+        letterSpacing: '0.04em',
+        textTransform: 'uppercase' as const,
+        lineHeight: 1,
+      }}
+    >
+      {label}
+    </div>
+  )
+}
+
+function TrashIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6l-1 14H6L5 6" />
+      <path d="M10 11v6M14 11v6" />
+      <path d="M9 6V4h6v2" />
+    </svg>
+  )
+}
+
+interface Step { id: number; text: string }
+
+interface StepRowProps {
+  n: number
+  text: string
+  isLast: boolean
+  isEditing: boolean
+  accent: string
+  onTap: () => void
+  onChange: (val: string) => void
+  onBlur: () => void
+  onDelete: () => void
+}
+
+function StepRow({ n, text, isLast, isEditing, accent, onTap, onChange, onBlur, onDelete }: StepRowProps) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const { handlers, rowStyle } = useSwipeReveal({ onDelete })
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus()
+      const len = inputRef.current.value.length
+      inputRef.current.setSelectionRange(len, len)
+    }
+  }, [isEditing])
+
+  return (
+    <div style={{ position: 'relative', overflow: 'hidden' }}>
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          bottom: 0,
+          right: 0,
+          width: REVEAL_WIDTH_DEFAULT,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: '#c0392b',
+        }}
+      >
+        <button
+          type="button"
+          aria-label="Delete step"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); onDelete() }}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#fff',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 4,
+            cursor: 'pointer',
+            minWidth: 44,
+            minHeight: 44,
+            justifyContent: 'center',
+            padding: 0,
+          }}
+        >
+          <TrashIcon />
+          <span style={{ fontFamily: LF.display, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase' as const, color: '#fff' }}>
+            Delete
+          </span>
+        </button>
+      </div>
+
+      <div
+        {...handlers}
+        role="button"
+        tabIndex={0}
+        aria-label={`Edit step ${n}`}
+        style={{
+          ...rowStyle,
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 14,
+          paddingBottom: isLast ? 0 : 14,
+          position: 'relative',
+          background: LF.bg,
+        }}
+        onClick={(e) => { e.stopPropagation(); onTap() }}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onTap() } }}
+      >
+        <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', alignSelf: 'stretch' }}>
+          <div
+            style={{
+              width: 26,
+              height: 26,
+              borderRadius: '50%',
+              border: `1.5px solid ${accent}`,
+              color: accent,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontFamily: LF.display,
+              fontSize: 12,
+              fontVariantNumeric: 'tabular-nums',
+              flexShrink: 0,
+            }}
+          >
+            {n}
+          </div>
+          {!isLast && (
+            <div
+              style={{
+                flex: 1,
+                width: 0,
+                borderLeft: `1.5px dotted ${accent}66`,
+                marginTop: 4,
+                marginBottom: 4,
+                minHeight: 12,
+              }}
+            />
+          )}
+        </div>
+
+        {isEditing ? (
+          <input
+            ref={inputRef}
+            aria-label={`Step ${n}`}
+            value={text}
+            onChange={(e) => onChange(e.target.value)}
+            onBlur={onBlur}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              flex: 1,
+              background: 'transparent',
+              border: 'none',
+              borderBottom: `1px solid ${accent}88`,
+              outline: 'none',
+              fontFamily: LF.body,
+              fontSize: 14.5,
+              color: '#fff',
+              lineHeight: 1.5,
+              paddingTop: 3,
+              paddingBottom: 6,
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              flex: 1,
+              fontFamily: LF.body,
+              fontSize: 14.5,
+              color: text.trim() ? '#fff' : LF.dim,
+              lineHeight: 1.5,
+              paddingTop: 3,
+              fontStyle: text.trim() ? 'normal' : 'italic',
+            }}
+          >
+            {text.trim() || 'Empty — swipe to delete'}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function RevealScreen({
   type,
   curricula,
   curriculumRows,
   photoPreviewUrls,
   draft,
-  onUpdateDraft,
   onSave,
-  onSpeakMore,
   onBack,
+  onClose,
   saving,
   accent = ACCENT,
 }: {
@@ -30,32 +256,91 @@ export default function RevealScreen({
   curriculumRows: CurriculumRow[]
   photoPreviewUrls: string[]
   draft: RevealDraft
-  onUpdateDraft: (next: RevealDraft) => void
-  onSave: () => void
-  onSpeakMore: () => void
+  onSave: (finalDraft: RevealDraft) => void
   onBack: () => void
+  onClose: () => void
   saving?: boolean
   accent?: string
 }) {
-  const [editOpen, setEditOpen] = useState(false)
+  const [title, setTitle] = useState(draft.title)
+  const [durationStr, setDurationStr] = useState(draft.durationMinutes != null ? String(draft.durationMinutes) : '')
+  const nextId = useRef(0)
+  const [steps, setSteps] = useState<Step[]>(() =>
+    splitSteps(draft.description).map((text) => ({ id: nextId.current++, text }))
+  )
+  const [skills, setSkills] = useState<string[]>(draft.skills || [])
+  const [activeField, setActiveField] = useState<Field>(null)
+  const [editingStepId, setEditingStepId] = useState<number | null>(null)
   const [activePhoto, setActivePhoto] = useState(0)
+
+  const titleRef = useRef<HTMLTextAreaElement>(null)
+  const durRef = useRef<HTMLInputElement>(null)
+  const skillRef = useRef<HTMLInputElement>(null)
   const carouselRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (activeField === 'title' && titleRef.current) titleRef.current.focus()
+    if (activeField === 'duration' && durRef.current) durRef.current.focus()
+    if (activeField === 'skills' && skillRef.current) skillRef.current.focus()
+  }, [activeField])
+
+  const hasDuration = durationStr.trim().length > 0
+  const multiPhoto = photoPreviewUrls.length > 1
 
   const typeLabel = type === 'game' ? 'Game' : 'Station'
   const currLabels = curricula
     .map((id) => curriculumRows.find((c) => c.age_group === id)?.label)
     .filter((x): x is string => Boolean(x))
-  const durationLabel = draft.durationMinutes ? `${draft.durationMinutes} min` : null
-  const metaParts = [durationLabel, ...currLabels, typeLabel].filter(Boolean) as string[]
-  const metaLine = metaParts.join(' · ')
+  const metaLine = [...currLabels, typeLabel].join(' · ')
 
-  const handleCommit = (next: EditDraft) => {
-    onUpdateDraft({
-      title: next.title,
-      description: next.description,
-      skills: next.skills,
-      durationMinutes: next.durationMinutes,
-    })
+  function buildFinalDraft(): RevealDraft {
+    const minutes = Number.parseInt(durationStr, 10)
+    return {
+      title: title.trim(),
+      description: steps.filter((s) => s.text.trim().length > 0).map((s) => s.text).join('\n'),
+      skills,
+      durationMinutes: Number.isFinite(minutes) && minutes > 0 ? minutes : null,
+    }
+  }
+
+  function handleStepChange(id: number, val: string) {
+    setSteps((prev) => prev.map((s) => s.id === id ? { ...s, text: val } : s))
+  }
+
+  function handleDeleteStep(id: number) {
+    setEditingStepId(null)
+    setSteps((prev) => prev.filter((s) => s.id !== id))
+  }
+
+  function handleAddStep() {
+    setActiveField(null)
+    const newId = nextId.current++
+    setSteps((prev) => [...prev, { id: newId, text: '' }])
+    setEditingStepId(newId)
+  }
+
+  function sectionStyle(id: Field): React.CSSProperties {
+    const isActive = activeField === id
+    return {
+      position: 'relative',
+      padding: '12px 14px',
+      marginLeft: -14,
+      marginRight: -14,
+      background: isActive ? `${accent}0d` : 'transparent',
+      borderLeft: `2px solid ${isActive ? accent : 'transparent'}`,
+      transition: 'background 160ms, border-color 160ms',
+      cursor: isActive ? 'text' : 'pointer',
+    }
+  }
+
+  const sequenceSectionStyle: React.CSSProperties = {
+    position: 'relative',
+    padding: '12px 14px',
+    marginLeft: -14,
+    marginRight: -14,
+    background: editingStepId !== null ? `${accent}0d` : 'transparent',
+    borderLeft: `2px solid ${editingStepId !== null ? accent : 'transparent'}`,
+    transition: 'background 160ms, border-color 160ms',
   }
 
   const handleCarouselScroll = () => {
@@ -64,11 +349,6 @@ export default function RevealScreen({
     const index = Math.round(el.scrollLeft / el.clientWidth)
     setActivePhoto(index)
   }
-
-  const titleDisplay = draft.title.trim() || 'Untitled component'
-  const descDisplay = draft.description.trim()
-  const skillList = draft.skills.filter(Boolean)
-  const multiPhoto = photoPreviewUrls.length > 1
 
   return (
     <div
@@ -83,313 +363,391 @@ export default function RevealScreen({
       }}
     >
       <StatusBarLog />
-      <Chrome step={4} total={5} accent={accent} label="STEP · 05 / REVIEW" onBack={onBack} onClose={onBack} />
+      <Chrome step={4} total={5} accent={accent} label="STEP · 05 / REVIEW" onBack={onBack} onClose={onClose} />
 
-      <div
-        aria-hidden
-        style={{
-          position: 'absolute',
-          inset: 0,
-          zIndex: 0,
-          pointerEvents: 'none',
-          background: `radial-gradient(ellipse 70% 40% at 50% 25%, ${accent}14 0%, transparent 70%)`,
-        }}
-      />
-
+      {/* Photo carousel */}
       <div
         style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
           position: 'relative',
-          zIndex: 1,
-          padding: '88px 0 0',
+          height: '52vh',
+          flexShrink: 0,
+          background: '#091230',
           overflow: 'hidden',
         }}
       >
-        <div style={{ padding: '0 24px 16px', animation: 'lf-rise-in 400ms both', flexShrink: 0 }}>
+        <div
+          ref={carouselRef}
+          onScroll={handleCarouselScroll}
+          style={{
+            display: 'flex',
+            width: '100%',
+            height: '100%',
+            overflowX: multiPhoto ? 'auto' : 'hidden',
+            overflowY: 'hidden',
+            scrollSnapType: 'x mandatory',
+            scrollBehavior: 'smooth',
+            WebkitOverflowScrolling: 'touch',
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
+          } as React.CSSProperties}
+        >
+          {photoPreviewUrls.length > 0 ? (
+            photoPreviewUrls.map((url, i) => (
+              <div
+                key={url}
+                style={{
+                  minWidth: '100%',
+                  height: '100%',
+                  scrollSnapAlign: 'start',
+                  flexShrink: 0,
+                  background: '#091230',
+                }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={url}
+                  alt={`Photo ${i + 1}`}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+              </div>
+            ))
+          ) : (
+            <div style={{ minWidth: '100%', height: '100%', background: '#091230' }} />
+          )}
+        </div>
+
+        {/* Gradient fade at bottom */}
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: 80,
+            background: `linear-gradient(180deg, transparent 0%, ${LF.bg} 100%)`,
+            pointerEvents: 'none',
+          }}
+        />
+
+        {/* Dot indicators */}
+        {multiPhoto && (
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute',
+              bottom: 14,
+              left: 0,
+              right: 0,
+              display: 'flex',
+              justifyContent: 'center',
+              gap: 5,
+              zIndex: 2,
+            }}
+          >
+            {photoPreviewUrls.map((_, i) => (
+              <div
+                key={i}
+                style={{
+                  width: 5,
+                  height: 5,
+                  borderRadius: '50%',
+                  background: i === activePhoto ? '#fff' : 'rgba(255,255,255,0.35)',
+                  transition: 'background 200ms',
+                }}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Scrollable edit body */}
+      <div
+        style={{ flex: 1, overflowY: 'auto', padding: '16px 24px 0' }}
+        onClick={() => { setActiveField(null); setEditingStepId(null) }}
+      >
+        {/* Meta line */}
+        {metaLine && (
           <div
             style={{
               fontFamily: LF.display,
-              fontSize: 11,
-              letterSpacing: '0.28em',
+              fontSize: 10,
+              letterSpacing: '0.22em',
               color: accent,
               textTransform: 'uppercase',
+              marginBottom: 8,
             }}
           >
-            CAPTURED
+            {metaLine}
           </div>
-          <div
-            style={{
-              fontFamily: LF.display,
-              fontSize: 26,
-              lineHeight: 0.95,
-              letterSpacing: '-0.01em',
-              textTransform: 'uppercase',
-              marginTop: 8,
-            }}
-          >
-            Here&apos;s what
-            <br />
-            I heard.
-          </div>
-        </div>
+        )}
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 8px' }}>
-          <Press
-            onClick={() => setEditOpen(true)}
-            ariaLabel="Edit component details"
-            style={{
-              background: LF.card,
-              borderRadius: 12,
-              overflow: 'hidden',
-              animation: 'lf-slide-up 440ms cubic-bezier(.22,1,.36,1) both',
-              display: 'block',
-            }}
-          >
-            {/* ── Photo carousel ── */}
+        {/* Title */}
+        <div
+          onClick={(e) => {
+            e.stopPropagation()
+            setEditingStepId(null)
+            setActiveField('title')
+          }}
+          style={sectionStyle('title')}
+        >
+          {activeField === 'title' ? (
+            <textarea
+              ref={titleRef}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              rows={2}
+              style={{
+                width: '100%',
+                background: 'transparent',
+                border: 'none',
+                outline: 'none',
+                resize: 'none',
+                fontFamily: LF.display,
+                fontSize: 32,
+                lineHeight: 1.0,
+                letterSpacing: '-0.01em',
+                color: '#fff',
+                textTransform: 'uppercase',
+                padding: 0,
+              }}
+            />
+          ) : (
             <div
               style={{
-                position: 'relative',
-                width: '100%',
-                borderRadius: '12px 12px 0 0',
-                background: '#091230',
-                overflow: 'hidden',
-              }}
-            >
-              {/* Scrollable slides */}
-              <div
-                ref={carouselRef}
-                onScroll={handleCarouselScroll}
-                style={{
-                  display: 'flex',
-                  width: '100%',
-                  height: 180,
-                  overflowX: multiPhoto ? 'auto' : 'hidden',
-                  overflowY: 'hidden',
-                  scrollSnapType: 'x mandatory',
-                  scrollBehavior: 'smooth',
-                  WebkitOverflowScrolling: 'touch',
-                  scrollbarWidth: 'none',
-                  msOverflowStyle: 'none',
-                }}
-              >
-                {photoPreviewUrls.length > 0 ? (
-                  photoPreviewUrls.map((url, i) => (
-                    <div
-                      key={url}
-                      style={{
-                        minWidth: '100%',
-                        height: 180,
-                        scrollSnapAlign: 'start',
-                        flexShrink: 0,
-                        background: '#091230',
-                      }}
-                    >
-                      <img
-                        src={url}
-                        alt={`Photo ${i + 1} of ${titleDisplay}`}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                      />
-                    </div>
-                  ))
-                ) : (
-                  <div style={{ minWidth: '100%', height: 180, background: '#091230' }} />
-                )}
-              </div>
-
-              {/* "Tap to edit" pill — always top-right */}
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 10,
-                  right: 10,
-                  background: 'rgba(6,10,28,0.65)',
-                  backdropFilter: 'blur(8px)',
-                  padding: '4px 9px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  border: '1px solid rgba(255,255,255,0.10)',
-                  borderRadius: 2,
-                  zIndex: 2,
-                }}
-              >
-                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="1.8" strokeLinecap="square">
-                  <path d="M11 4H4v16h16v-7" />
-                  <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-                </svg>
-                <span
-                  style={{
-                    fontFamily: LF.display,
-                    fontSize: 8,
-                    letterSpacing: '0.2em',
-                    color: accent,
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  Tap to edit
-                </span>
-              </div>
-
-              {/* Dot indicators — only when multiple photos */}
-              {multiPhoto && (
-                <div
-                  aria-hidden
-                  style={{
-                    position: 'absolute',
-                    bottom: 10,
-                    left: 0,
-                    right: 0,
-                    display: 'flex',
-                    justifyContent: 'center',
-                    gap: 5,
-                    zIndex: 2,
-                  }}
-                >
-                  {photoPreviewUrls.map((_, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        width: 5,
-                        height: 5,
-                        borderRadius: '50%',
-                        background: i === activePhoto ? '#fff' : 'rgba(255,255,255,0.35)',
-                        transition: 'background 200ms',
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div style={{ padding: '14px 16px 16px' }}>
-              <div
-                style={{
-                  fontFamily: LF.display,
-                  fontSize: 26,
-                  lineHeight: 1.05,
-                  letterSpacing: '-0.01em',
-                  textTransform: 'uppercase',
-                  color: '#fff',
-                }}
-              >
-                {titleDisplay}
-              </div>
-              {metaLine && (
-                <div style={{ fontFamily: LF.body, fontSize: 12, color: LF.muted, marginTop: 7, letterSpacing: '0.01em' }}>
-                  {metaLine}
-                </div>
-              )}
-              {descDisplay && (
-                <div
-                  style={{
-                    fontFamily: LF.body,
-                    fontSize: 13.5,
-                    color: 'rgba(255,255,255,0.70)',
-                    marginTop: 12,
-                    lineHeight: 1.55,
-                    whiteSpace: 'pre-wrap',
-                  }}
-                >
-                  {descDisplay}
-                </div>
-              )}
-              {skillList.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 14 }}>
-                  {skillList.map((s) => (
-                    <div
-                      key={s}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 5,
-                        padding: '4px 9px',
-                        border: `1px solid ${accent}55`,
-                        background: `${accent}14`,
-                      }}
-                    >
-                      <span style={{ width: 5, height: 5, borderRadius: '50%', background: accent, flexShrink: 0 }} />
-                      <span
-                        style={{
-                          fontFamily: LF.display,
-                          fontSize: 9,
-                          letterSpacing: '0.2em',
-                          color: accent,
-                          textTransform: 'uppercase',
-                        }}
-                      >
-                        {s}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </Press>
-        </div>
-
-        <div
-          style={{
-            padding: '12px 20px 24px',
-            borderTop: `1px solid ${LF.hairline}`,
-            flexShrink: 0,
-            animation: 'lf-rise-in 400ms 400ms both',
-          }}
-        >
-          <PrimaryBtn accent={accent} onClick={onSave} disabled={saving || !draft.title.trim()}>
-            {saving ? 'Saving…' : 'Save to library'}
-          </PrimaryBtn>
-          <Press
-            onClick={onSpeakMore}
-            ariaLabel="Speak to add more"
-            style={{
-              marginTop: 10,
-              width: '100%',
-              height: 44,
-              border: `1px solid ${LF.hairlineStrong}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 10,
-              background: 'transparent',
-              transition: 'all 200ms',
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={LF.muted} strokeWidth="1.8">
-              <rect x="9" y="3" width="6" height="12" rx="3" />
-              <path d="M5 11a7 7 0 0014 0" strokeLinecap="square" />
-              <line x1="12" y1="18" x2="12" y2="21" strokeLinecap="square" />
-            </svg>
-            <span
-              style={{
                 fontFamily: LF.display,
-                fontSize: 11,
-                letterSpacing: '0.2em',
-                color: LF.muted,
+                fontSize: 32,
+                lineHeight: 1.0,
+                letterSpacing: '-0.01em',
+                color: title.trim() ? '#fff' : LF.dim,
                 textTransform: 'uppercase',
               }}
             >
-              Speak to add more
-            </span>
-          </Press>
+              {title.trim() || 'Untitled'}
+            </div>
+          )}
         </div>
+
+        <div style={{ height: 14 }} />
+
+        {/* Skills */}
+        <div
+          onClick={(e) => {
+            e.stopPropagation()
+            setEditingStepId(null)
+            setActiveField('skills')
+          }}
+          style={sectionStyle('skills')}
+        >
+          {activeField === 'skills' ? (
+            <div onClick={(e) => e.stopPropagation()}>
+              <input
+                ref={skillRef}
+                value={skills.join(', ')}
+                onChange={(e) => setSkills(e.target.value.split(',').map((s) => s.trim()).filter(Boolean))}
+                placeholder="Add skills, comma separated"
+                style={{
+                  width: '100%',
+                  background: 'transparent',
+                  border: `1px solid ${accent}66`,
+                  outline: 'none',
+                  fontFamily: LF.body,
+                  fontSize: 14,
+                  color: '#fff',
+                  padding: '10px 12px',
+                  boxSizing: 'border-box',
+                }}
+              />
+              {skills.length > 0 && (
+                <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {skills.map((s, i) => (
+                    <SkillPill key={i} label={s} accent={accent} />
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {skills.length === 0 ? (
+                <div style={{ fontFamily: LF.body, fontSize: 13, color: LF.dim, fontStyle: 'italic' }}>
+                  Tap to add skills
+                </div>
+              ) : (
+                skills.map((s, i) => <SkillPill key={i} label={s} accent={accent} />)
+              )}
+            </div>
+          )}
+        </div>
+
+        <div style={{ height: 16 }} />
+
+        {/* Duration */}
+        <div
+          onClick={(e) => {
+            e.stopPropagation()
+            setEditingStepId(null)
+            setActiveField('duration')
+          }}
+          style={sectionStyle('duration')}
+        >
+          {activeField === 'duration' ? (
+            <div
+              style={{ display: 'flex', alignItems: 'center', gap: 10 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ClockIcon color={accent} size={16} />
+              <input
+                ref={durRef}
+                value={durationStr}
+                onChange={(e) => setDurationStr(e.target.value.replace(/[^0-9]/g, ''))}
+                placeholder="Minutes"
+                inputMode="numeric"
+                style={{
+                  flex: 1,
+                  background: 'transparent',
+                  border: 'none',
+                  borderBottom: `1px solid ${accent}66`,
+                  outline: 'none',
+                  fontFamily: LF.body,
+                  fontSize: 15,
+                  color: '#fff',
+                  padding: '6px 0',
+                }}
+              />
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <ClockIcon color={hasDuration ? LF.muted : LF.faint} size={16} />
+              <span
+                style={{
+                  fontFamily: LF.body,
+                  fontSize: 15,
+                  color: hasDuration ? '#fff' : LF.dim,
+                  fontStyle: hasDuration ? 'normal' : 'italic',
+                }}
+              >
+                {hasDuration ? `${durationStr} min` : 'Tap to add duration'}
+              </span>
+            </div>
+          )}
+        </div>
+
+        <div style={{ height: 16 }} />
+
+        {/* Steps sequence */}
+        <div
+          onClick={(e) => { e.stopPropagation(); setActiveField(null) }}
+          style={sequenceSectionStyle}
+        >
+          {steps.length === 0 && editingStepId === null ? (
+            <div style={{ fontFamily: LF.body, fontSize: 13, color: LF.dim, fontStyle: 'italic', marginBottom: 12 }}>
+              Tap + Add step to describe this component.
+            </div>
+          ) : (
+            steps.map((step, i) => (
+              <StepRow
+                key={step.id}
+                n={i + 1}
+                text={step.text}
+                isLast={i === steps.length - 1}
+                isEditing={step.id === editingStepId}
+                accent={accent}
+                onTap={() => { setActiveField(null); setEditingStepId(step.id) }}
+                onChange={(val) => handleStepChange(step.id, val)}
+                onBlur={() => setEditingStepId(null)}
+                onDelete={() => handleDeleteStep(step.id)}
+              />
+            ))
+          )}
+
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); handleAddStep() }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              marginTop: steps.length > 0 ? 14 : 0,
+              padding: 0,
+              minHeight: 44,
+              minWidth: 44,
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            <div
+              style={{
+                width: 26,
+                height: 26,
+                borderRadius: '50%',
+                border: `1.5px dashed ${accent}55`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={`${accent}88`} strokeWidth="2.5" strokeLinecap="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </div>
+            <span
+              style={{
+                fontFamily: LF.display,
+                fontSize: 10,
+                letterSpacing: '0.18em',
+                textTransform: 'uppercase' as const,
+                color: `${accent}88`,
+              }}
+            >
+              Add step
+            </span>
+          </button>
+        </div>
+
+        <div style={{ height: 24 }} />
       </div>
 
-      {editOpen && (
-        <EditSheet
-          accent={accent}
-          draft={{
-            title: draft.title,
-            description: draft.description,
-            skills: draft.skills,
-            durationMinutes: draft.durationMinutes,
+      {/* Save bar */}
+      <div
+        style={{
+          padding: '12px 20px 32px',
+          flexShrink: 0,
+          borderTop: `1px solid ${LF.hairline}`,
+          background: LF.bg,
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => onSave(buildFinalDraft())}
+          disabled={saving || !title.trim()}
+          style={{
+            width: '100%',
+            height: 54,
+            background: saving || !title.trim() ? `${accent}55` : accent,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: saving || !title.trim() ? 'none' : `0 0 32px ${accent}55`,
+            border: 'none',
+            cursor: saving || !title.trim() ? 'default' : 'pointer',
           }}
-          photoPreviewUrl={photoPreviewUrls[0] ?? null}
-          onClose={() => setEditOpen(false)}
-          onCommit={handleCommit}
-        />
-      )}
+        >
+          <span
+            style={{
+              fontFamily: LF.display,
+              fontSize: 13,
+              letterSpacing: '0.22em',
+              color: saving || !title.trim() ? 'rgba(0,0,0,0.5)' : '#000',
+              textTransform: 'uppercase' as const,
+            }}
+          >
+            {saving ? 'Saving…' : 'Save to library'}
+          </span>
+        </button>
+      </div>
     </div>
   )
 }

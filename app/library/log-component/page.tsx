@@ -15,7 +15,7 @@ import S1Type from '@/app/components/log-flow/S1Type'
 import S2Curriculum from '@/app/components/log-flow/S2Curriculum'
 import S3Photo from '@/app/components/log-flow/S3Photo'
 import VoiceScreen from '@/app/components/log-flow/VoiceScreen'
-import RevealScreen from '@/app/components/log-flow/RevealScreen'
+import RevealScreen, { type RevealDraft } from '@/app/components/log-flow/RevealScreen'
 import Satisfaction from '@/app/components/log-flow/Satisfaction'
 import '@/app/components/log-flow/log-flow.css'
 
@@ -56,7 +56,6 @@ export default function LogComponentPage() {
   const [error, setError] = useState<string | null>(null)
   const [guardDest, setGuardDest] = useState<string | null>(null)
   const [confirmExitOpen, setConfirmExitOpen] = useState(false)
-  const refineSnapshotRef = useRef<{ title: string; description: string; skills: string[]; durationMinutes: number | null } | null>(null)
   const isDirtyRef = useRef(false)
 
   const voice = useVoiceNote()
@@ -152,35 +151,22 @@ export default function LogComponentPage() {
     if (voice.voiceState === 'recording') voice.stopRecording()
     setIsPaused(false)
     try {
-      const result = await voice.parseComponent(draft.type, availableSkills, refineSnapshotRef.current ?? undefined)
+      const result = await voice.parseComponent(draft.type, availableSkills)
       if (!result.title && !result.description && result.skills.length === 0 && result.durationMinutes == null) {
         return
       }
       setDraft((d) => ({
         ...d,
-        title: refineSnapshotRef.current?.title || result.title || d.title,
+        title: result.title || d.title,
         description: result.description || d.description,
         skills: result.skills.length > 0 ? result.skills : d.skills,
         durationMinutes: result.durationMinutes ?? d.durationMinutes,
       }))
-      refineSnapshotRef.current = null
       voice.reset()
       setStep('reveal')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Voice parse failed')
     }
-  }
-
-  const handleSpeakMore = () => {
-    refineSnapshotRef.current = {
-      title: draft.title,
-      description: draft.description,
-      skills: draft.skills,
-      durationMinutes: draft.durationMinutes,
-    }
-    voice.reset()
-    setIsPaused(false)
-    setStep('voice')
   }
 
   // ── Photo handlers ─────────────────────────────────────────────────────────
@@ -218,8 +204,8 @@ export default function LogComponentPage() {
 
   // ── Save ──────────────────────────────────────────────────────────────────
 
-  const handleSave = async () => {
-    if (!draft.type || draft.curriculums.length === 0 || draft.photoFiles.length === 0 || !draft.title.trim()) {
+  const handleSave = async (finalDraft: RevealDraft) => {
+    if (!draft.type || draft.curriculums.length === 0 || draft.photoFiles.length === 0 || !finalDraft.title.trim()) {
       setError('Missing required fields')
       return
     }
@@ -229,15 +215,15 @@ export default function LogComponentPage() {
 
       const { error: insertErr } = await supabase.from('components').insert({
         type: draft.type,
-        title: draft.title.trim(),
+        title: finalDraft.title.trim(),
         curriculum: draft.curriculums[0],
         curriculums: draft.curriculums,
-        description: draft.description.trim() || null,
-        skills: draft.skills,
+        description: finalDraft.description.trim() || null,
+        skills: finalDraft.skills,
         photos: photoUrls,
         video_url: null,
         video_link: null,
-        duration_minutes: draft.durationMinutes,
+        duration_minutes: finalDraft.durationMinutes,
       })
 
       if (insertErr) throw insertErr
@@ -270,7 +256,6 @@ export default function LogComponentPage() {
 
   const handleLogAnother = () => {
     draft.photoPreviewUrls.forEach((url) => URL.revokeObjectURL(url))
-    refineSnapshotRef.current = null
     voice.reset()
     setIsPaused(false)
     setError(null)
@@ -335,7 +320,6 @@ export default function LogComponentPage() {
           onBack={() => {
             voice.reset()
             setIsPaused(false)
-            refineSnapshotRef.current = null
             setStep('photo')
           }}
           onClose={handleClose}
@@ -354,18 +338,9 @@ export default function LogComponentPage() {
             skills: draft.skills,
             durationMinutes: draft.durationMinutes,
           }}
-          onUpdateDraft={(next) =>
-            setDraft((d) => ({
-              ...d,
-              title: next.title,
-              description: next.description,
-              skills: next.skills,
-              durationMinutes: next.durationMinutes,
-            }))
-          }
           onSave={handleSave}
-          onSpeakMore={handleSpeakMore}
           onBack={() => { voice.reset(); setStep('voice') }}
+          onClose={handleClose}
           saving={saving}
         />
       )}
