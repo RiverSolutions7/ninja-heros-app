@@ -457,19 +457,13 @@ export function WaveformStatic({ accent = ACCENT }: { accent?: string }) {
 
 export function LiveTranscript({ accent = ACCENT, words }: { accent?: string; words: string[] }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const paraRef = useRef<HTMLParagraphElement | null>(null)
-  const [offsetY, setOffsetY] = useState(0)
 
-  // useLayoutEffect runs synchronously after DOM mutations, before paint —
-  // guarantees offsetHeight is measured against the already-painted layout.
-  // height: '100%' on the container can resolve to 0 when the parent height
-  // is flex-computed; flex: 1 + minHeight: 0 gives a definite size instead.
+  // useLayoutEffect fires synchronously after DOM update, before paint —
+  // scrollTop = scrollHeight always snaps to the newest words with no math,
+  // no translateY fighting, and no possibility of overflow-hiding content.
   useLayoutEffect(() => {
-    const container = containerRef.current
-    const para = paraRef.current
-    if (!container || !para) return
-    const gap = para.offsetHeight - container.offsetHeight
-    setOffsetY(gap > 0 ? gap : 0)
+    const el = containerRef.current
+    if (el) el.scrollTop = el.scrollHeight
   }, [words])
 
   return (
@@ -478,14 +472,13 @@ export function LiveTranscript({ accent = ACCENT, words }: { accent?: string; wo
       style={{
         flex: 1,
         minHeight: 0,
-        overflow: 'hidden',
+        overflowY: 'auto',
+        overflowX: 'hidden',
         padding: '12px 24px 8px',
-        display: 'flex',
-        alignItems: 'flex-end',
-      }}
+        scrollbarWidth: 'none',
+      } as CSSProperties}
     >
       <p
-        ref={paraRef}
         style={{
           margin: 0,
           fontFamily: LF.body,
@@ -495,9 +488,6 @@ export function LiveTranscript({ accent = ACCENT, words }: { accent?: string; wo
           letterSpacing: '-0.01em',
           textAlign: 'left',
           wordBreak: 'normal',
-          transform: `translateY(-${offsetY}px)`,
-          transition: 'transform 500ms cubic-bezier(0.22, 1, 0.36, 1)',
-          willChange: 'transform',
         }}
       >
         {words.map((w, idx) => (

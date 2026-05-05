@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import type { ComponentType } from '@/app/lib/database.types'
-import { ACCENT, LF, LiveTranscript, MicState, StatusBarLog, VoiceControlBar } from './atoms'
+import { ACCENT, LF, LiveTranscript, MicState, VoiceControlBar } from './atoms'
 
 const CAROUSEL_H = 380
 
@@ -145,18 +145,15 @@ export default function VoiceScreen({
         overflow: 'hidden',
       }}
     >
-      <StatusBarLog />
-
-      {/* Minimal header — BACK + X only, no bars, no step label */}
+      {/* In-flow header — BACK + X only */}
       <div
         style={{
-          position: 'absolute',
-          top: 66,
-          left: 24,
-          right: 24,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          padding: '12px 24px 10px',
+          flexShrink: 0,
+          position: 'relative',
           zIndex: 20,
         }}
       >
@@ -222,13 +219,12 @@ export default function VoiceScreen({
         }}
       />
 
-      {/* Content — paddingTop clears the absolute header */}
+      {/* Content */}
       <div
         style={{
           flex: 1,
           display: 'flex',
           flexDirection: 'column',
-          paddingTop: 90,
           position: 'relative',
           zIndex: 1,
           overflow: 'hidden',
