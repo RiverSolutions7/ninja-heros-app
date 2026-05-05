@@ -33,8 +33,8 @@ export default function S3Photo({
   const openLibrary = () => { setAddOpen(false); libraryInputRef.current?.click() }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) onCapture(file)
+    const remaining = MAX_PHOTOS - previewUrls.length
+    Array.from(e.target.files ?? []).slice(0, remaining).forEach((file) => onCapture(file))
     e.target.value = ''
   }
 
@@ -60,7 +60,7 @@ export default function S3Photo({
       />
 
       <input ref={cameraInputRef}  type="file" accept="image/*" capture="environment" onChange={handleChange} style={{ display: 'none' }} />
-      <input ref={libraryInputRef} type="file" accept="image/*"                       onChange={handleChange} style={{ display: 'none' }} />
+      <input ref={libraryInputRef} type="file" accept="image/*" multiple             onChange={handleChange} style={{ display: 'none' }} />
 
       <div style={{ padding: '100px 24px 0', flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 1 }}>
         <div style={{ animation: 'lf-rise-in 500ms both' }}>
@@ -79,70 +79,61 @@ export default function S3Photo({
             <br />
             {subjectLabel}.
           </h1>
-          <p style={{ fontFamily: LF.body, fontSize: 14, color: LF.muted, marginTop: 14, lineHeight: 1.55, maxWidth: 300 }}>
-            A real photo of the setup is what makes this component shareable.
-          </p>
         </div>
 
         <div style={{ marginTop: 28, flex: 1, display: 'flex', flexDirection: 'column' }}>
           {!hasPhoots ? (
-            /* ── Empty state: two-card picker ── */
+            /* ── Empty state: two compact cards ── */
             <div style={{ display: 'flex', gap: 10 }}>
               <Press
                 onClick={openCamera}
                 ariaLabel="Take a photo with camera"
                 style={{
                   flex: 1,
-                  height: 180,
-                  border: `1.5px solid ${LF.faint}`,
+                  height: 120,
+                  border: `1px solid ${LF.faint}`,
                   background: 'rgba(255,255,255,0.015)',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 14,
+                  gap: 12,
                   animation: 'lf-rise-in 500ms 80ms both',
                 }}
               >
-                <div style={{ width: 56, height: 56, border: `1.5px solid ${LF.faint}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={LF.muted} strokeWidth="1.4" strokeLinecap="square">
-                    <path d="M3 7h4l2-2h6l2 2h4v13H3z" />
-                    <circle cx="12" cy="13.5" r="3.5" />
-                    <circle cx="18.5" cy="9.5" r="0.75" fill={LF.muted} stroke="none" />
-                  </svg>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontFamily: LF.display, fontSize: 10, letterSpacing: '0.28em', color: LF.dim, textTransform: 'uppercase' }}>Take photo</div>
-                  <div style={{ fontFamily: LF.body, fontSize: 11, color: LF.faint, marginTop: 5 }}>Opens your camera</div>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={LF.muted} strokeWidth="1.4" strokeLinecap="square">
+                  <path d="M3 7h4l2-2h6l2 2h4v13H3z" />
+                  <circle cx="12" cy="13.5" r="3.5" />
+                  <circle cx="18.5" cy="9.5" r="0.75" fill={LF.muted} stroke="none" />
+                </svg>
+                <div style={{ fontFamily: LF.display, fontSize: 10, letterSpacing: '0.28em', color: LF.dim, textTransform: 'uppercase' }}>
+                  Camera
                 </div>
               </Press>
 
               <Press
                 onClick={openLibrary}
-                ariaLabel="Choose a photo from library"
+                ariaLabel="Choose photos from library"
                 style={{
                   flex: 1,
-                  height: 180,
-                  border: `1.5px solid ${LF.faint}`,
+                  height: 120,
+                  border: `1px solid ${LF.faint}`,
                   background: 'rgba(255,255,255,0.015)',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 14,
+                  gap: 12,
                   animation: 'lf-rise-in 500ms 160ms both',
                 }}
               >
-                <div style={{ width: 56, height: 56, border: `1.5px solid ${LF.faint}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={LF.muted} strokeWidth="1.4" strokeLinecap="square">
-                    <rect x="3" y="4" width="18" height="16" />
-                    <path d="M3 15l5-4 4 3 3-2 6 5" />
-                    <circle cx="8.5" cy="8.5" r="1.5" fill={LF.muted} stroke="none" />
-                  </svg>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontFamily: LF.display, fontSize: 10, letterSpacing: '0.28em', color: LF.dim, textTransform: 'uppercase' }}>From library</div>
-                  <div style={{ fontFamily: LF.body, fontSize: 11, color: LF.faint, marginTop: 5 }}>Choose existing photo</div>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={LF.muted} strokeWidth="1.4" strokeLinecap="square">
+                  <rect x="3" y="4" width="18" height="16" />
+                  <path d="M3 15l5-4 4 3 3-2 6 5" />
+                  <circle cx="8.5" cy="8.5" r="1.5" fill={LF.muted} stroke="none" />
+                </svg>
+                <div style={{ fontFamily: LF.display, fontSize: 10, letterSpacing: '0.28em', color: LF.dim, textTransform: 'uppercase' }}>
+                  Library
                 </div>
               </Press>
             </div>
@@ -266,7 +257,7 @@ export default function S3Photo({
                   </Press>
                   <Press
                     onClick={openLibrary}
-                    ariaLabel="Choose another photo from library"
+                    ariaLabel="Choose more photos from library"
                     rippleColor="rgba(0,0,0,0.2)"
                     style={{
                       flex: 1,
