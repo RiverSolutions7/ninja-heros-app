@@ -1,6 +1,6 @@
 'use client'
 
-import { CSSProperties, Fragment, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { CSSProperties, Fragment, ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 export const LF = {
   bg: '#0a1232',
@@ -380,7 +380,10 @@ export function MicButton({ state, accent = ACCENT, onClick }: { state: MicState
   )
 }
 
-// ─── WaveformLive — rAF-based organic animation (recording state) ─────────
+// ─── WaveformLive — rAF drives DOM directly, zero React state ────────────
+// Writing bar heights via refs avoids React re-renders at 60fps, which
+// previously caused the animation to freeze when speech-recognition updates
+// were also competing for React's scheduler.
 export function WaveformLive({ accent = ACCENT }: { accent?: string }) {
   const BARS = 16
   const phases = useMemo(
@@ -392,39 +395,45 @@ export function WaveformLive({ accent = ACCENT }: { accent?: string }) {
       })),
     []
   )
-  const [t, setT] = useState(0)
+  const barRefs = useRef<(HTMLDivElement | null)[]>([])
+
   useEffect(() => {
     let raf: number
     let start = 0
     const loop = (ts: number) => {
       if (!start) start = ts
-      setT((ts - start) / 1000)
+      const t = (ts - start) / 1000
+      phases.forEach((p, i) => {
+        const bar = barRefs.current[i]
+        if (!bar) return
+        const h = 4 + ((Math.sin(t * p.freq * Math.PI + p.phase) + 1) / 2) * 28 * p.amp
+        bar.style.height = `${Math.max(4, Math.min(32, h))}px`
+      })
       raf = requestAnimationFrame(loop)
     }
     raf = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(raf)
-  }, [])
+  }, [phases])
+
   return (
     <div
       aria-hidden
       style={{ flex: 1, minWidth: 0, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}
     >
-      {phases.map((p, i) => {
-        const h = 4 + ((Math.sin(t * p.freq * Math.PI + p.phase) + 1) / 2) * 28 * p.amp
-        return (
-          <div
-            key={i}
-            style={{
-              width: 3,
-              height: Math.max(4, Math.min(32, h)),
-              borderRadius: 2,
-              background: accent,
-              opacity: 0.85,
-              transition: 'height 60ms linear',
-            }}
-          />
-        )
-      })}
+      {phases.map((_, i) => (
+        <div
+          key={i}
+          ref={(el) => { barRefs.current[i] = el }}
+          style={{
+            width: 3,
+            height: 4,
+            borderRadius: 2,
+            background: accent,
+            opacity: 0.85,
+            transition: 'height 60ms linear',
+          }}
+        />
+      ))}
     </div>
   )
 }
@@ -451,7 +460,11 @@ export function LiveTranscript({ accent = ACCENT, words }: { accent?: string; wo
   const paraRef = useRef<HTMLParagraphElement | null>(null)
   const [offsetY, setOffsetY] = useState(0)
 
-  useEffect(() => {
+  // useLayoutEffect runs synchronously after DOM mutations, before paint —
+  // guarantees offsetHeight is measured against the already-painted layout.
+  // height: '100%' on the container can resolve to 0 when the parent height
+  // is flex-computed; flex: 1 + minHeight: 0 gives a definite size instead.
+  useLayoutEffect(() => {
     const container = containerRef.current
     const para = paraRef.current
     if (!container || !para) return
@@ -463,8 +476,8 @@ export function LiveTranscript({ accent = ACCENT, words }: { accent?: string; wo
     <div
       ref={containerRef}
       style={{
-        width: '100%',
-        height: '100%',
+        flex: 1,
+        minHeight: 0,
         overflow: 'hidden',
         padding: '12px 24px 8px',
         display: 'flex',

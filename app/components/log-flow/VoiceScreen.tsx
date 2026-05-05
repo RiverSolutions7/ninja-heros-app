@@ -1,68 +1,48 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import type { ComponentType } from '@/app/lib/database.types'
-import { ACCENT, Chrome, LF, LiveTranscript, MicState, StatusBarLog, VoiceControlBar } from './atoms'
+import { ACCENT, LF, LiveTranscript, MicState, StatusBarLog, VoiceControlBar } from './atoms'
 
 const CAROUSEL_H = 380
 
-function formatElapsed(seconds: number) {
-  const m = Math.floor(seconds / 60)
-  const s = Math.floor(seconds % 60)
-    .toString()
-    .padStart(2, '0')
-  return `${m}:${s}`
-}
-
-// ─── full-bleed carousel (30px peek of the next slide) ───────────────────
-function PhotoCarousel({
-  urls,
-  accent,
-}: {
-  urls: string[]
-  accent: string
-}) {
+// ─── full-bleed carousel (30px peek only when multiple photos) ───────────
+function PhotoCarousel({ urls, accent }: { urls: string[]; accent: string }) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [active, setActive] = useState(0)
-  const [frameW, setFrameW] = useState(390)
-
-  useEffect(() => {
-    const el = scrollRef.current
-    if (el) setFrameW(el.clientWidth)
-  }, [])
+  const multi = urls.length > 1
 
   const handleScroll = () => {
     const el = scrollRef.current
     if (!el) return
-    const slideW = frameW - 30
+    const slideW = el.clientWidth - 30
     const i = Math.round(el.scrollLeft / slideW)
     if (i !== active) setActive(i)
   }
-
-  const hasPhotos = urls.length > 0
 
   return (
     <div style={{ width: '100%', position: 'relative', flexShrink: 0, height: CAROUSEL_H }}>
       <div
         ref={scrollRef}
-        onScroll={handleScroll}
+        onScroll={multi ? handleScroll : undefined}
         style={{
           display: 'flex',
-          overflowX: 'auto',
+          overflowX: multi ? 'auto' : 'hidden',
           overflowY: 'hidden',
-          scrollSnapType: 'x mandatory',
+          scrollSnapType: multi ? 'x mandatory' : 'none',
           height: '100%',
           scrollbarWidth: 'none',
           WebkitOverflowScrolling: 'touch',
         } as React.CSSProperties}
       >
-        {hasPhotos ? (
+        {urls.length > 0 ? (
           urls.map((url, i) => (
             <div
               key={i}
               style={{
                 flexShrink: 0,
-                width: 'calc(100% - 30px)',
+                // single photo: full width; multiple: leave 30px peek of next
+                width: multi ? 'calc(100% - 30px)' : '100%',
                 height: '100%',
                 scrollSnapAlign: 'start',
                 position: 'relative',
@@ -78,7 +58,7 @@ function PhotoCarousel({
             </div>
           ))
         ) : (
-          // empty: single gradient placeholder
+          // no photos yet: gradient placeholder
           <div
             style={{
               flexShrink: 0,
@@ -88,12 +68,12 @@ function PhotoCarousel({
             }}
           />
         )}
-        {/* trailing spacer so the last photo can snap fully */}
-        {hasPhotos && <div style={{ flexShrink: 0, width: 30, height: '100%' }} />}
+        {/* trailing spacer lets the last multi-photo slide snap fully */}
+        {multi && <div style={{ flexShrink: 0, width: 30, height: '100%' }} />}
       </div>
 
-      {/* dot indicators */}
-      {urls.length > 1 && (
+      {/* dots — only when 2+ photos */}
+      {multi && (
         <div
           style={{
             position: 'absolute',
@@ -128,7 +108,6 @@ function PhotoCarousel({
 // ─── main screen ─────────────────────────────────────────────────────────
 export default function VoiceScreen({
   state,
-  type,
   photoPreviewUrls,
   transcript,
   onStart,
@@ -137,11 +116,10 @@ export default function VoiceScreen({
   onDone,
   onBack,
   onClose,
-  step = 3,
   accent = ACCENT,
 }: {
   state: MicState
-  type: ComponentType
+  type: ComponentType        // kept for caller compatibility; not used in body
   photoPreviewUrls: string[]
   transcript: string
   onStart: () => void
@@ -150,32 +128,10 @@ export default function VoiceScreen({
   onDone: () => void
   onBack: () => void
   onClose?: () => void
-  step?: number
+  step?: number              // kept for caller compatibility; not used in body
   accent?: string
 }) {
-  const [elapsed, setElapsed] = useState(0)
-
-  useEffect(() => {
-    if (state !== 'recording') {
-      setElapsed(0)
-      return
-    }
-    const start = Date.now()
-    const tick = setInterval(() => setElapsed((Date.now() - start) / 1000), 250)
-    return () => clearInterval(tick)
-  }, [state])
-
-  const chromeLabel =
-    state === 'parsing'
-      ? 'STEP · 05 / PARSING'
-      : state === 'recording'
-      ? 'STEP · 04 / RECORDING'
-      : state === 'paused'
-      ? 'STEP · 04 / PAUSED'
-      : 'STEP · 04 / VOICE'
-
   const transcriptWords = transcript.trim().length > 0 ? transcript.trim().split(/\s+/) : []
-  const subjectLabel = type === 'game' ? 'game' : 'station'
 
   return (
     <div
@@ -190,14 +146,68 @@ export default function VoiceScreen({
       }}
     >
       <StatusBarLog />
-      <Chrome
-        step={step}
-        total={5}
-        accent={accent}
-        label={chromeLabel}
-        onBack={onBack}
-        onClose={onClose ?? onBack}
-      />
+
+      {/* Minimal header — BACK + X only, no bars, no step label */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 66,
+          left: 24,
+          right: 24,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          zIndex: 20,
+        }}
+      >
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Back"
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: LF.muted,
+            cursor: 'pointer',
+            fontFamily: LF.display,
+            fontSize: 10,
+            letterSpacing: '0.2em',
+            minHeight: 44,
+            minWidth: 44,
+            padding: '12px 8px',
+            margin: '-12px -8px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+          }}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square">
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+          BACK
+        </button>
+        <button
+          type="button"
+          onClick={onClose ?? onBack}
+          aria-label="Close"
+          style={{
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            minHeight: 44,
+            minWidth: 44,
+            padding: 15,
+            margin: -15,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={LF.muted} strokeWidth="1.8" strokeLinecap="square">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
+      </div>
 
       {/* Ambient gradient */}
       <div
@@ -212,7 +222,7 @@ export default function VoiceScreen({
         }}
       />
 
-      {/* Content — below the absolute Chrome (44px status + ~46px chrome = ~90px) */}
+      {/* Content — paddingTop clears the absolute header */}
       <div
         style={{
           flex: 1,
@@ -225,89 +235,22 @@ export default function VoiceScreen({
           minHeight: 0,
         }}
       >
-        {/* Full-bleed photo carousel */}
         <PhotoCarousel urls={photoPreviewUrls} accent={accent} />
 
-        {/* Middle — transcript or idle heading */}
+        {/* Middle — live words when recording, empty otherwise */}
         <div
           style={{
             flex: 1,
             overflow: 'hidden',
             display: 'flex',
             flexDirection: 'column',
-            justifyContent: state === 'recording' ? 'flex-start' : 'center',
             minHeight: 0,
           }}
         >
-          {state === 'recording' ? (
+          {state === 'recording' && (
             <LiveTranscript accent={accent} words={transcriptWords} />
-          ) : (
-            <div style={{ padding: '0 24px', animation: 'lf-rise-in 600ms 120ms both' }}>
-              <div
-                style={{
-                  fontFamily: LF.display,
-                  fontSize: 28,
-                  lineHeight: 1.05,
-                  letterSpacing: '-0.01em',
-                  textTransform: 'uppercase',
-                  color: state === 'parsing' ? accent : '#fff',
-                }}
-              >
-                {state === 'parsing' ? (
-                  <>
-                    Reading your
-                    <br />
-                    notes…
-                  </>
-                ) : state === 'paused' ? (
-                  <>
-                    Paused.
-                    <br />
-                    Ready when you are.
-                  </>
-                ) : (
-                  <>
-                    Describe your
-                    <br />
-                    {subjectLabel}.
-                  </>
-                )}
-              </div>
-              <div
-                style={{
-                  fontFamily: LF.body,
-                  fontSize: 13,
-                  color: LF.muted,
-                  marginTop: 10,
-                  lineHeight: 1.5,
-                }}
-              >
-                {state === 'parsing'
-                  ? 'Pulling out title, duration, cues.'
-                  : state === 'paused'
-                  ? 'Tap ✓ to save or ↺ to re-record.'
-                  : "No fields. Just talk. We'll fill the form."}
-              </div>
-            </div>
           )}
         </div>
-
-        {/* Elapsed timer — recording only */}
-        {state === 'recording' && (
-          <div style={{ padding: '8px 24px 4px', flexShrink: 0, textAlign: 'center' }}>
-            <div
-              style={{
-                fontFamily: LF.display,
-                fontSize: 10,
-                letterSpacing: '0.24em',
-                color: LF.faint,
-                textTransform: 'uppercase',
-              }}
-            >
-              {formatElapsed(elapsed)} · Listening… just talk
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Bottom controls */}
