@@ -51,6 +51,7 @@ export default function LogComponentPage() {
   const [curriculumRows, setCurriculumRows] = useState<CurriculumRow[]>([])
   const [availableSkills, setAvailableSkills] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
+  const [isPaused, setIsPaused] = useState(false)
   const [satisfactionCount, setSatisfactionCount] = useState<number>(1)
   const [error, setError] = useState<string | null>(null)
   const [guardDest, setGuardDest] = useState<string | null>(null)
@@ -124,37 +125,49 @@ export default function LogComponentPage() {
 
   // ── Voice handlers ─────────────────────────────────────────────────────────
 
-  const handleMicTap = async () => {
+  const handleVoiceStart = () => {
     if (!draft.type) return
     if (!voice.isSupported) {
       setError("Voice isn't supported on this browser. Tap the card to type details.")
       setStep('reveal')
       return
     }
-    if (voice.voiceState === 'idle' || voice.voiceState === 'done' || voice.voiceState === 'error') {
-      voice.startRecording()
-      return
-    }
-    if (voice.voiceState === 'recording') {
-      voice.stopRecording()
-      try {
-        const result = await voice.parseComponent(draft.type, availableSkills, refineSnapshotRef.current ?? undefined)
-        if (!result.title && !result.description && result.skills.length === 0 && result.durationMinutes == null) {
-          return
-        }
-        setDraft((d) => ({
-          ...d,
-          title: refineSnapshotRef.current?.title || result.title || d.title,
-          description: result.description || d.description,
-          skills: result.skills.length > 0 ? result.skills : d.skills,
-          durationMinutes: result.durationMinutes ?? d.durationMinutes,
-        }))
-        refineSnapshotRef.current = null
-        voice.reset()
-        setStep('reveal')
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Voice parse failed')
+    setIsPaused(false)
+    voice.startRecording()
+  }
+
+  const handlePause = () => {
+    voice.stopRecording()   // stops recognition; transcript preserved in transcriptRef
+    setIsPaused(true)       // override micState to 'paused' instead of 'parsing'
+  }
+
+  const handleRedo = () => {
+    voice.reset()           // clears transcript + voiceState → idle
+    setIsPaused(false)
+    voice.startRecording()  // immediately start fresh
+  }
+
+  const handleDone = async () => {
+    if (!draft.type) return
+    if (voice.voiceState === 'recording') voice.stopRecording()
+    setIsPaused(false)
+    try {
+      const result = await voice.parseComponent(draft.type, availableSkills, refineSnapshotRef.current ?? undefined)
+      if (!result.title && !result.description && result.skills.length === 0 && result.durationMinutes == null) {
+        return
       }
+      setDraft((d) => ({
+        ...d,
+        title: refineSnapshotRef.current?.title || result.title || d.title,
+        description: result.description || d.description,
+        skills: result.skills.length > 0 ? result.skills : d.skills,
+        durationMinutes: result.durationMinutes ?? d.durationMinutes,
+      }))
+      refineSnapshotRef.current = null
+      voice.reset()
+      setStep('reveal')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Voice parse failed')
     }
   }
 
@@ -166,6 +179,7 @@ export default function LogComponentPage() {
       durationMinutes: draft.durationMinutes,
     }
     voice.reset()
+    setIsPaused(false)
     setStep('voice')
   }
 
@@ -258,6 +272,7 @@ export default function LogComponentPage() {
     draft.photoPreviewUrls.forEach((url) => URL.revokeObjectURL(url))
     refineSnapshotRef.current = null
     voice.reset()
+    setIsPaused(false)
     setError(null)
     setDraft(EMPTY_DRAFT)
     setStep('type')
@@ -265,7 +280,13 @@ export default function LogComponentPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  const micState = voice.voiceState === 'recording' ? 'recording' : voice.voiceState === 'processing' ? 'parsing' : 'idle'
+  const micState: import('@/app/components/log-flow/atoms').MicState = isPaused
+    ? 'paused'
+    : voice.voiceState === 'recording'
+    ? 'recording'
+    : voice.voiceState === 'processing'
+    ? 'parsing'
+    : 'idle'
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#0a1232', overflow: 'hidden' }}>
@@ -307,9 +328,13 @@ export default function LogComponentPage() {
           type={draft.type}
           photoPreviewUrls={draft.photoPreviewUrls}
           transcript={voice.transcript}
-          onMicTap={handleMicTap}
+          onStart={handleVoiceStart}
+          onPause={handlePause}
+          onRedo={handleRedo}
+          onDone={handleDone}
           onBack={() => {
             voice.reset()
+            setIsPaused(false)
             refineSnapshotRef.current = null
             setStep('photo')
           }}

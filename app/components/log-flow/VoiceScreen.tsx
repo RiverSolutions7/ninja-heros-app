@@ -1,8 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ComponentType } from '@/app/lib/database.types'
 import { ACCENT, Chrome, LF, LiveTranscript, MicState, StatusBarLog, VoiceControlBar } from './atoms'
+
+const CAROUSEL_H = 380
 
 function formatElapsed(seconds: number) {
   const m = Math.floor(seconds / 60)
@@ -12,12 +14,127 @@ function formatElapsed(seconds: number) {
   return `${m}:${s}`
 }
 
+// ─── full-bleed carousel (30px peek of the next slide) ───────────────────
+function PhotoCarousel({
+  urls,
+  accent,
+}: {
+  urls: string[]
+  accent: string
+}) {
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const [active, setActive] = useState(0)
+  const [frameW, setFrameW] = useState(390)
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (el) setFrameW(el.clientWidth)
+  }, [])
+
+  const handleScroll = () => {
+    const el = scrollRef.current
+    if (!el) return
+    const slideW = frameW - 30
+    const i = Math.round(el.scrollLeft / slideW)
+    if (i !== active) setActive(i)
+  }
+
+  const hasPhotos = urls.length > 0
+
+  return (
+    <div style={{ width: '100%', position: 'relative', flexShrink: 0, height: CAROUSEL_H }}>
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        style={{
+          display: 'flex',
+          overflowX: 'auto',
+          overflowY: 'hidden',
+          scrollSnapType: 'x mandatory',
+          height: '100%',
+          scrollbarWidth: 'none',
+          WebkitOverflowScrolling: 'touch',
+        } as React.CSSProperties}
+      >
+        {hasPhotos ? (
+          urls.map((url, i) => (
+            <div
+              key={i}
+              style={{
+                flexShrink: 0,
+                width: 'calc(100% - 30px)',
+                height: '100%',
+                scrollSnapAlign: 'start',
+                position: 'relative',
+                background: LF.bgDeep,
+              }}
+            >
+              <img
+                src={url}
+                alt=""
+                aria-hidden
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+              />
+            </div>
+          ))
+        ) : (
+          // empty: single gradient placeholder
+          <div
+            style={{
+              flexShrink: 0,
+              width: '100%',
+              height: '100%',
+              background: `radial-gradient(ellipse 80% 60% at 50% 50%, ${accent}1a 0%, transparent 70%), ${LF.bgDeep}`,
+            }}
+          />
+        )}
+        {/* trailing spacer so the last photo can snap fully */}
+        {hasPhotos && <div style={{ flexShrink: 0, width: 30, height: '100%' }} />}
+      </div>
+
+      {/* dot indicators */}
+      {urls.length > 1 && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 14,
+            left: 0,
+            right: 0,
+            display: 'flex',
+            justifyContent: 'center',
+            gap: 6,
+            pointerEvents: 'none',
+          }}
+        >
+          {urls.map((_, i) => (
+            <div
+              key={i}
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: '#fff',
+                opacity: i === active ? 1 : 0.45,
+                transition: 'opacity 220ms',
+              }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── main screen ─────────────────────────────────────────────────────────
 export default function VoiceScreen({
   state,
   type,
   photoPreviewUrls,
   transcript,
-  onMicTap,
+  onStart,
+  onPause,
+  onRedo,
+  onDone,
   onBack,
   onClose,
   step = 3,
@@ -27,16 +144,16 @@ export default function VoiceScreen({
   type: ComponentType
   photoPreviewUrls: string[]
   transcript: string
-  onMicTap: () => void
+  onStart: () => void
+  onPause: () => void
+  onRedo: () => void
+  onDone: () => void
   onBack: () => void
   onClose?: () => void
   step?: number
   accent?: string
 }) {
   const [elapsed, setElapsed] = useState(0)
-
-  const firstPhotoUrl = photoPreviewUrls[0] ?? null
-  const photoCount = photoPreviewUrls.length
 
   useEffect(() => {
     if (state !== 'recording') {
@@ -49,16 +166,38 @@ export default function VoiceScreen({
   }, [state])
 
   const chromeLabel =
-    state === 'parsing' ? 'STEP · 05 / PARSING' : state === 'recording' ? 'STEP · 04 / RECORDING' : 'STEP · 04 / VOICE'
+    state === 'parsing'
+      ? 'STEP · 05 / PARSING'
+      : state === 'recording'
+      ? 'STEP · 04 / RECORDING'
+      : state === 'paused'
+      ? 'STEP · 04 / PAUSED'
+      : 'STEP · 04 / VOICE'
 
   const transcriptWords = transcript.trim().length > 0 ? transcript.trim().split(/\s+/) : []
-  const photoReadyLabel = photoCount > 1 ? `${photoCount} photos ready` : 'Photo ready'
   const subjectLabel = type === 'game' ? 'game' : 'station'
 
   return (
-    <div style={{ position: 'absolute', inset: 0, background: LF.bg, color: '#fff', display: 'flex', flexDirection: 'column' }}>
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        background: LF.bg,
+        color: '#fff',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+      }}
+    >
       <StatusBarLog />
-      <Chrome step={step} total={5} accent={accent} label={chromeLabel} onBack={onBack} onClose={onClose ?? onBack} />
+      <Chrome
+        step={step}
+        total={5}
+        accent={accent}
+        label={chromeLabel}
+        onBack={onBack}
+        onClose={onClose ?? onBack}
+      />
 
       {/* Ambient gradient */}
       <div
@@ -73,94 +212,23 @@ export default function VoiceScreen({
         }}
       />
 
-      {/* Content */}
+      {/* Content — below the absolute Chrome (44px status + ~46px chrome = ~90px) */}
       <div
         style={{
           flex: 1,
           display: 'flex',
           flexDirection: 'column',
-          padding: '88px 0 0',
+          paddingTop: 90,
           position: 'relative',
           zIndex: 1,
           overflow: 'hidden',
+          minHeight: 0,
         }}
       >
-        {/* Photo strip */}
-        {state === 'recording' ? (
-          <div
-            style={{
-              width: '100%',
-              height: 120,
-              marginBottom: 24,
-              flexShrink: 0,
-              position: 'relative',
-              animation: 'lf-rise-in 300ms both',
-              background: LF.bgDeep,
-            }}
-          >
-            {firstPhotoUrl && (
-              <img
-                src={firstPhotoUrl}
-                alt=""
-                aria-hidden
-                style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
-              />
-            )}
-            <div style={{ position: 'absolute', inset: 0, border: `1px solid ${accent}55` }} />
-          </div>
-        ) : (
-          <div
-            style={{
-              alignSelf: 'center',
-              width: 'calc(100% - 48px)',
-              height: 120,
-              marginBottom: 28,
-              flexShrink: 0,
-              position: 'relative',
-              animation: 'lf-rise-in 600ms both',
-              border: `1px solid ${accent}44`,
-              background: LF.bgDeep,
-            }}
-          >
-            {firstPhotoUrl && (
-              <img
-                src={firstPhotoUrl}
-                alt=""
-                aria-hidden
-                style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
-              />
-            )}
-            <div style={{ position: 'absolute', inset: 0, background: 'rgba(6,10,28,0.35)' }} />
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-              }}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="1.5" strokeLinecap="square">
-                <path d="M3 7h4l2-2h6l2 2h4v13H3z" />
-                <circle cx="12" cy="13.5" r="3.5" />
-              </svg>
-              <span
-                style={{
-                  fontFamily: LF.display,
-                  fontSize: 9,
-                  letterSpacing: '0.24em',
-                  color: accent,
-                  textTransform: 'uppercase',
-                }}
-              >
-                {photoReadyLabel}
-              </span>
-            </div>
-          </div>
-        )}
+        {/* Full-bleed photo carousel */}
+        <PhotoCarousel urls={photoPreviewUrls} accent={accent} />
 
-        {/* Middle content — transcript or heading */}
+        {/* Middle — transcript or idle heading */}
         <div
           style={{
             flex: 1,
@@ -168,6 +236,7 @@ export default function VoiceScreen({
             display: 'flex',
             flexDirection: 'column',
             justifyContent: state === 'recording' ? 'flex-start' : 'center',
+            minHeight: 0,
           }}
         >
           {state === 'recording' ? (
@@ -185,9 +254,23 @@ export default function VoiceScreen({
                 }}
               >
                 {state === 'parsing' ? (
-                  <>Reading your<br />notes…</>
+                  <>
+                    Reading your
+                    <br />
+                    notes…
+                  </>
+                ) : state === 'paused' ? (
+                  <>
+                    Paused.
+                    <br />
+                    Ready when you are.
+                  </>
                 ) : (
-                  <>Describe your<br />{subjectLabel}.</>
+                  <>
+                    Describe your
+                    <br />
+                    {subjectLabel}.
+                  </>
                 )}
               </div>
               <div
@@ -201,13 +284,15 @@ export default function VoiceScreen({
               >
                 {state === 'parsing'
                   ? 'Pulling out title, duration, cues.'
+                  : state === 'paused'
+                  ? 'Tap ✓ to save or ↺ to re-record.'
                   : "No fields. Just talk. We'll fill the form."}
               </div>
             </div>
           )}
         </div>
 
-        {/* Elapsed — recording only */}
+        {/* Elapsed timer — recording only */}
         {state === 'recording' && (
           <div style={{ padding: '8px 24px 4px', flexShrink: 0, textAlign: 'center' }}>
             <div
@@ -227,7 +312,14 @@ export default function VoiceScreen({
 
       {/* Bottom controls */}
       <div style={{ position: 'relative', zIndex: 1, flexShrink: 0 }}>
-        <VoiceControlBar state={state} accent={accent} onStart={onMicTap} onStop={onMicTap} />
+        <VoiceControlBar
+          state={state}
+          accent={accent}
+          onStart={onStart}
+          onPause={onPause}
+          onRedo={onRedo}
+          onDone={onDone}
+        />
       </div>
     </div>
   )

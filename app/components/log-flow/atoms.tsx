@@ -1,6 +1,6 @@
 'use client'
 
-import { CSSProperties, ReactNode, useEffect, useRef, useState } from 'react'
+import { CSSProperties, Fragment, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 
 export const LF = {
   bg: '#0a1232',
@@ -300,7 +300,7 @@ export function Chrome({
   )
 }
 
-export type MicState = 'idle' | 'recording' | 'parsing'
+export type MicState = 'idle' | 'recording' | 'paused' | 'parsing'
 
 export function MicButton({ state, accent = ACCENT, onClick }: { state: MicState; accent?: string; onClick?: () => void }) {
   return (
@@ -380,32 +380,66 @@ export function MicButton({ state, accent = ACCENT, onClick }: { state: MicState
   )
 }
 
-export function Waveform({ accent = ACCENT, active }: { accent?: string; active: boolean }) {
-  const bars = 16
-  const durations = [0.85, 1.1, 0.75, 1.3, 0.95, 1.15, 0.8, 1.0, 1.25, 0.9, 1.05, 0.7, 1.2, 0.88, 1.4, 1.0]
+// ─── WaveformLive — rAF-based organic animation (recording state) ─────────
+export function WaveformLive({ accent = ACCENT }: { accent?: string }) {
+  const BARS = 16
+  const phases = useMemo(
+    () =>
+      Array.from({ length: BARS }, (_, i) => ({
+        phase: (i * 0.62) % (Math.PI * 2),
+        freq: 1.6 + (i % 5) * 0.18,
+        amp: 0.55 + ((i * 7) % 11) / 22,
+      })),
+    []
+  )
+  const [t, setT] = useState(0)
+  useEffect(() => {
+    let raf: number
+    let start = 0
+    const loop = (ts: number) => {
+      if (!start) start = ts
+      setT((ts - start) / 1000)
+      raf = requestAnimationFrame(loop)
+    }
+    raf = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(raf)
+  }, [])
   return (
     <div
       aria-hidden
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 5,
-        height: 40,
-      }}
+      style={{ flex: 1, minWidth: 0, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}
     >
-      {Array.from({ length: bars }).map((_, i) => (
+      {phases.map((p, i) => {
+        const h = 4 + ((Math.sin(t * p.freq * Math.PI + p.phase) + 1) / 2) * 28 * p.amp
+        return (
+          <div
+            key={i}
+            style={{
+              width: 3,
+              height: Math.max(4, Math.min(32, h)),
+              borderRadius: 2,
+              background: accent,
+              opacity: 0.85,
+              transition: 'height 60ms linear',
+            }}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── WaveformStatic — frozen bars (paused / parsing state) ───────────────
+export function WaveformStatic({ accent = ACCENT }: { accent?: string }) {
+  return (
+    <div
+      aria-hidden
+      style={{ flex: 1, minWidth: 0, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}
+    >
+      {Array.from({ length: 16 }).map((_, i) => (
         <div
           key={i}
-          style={{
-            width: 3,
-            borderRadius: 2,
-            background: accent,
-            height: active ? `${4 + Math.abs(Math.sin((i + 1) * 0.9)) * 28}px` : '6px',
-            animation: active ? `lf-wave ${durations[i]}s ${(i * 0.09) % 0.9}s ease-in-out infinite alternate` : 'none',
-            opacity: active ? 0.85 : 0.25,
-            transition: 'opacity 400ms',
-          }}
+          style={{ width: 3, height: 6 + ((i * 13) % 5), borderRadius: 2, background: accent, opacity: 0.32 }}
         />
       ))}
     </div>
@@ -413,48 +447,63 @@ export function Waveform({ accent = ACCENT, active }: { accent?: string; active:
 }
 
 export function LiveTranscript({ accent = ACCENT, words }: { accent?: string; words: string[] }) {
-  const bottomRef = useRef<HTMLDivElement | null>(null)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const paraRef = useRef<HTMLParagraphElement | null>(null)
+  const [offsetY, setOffsetY] = useState(0)
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-  }, [words.length])
+    const container = containerRef.current
+    const para = paraRef.current
+    if (!container || !para) return
+    const gap = para.offsetHeight - container.offsetHeight
+    setOffsetY(gap > 0 ? gap : 0)
+  }, [words])
 
   return (
     <div
+      ref={containerRef}
       style={{
         width: '100%',
-        maxHeight: 220,
-        overflowY: 'auto',
-        padding: '0 24px',
-        scrollbarWidth: 'none',
-        msOverflowStyle: 'none',
+        height: '100%',
+        overflow: 'hidden',
+        padding: '12px 24px 8px',
+        display: 'flex',
+        alignItems: 'flex-end',
       }}
     >
-      <div
+      <p
+        ref={paraRef}
         style={{
-          fontFamily: LF.display,
-          fontSize: 22,
+          margin: 0,
+          fontFamily: LF.body,
+          fontWeight: 700,
+          fontSize: 26,
           lineHeight: 1.35,
           letterSpacing: '-0.01em',
-          textTransform: 'uppercase',
+          textAlign: 'left',
+          wordBreak: 'normal',
+          transform: `translateY(-${offsetY}px)`,
+          transition: 'transform 500ms cubic-bezier(0.22, 1, 0.36, 1)',
+          willChange: 'transform',
         }}
       >
-        {words.map((w, i) => (
-          <span
-            key={i}
-            style={{
-              display: 'inline-block',
-              marginRight: 6,
-              color: i === words.length - 1 ? accent : '#fff',
-              transition: 'color 120ms',
-              animation: 'lf-word-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both',
-            }}
-          >
-            {w}
-          </span>
+        {words.map((w, idx) => (
+          <Fragment key={idx}>
+            <span
+              style={{
+                display: 'inline-block',
+                color: idx === words.length - 1 ? accent : '#ffffff',
+                transition: idx === words.length - 1 ? 'none' : 'color 120ms ease',
+                animation: 'lf-word-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both',
+                willChange: 'transform, opacity',
+              }}
+            >
+              {w}
+            </span>
+            {idx < words.length - 1 ? ' ' : ''}
+          </Fragment>
         ))}
-      </div>
-      <div ref={bottomRef} style={{ height: 1 }} />
+      </p>
     </div>
   )
 }
@@ -463,125 +512,146 @@ export function VoiceControlBar({
   state,
   accent = ACCENT,
   onStart,
-  onStop,
+  onPause,
+  onRedo,
+  onDone,
 }: {
   state: MicState
   accent?: string
   onStart: () => void
-  onStop: () => void
+  onPause: () => void
+  onRedo: () => void
+  onDone: () => void
 }) {
+  // ── idle: single pill ────────────────────────────────────────────────────
   if (state === 'idle') {
     return (
-      <div style={{ padding: '12px 24px 40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ padding: '0 24px 36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <Press
           onClick={onStart}
           ariaLabel="Start recording"
           rippleColor={`${accent}22`}
           style={{
             height: 52,
-            paddingLeft: 36,
-            paddingRight: 36,
-            border: `1.5px solid ${accent}`,
+            borderRadius: 999,
+            border: `1px solid ${accent}`,
+            background: 'transparent',
             display: 'flex',
             alignItems: 'center',
+            justifyContent: 'center',
             gap: 10,
+            padding: '0 24px',
           }}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="1.8">
+          {/* mic icon */}
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2" strokeLinecap="square">
             <rect x="9" y="3" width="6" height="12" rx="3" />
-            <path d="M5 11a7 7 0 0014 0" strokeLinecap="square" />
-            <line x1="12" y1="18" x2="12" y2="21" strokeLinecap="square" />
+            <path d="M5 11a7 7 0 0 0 14 0" />
+            <line x1="12" y1="18" x2="12" y2="22" />
           </svg>
-          <span style={{ fontFamily: LF.display, fontSize: 11, letterSpacing: '0.24em', color: accent, textTransform: 'uppercase' }}>
-            Tap to speak
+          <span
+            style={{
+              fontFamily: 'ui-monospace, SF Mono, Menlo, monospace',
+              fontSize: 12,
+              fontWeight: 600,
+              letterSpacing: '0.22em',
+              color: accent,
+              textTransform: 'uppercase',
+            }}
+          >
+            TAP TO SPEAK
           </span>
         </Press>
       </div>
     )
   }
 
-  if (state === 'parsing') {
-    return (
-      <div style={{ padding: '12px 24px 40px', display: 'flex', alignItems: 'center', gap: 16 }}>
-        <div style={{ width: 44, height: 44, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+  // ── recording / paused / parsing: three-element row ──────────────────────
+  const isParsing = state === 'parsing'
+  const isPaused = state === 'paused'
+
+  return (
+    <div
+      style={{
+        padding: '0 24px 36px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 14,
+      }}
+    >
+      {/* Left — pause (recording) or redo (paused/parsing) */}
+      <Press
+        onClick={isPaused || isParsing ? onRedo : onPause}
+        ariaLabel={isPaused || isParsing ? 'Redo recording' : 'Pause recording'}
+        style={{
+          width: 48,
+          height: 48,
+          borderRadius: '50%',
+          border: '1px solid rgba(255,255,255,0.20)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+          opacity: isParsing ? 0.4 : 1,
+        }}
+      >
+        {isPaused || isParsing ? (
+          // redo / restart arrow ↺
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="square" strokeLinejoin="miter">
+            <path d="M3 12a9 9 0 1 0 3-6.7" />
+            <polyline points="3 4 3 9 8 9" />
+          </svg>
+        ) : (
+          // pause ⏸
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="#fff">
+            <rect x="6" y="5" width="4" height="14" />
+            <rect x="14" y="5" width="4" height="14" />
+          </svg>
+        )}
+      </Press>
+
+      {/* Center — animated or frozen waveform */}
+      {state === 'recording' ? (
+        <WaveformLive accent={accent} />
+      ) : (
+        <WaveformStatic accent={accent} />
+      )}
+
+      {/* Right — fire circle with check (or spinner when parsing) */}
+      <Press
+        onClick={isParsing ? undefined : onDone}
+        ariaLabel="Done recording"
+        rippleColor="rgba(0,0,0,0.2)"
+        style={{
+          width: 56,
+          height: 56,
+          borderRadius: '50%',
+          background: isParsing ? `${accent}22` : accent,
+          boxShadow: isParsing ? 'none' : '0 8px 24px rgba(232,64,64,0.35), 0 0 0 1px rgba(255,255,255,0.08) inset',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+          cursor: isParsing ? 'default' : 'pointer',
+        }}
+      >
+        {isParsing ? (
           <div
             style={{
               width: 20,
               height: 20,
               borderRadius: '50%',
-              border: `1.5px solid ${accent}33`,
+              border: `1.5px solid ${accent}44`,
               borderTopColor: accent,
               animation: 'lf-spin 1.2s linear infinite',
             }}
           />
-        </div>
-        <div style={{ flex: 1 }}>
-          <Waveform accent={accent} active={false} />
-        </div>
-        <div
-          style={{
-            width: 52,
-            height: 52,
-            flexShrink: 0,
-            borderRadius: '50%',
-            background: `${accent}22`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={`${accent}55`} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="20 6 9 17 4 12" />
+        ) : (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="square" strokeLinejoin="miter">
+            <path d="M5 12l5 5L20 7" />
           </svg>
-        </div>
-      </div>
-    )
-  }
-
-  // recording state
-  return (
-    <div style={{ padding: '12px 24px 40px', display: 'flex', alignItems: 'center', gap: 16 }}>
-      <Press
-        onClick={onStop}
-        ariaLabel="Pause recording"
-        style={{
-          width: 44,
-          height: 44,
-          borderRadius: '50%',
-          border: '1px solid rgba(255,255,255,0.18)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexShrink: 0,
-        }}
-      >
-        <svg width="10" height="13" viewBox="0 0 10 13" fill="none">
-          <rect x="0" y="0" width="3.5" height="13" rx="1" fill="white" />
-          <rect x="6.5" y="0" width="3.5" height="13" rx="1" fill="white" />
-        </svg>
-      </Press>
-      <div style={{ flex: 1 }}>
-        <Waveform accent={accent} active />
-      </div>
-      <Press
-        onClick={onStop}
-        ariaLabel="Done recording"
-        rippleColor="rgba(0,0,0,0.2)"
-        style={{
-          width: 52,
-          height: 52,
-          borderRadius: '50%',
-          background: accent,
-          boxShadow: `0 0 24px ${accent}66`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexShrink: 0,
-        }}
-      >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="20 6 9 17 4 12" />
-        </svg>
+        )}
       </Press>
     </div>
   )
