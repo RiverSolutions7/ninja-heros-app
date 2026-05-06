@@ -176,19 +176,6 @@ export default function W5Review({ stations, saving, onSaveAll, onUpdateParsed }
       }}
     >
       <div style={{ padding: '10px 24px 14px', flexShrink: 0 }}>
-        <div
-          style={{
-            fontFamily: 'var(--font-russo), sans-serif',
-            fontSize: 9,
-            letterSpacing: '0.28em',
-            color: FAINT,
-            textTransform: 'uppercase',
-            textAlign: 'right',
-            marginBottom: 12,
-          }}
-        >
-          Walkthrough · Review
-        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <div
             style={{

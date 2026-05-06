@@ -161,14 +161,12 @@ export function Chrome({
   step,
   total = 5,
   accent = ACCENT,
-  label,
   onClose,
   onBack,
 }: {
   step: number
   total?: number
   accent?: string
-  label: string
   onClose?: () => void
   onBack?: () => void
 }) {
@@ -235,10 +233,9 @@ export function Chrome({
             </svg>
           </button>
         ) : (
-          <div style={{ fontFamily: LF.display, fontSize: 10, letterSpacing: '0.28em', color: LF.faint }}>{label}</div>
+          <div />
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {onBack && <div style={{ fontFamily: LF.display, fontSize: 10, letterSpacing: '0.28em', color: LF.faint }}>{label}</div>}
           {onClose && (
             <button
               type="button"

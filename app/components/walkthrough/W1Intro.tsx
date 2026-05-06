@@ -53,22 +53,6 @@ export default function W1Intro({ onStart, onClose }: Props) {
       <div
         style={{
           position: 'absolute',
-          top: 64,
-          right: 24,
-          zIndex: 30,
-          fontFamily: 'var(--font-russo), sans-serif',
-          fontSize: 10,
-          letterSpacing: '0.28em',
-          color: '#3e4d70',
-          textTransform: 'uppercase',
-        }}
-      >
-        Walkthrough Mode
-      </div>
-
-      <div
-        style={{
-          position: 'absolute',
           inset: 0,
           zIndex: 0,
           pointerEvents: 'none',

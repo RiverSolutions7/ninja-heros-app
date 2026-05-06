@@ -363,7 +363,7 @@ export default function RevealScreen({
         paddingTop: 'env(safe-area-inset-top, 0px)',
       }}
     >
-      <Chrome step={4} total={5} accent={accent} label="STEP · 05 / REVIEW" onBack={() => onBack(buildFinalDraft())} onClose={onClose} />
+      <Chrome step={4} total={5} accent={accent} onBack={() => onBack(buildFinalDraft())} onClose={onClose} />
 
       {/* Single scroll container — photo scrolls with content so edit fields are accessible */}
       <div

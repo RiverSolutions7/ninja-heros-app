@@ -240,31 +240,6 @@ export default function W2Frame({ station, stations, newStationId, onPhoto, onCl
         </svg>
       </button>
 
-      <div
-        style={{
-          position: 'absolute',
-          top: 62,
-          left: 0,
-          right: 0,
-          display: 'flex',
-          justifyContent: 'center',
-          zIndex: 30,
-          pointerEvents: 'none',
-        }}
-      >
-        <span
-          style={{
-            fontFamily: 'var(--font-russo), sans-serif',
-            fontSize: 10,
-            letterSpacing: '0.28em',
-            color: 'rgba(255,255,255,0.38)',
-            textTransform: 'uppercase',
-          }}
-        >
-          Station {station}
-        </span>
-      </div>
-
       {cameraError && (
         <div
           style={{

@@ -121,7 +121,7 @@ export default function S3Photo({
 
   return (
     <div style={{ position: 'absolute', inset: 0, background: LF.bg, color: '#fff', display: 'flex', flexDirection: 'column' }}>
-      <Chrome step={2} total={5} accent={accent} label="STEP · 03 / PHOTO" onBack={onBack} onClose={onClose ?? onBack} />
+      <Chrome step={2} total={5} accent={accent} onBack={onBack} onClose={onClose ?? onBack} />
 
       <div
         aria-hidden
@@ -141,7 +141,7 @@ export default function S3Photo({
       <input ref={libraryInputRef} type="file" accept="image/*" multiple             onChange={handleChange} style={{ display: 'none' }} />
 
       <div style={{
-        padding: 'calc(env(safe-area-inset-top, 0px) + 56px) 24px 0',
+        padding: 'calc(env(safe-area-inset-top, 0px) + 76px) 24px 0',
         flex: 1,
         display: 'flex',
         flexDirection: 'column',

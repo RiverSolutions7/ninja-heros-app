@@ -23,7 +23,7 @@ export default function S2Curriculum({
 }) {
   return (
     <div style={{ position: 'absolute', inset: 0, background: LF.bg, color: '#fff', display: 'flex', flexDirection: 'column' }}>
-      <Chrome step={1} total={5} accent={accent} label="STEP · 02 / CURRICULUM" onBack={onBack} onClose={onClose ?? onBack} />
+      <Chrome step={1} total={5} accent={accent} onBack={onBack} onClose={onClose ?? onBack} />
 
       <div style={{ padding: 'calc(env(safe-area-inset-top, 0px) + 76px) 24px 0', flex: 1, display: 'flex', flexDirection: 'column' }}>
         <div style={{ animation: 'lf-rise-in 600ms both' }}>

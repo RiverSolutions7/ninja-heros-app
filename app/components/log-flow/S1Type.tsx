@@ -23,7 +23,7 @@ export default function S1Type({
 }) {
   return (
     <div style={{ position: 'absolute', inset: 0, background: LF.bg, color: '#fff', display: 'flex', flexDirection: 'column' }}>
-      <Chrome step={0} total={5} accent={accent} label="STEP · 01 / TYPE" onClose={onClose} />
+      <Chrome step={0} total={5} accent={accent} onClose={onClose} />
 
       <div style={{ padding: 'calc(env(safe-area-inset-top, 0px) + 76px) 24px 0', flex: 1, display: 'flex', flexDirection: 'column' }}>
         <div style={{ animation: 'lf-rise-in 600ms both' }}>
