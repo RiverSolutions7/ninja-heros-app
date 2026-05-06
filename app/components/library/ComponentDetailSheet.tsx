@@ -494,20 +494,18 @@ export default function ComponentDetailSheet({
       {/* pb-32 only when the sticky footer is present (afterSave or picker);
           pb-28 in library-browse context to clear the Share FAB. */}
       <div className={`px-6 pt-2 ${mode === 'afterSave' || onAdd !== undefined ? 'pb-32' : 'pb-28'}`}>
-        {/* Stat row — shown only in picker / afterSave context, not library browse */}
-        {(mode === 'afterSave' || onAdd !== undefined) && (
-          <div className="grid grid-cols-3 gap-3 pb-7 border-b border-white/[0.06]">
-            <Stat value={durationValue} label={durationLabel} />
-            <Stat
-              value={formatDateAdded(component.created_at)}
-              label="Added"
-            />
-            <Stat
-              value={usage ? formatDaysSince(usage.daysSince) : '—'}
-              label="Last used"
-            />
-          </div>
-        )}
+        {/* Stat row — always shown */}
+        <div className="grid grid-cols-3 gap-3 pb-7 border-b border-white/[0.06]">
+          <Stat value={durationValue} label={durationLabel} />
+          <Stat
+            value={formatDateAdded(component.created_at)}
+            label="Added"
+          />
+          <Stat
+            value={usage ? formatDaysSince(usage.daysSince) : '—'}
+            label="Last used"
+          />
+        </div>
 
         {/* Skills — fire-red chip pills, no header label */}
         {skills.length > 0 && (

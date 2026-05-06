@@ -360,6 +360,7 @@ export default function RevealScreen({
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
+        paddingTop: 'env(safe-area-inset-top, 0px)',
       }}
     >
       <Chrome step={4} total={5} accent={accent} label="STEP · 05 / REVIEW" onBack={() => onBack(buildFinalDraft())} onClose={onClose} />

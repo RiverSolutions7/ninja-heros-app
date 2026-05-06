@@ -87,13 +87,6 @@ export default function ComponentPickerModal({ onSelect, onClose, existingIds }:
         <h2 className="font-heading text-lg text-text-primary leading-none flex-1">
           Add to plan
         </h2>
-        <button
-          type="button"
-          onClick={onClose}
-          className="font-heading text-sm text-accent-fire px-3 py-1.5 rounded-lg hover:bg-accent-fire/10 transition-colors"
-        >
-          Done
-        </button>
       </div>
 
       {/* Type sub-tabs */}

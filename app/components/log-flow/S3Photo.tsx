@@ -61,7 +61,7 @@ export default function S3Photo({
       <input ref={cameraInputRef}  type="file" accept="image/*" capture="environment" onChange={handleChange} style={{ display: 'none' }} />
       <input ref={libraryInputRef} type="file" accept="image/*" multiple             onChange={handleChange} style={{ display: 'none' }} />
 
-      <div style={{ padding: '100px 24px 0', flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 1 }}>
+      <div style={{ padding: 'calc(env(safe-area-inset-top, 0px) + 56px) 24px 0', flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 1 }}>
         <div style={{ animation: 'lf-rise-in 500ms both' }}>
           <h1
             style={{

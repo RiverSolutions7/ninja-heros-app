@@ -3,8 +3,8 @@
 import { CSSProperties, Fragment, ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 export const LF = {
-  bg: '#0a1232',
-  bgDeep: '#060a1c',
+  bg: '#080c1a',
+  bgDeep: '#060a18',
   card: '#0f1734',
   muted: '#8ea0c4',
   dim: '#6b7da3',
@@ -154,38 +154,8 @@ export function PrimaryBtn({
   )
 }
 
-export function StatusBarLog() {
-  return (
-    <div
-      aria-hidden
-      style={{
-        height: 44,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '0 24px',
-        color: '#fff',
-        fontFamily: LF.display,
-        fontSize: 14,
-        flexShrink: 0,
-      }}
-    >
-      <div>9:41</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <svg width="17" height="11" viewBox="0 0 17 11" fill="none">
-          <rect x="0" y="7" width="3" height="4" fill="white" />
-          <rect x="4.5" y="5" width="3" height="6" fill="white" />
-          <rect x="9" y="2.5" width="3" height="8.5" fill="white" />
-          <rect x="13.5" y="0" width="3" height="11" fill="white" />
-        </svg>
-        <svg width="27" height="11" viewBox="0 0 27 11" fill="none">
-          <rect x="0.5" y="0.5" width="22" height="10" stroke="white" opacity="0.5" />
-          <rect x="2" y="2" width="19" height="7" fill="white" />
-        </svg>
-      </div>
-    </div>
-  )
-}
+/** @deprecated Removed — the real device status bar shows through now. */
+export function StatusBarLog() { return null }
 
 export function Chrome({
   step,
@@ -207,7 +177,7 @@ export function Chrome({
       <div
         style={{
           position: 'absolute',
-          top: 52,
+          top: 'calc(env(safe-area-inset-top, 0px) + 8px)',
           left: 24,
           right: 24,
           display: 'flex',
@@ -230,7 +200,7 @@ export function Chrome({
       <div
         style={{
           position: 'absolute',
-          top: 66,
+          top: 'calc(env(safe-area-inset-top, 0px) + 22px)',
           left: 24,
           right: 24,
           display: 'flex',
@@ -245,26 +215,24 @@ export function Chrome({
             onClick={onBack}
             aria-label="Back"
             style={{
-              background: 'transparent',
+              width: 36,
+              height: 36,
+              borderRadius: '50%',
+              background: 'rgba(0,0,0,0.35)',
+              backdropFilter: 'blur(10px)',
+              WebkitBackdropFilter: 'blur(10px)',
               border: 'none',
-              color: LF.muted,
-              cursor: 'pointer',
-              fontFamily: LF.display,
-              fontSize: 10,
-              letterSpacing: '0.2em',
-              minHeight: 44,
-              minWidth: 44,
-              padding: '12px 8px',
-              margin: '-12px -8px',
               display: 'flex',
               alignItems: 'center',
-              gap: 6,
+              justifyContent: 'center',
+              cursor: 'pointer',
+              flexShrink: 0,
+              color: 'rgba(255,255,255,0.9)',
             }}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square">
-              <path d="M15 18l-6-6 6-6" />
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+              <path d="M15 19l-7-7 7-7" />
             </svg>
-            BACK
           </button>
         ) : (
           <div style={{ fontFamily: LF.display, fontSize: 10, letterSpacing: '0.28em', color: LF.faint }}>{label}</div>

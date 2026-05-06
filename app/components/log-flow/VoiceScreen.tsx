@@ -145,13 +145,13 @@ export default function VoiceScreen({
         overflow: 'hidden',
       }}
     >
-      {/* In-flow header — BACK + X only */}
+      {/* In-flow header — back circle + X only */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '12px 24px 10px',
+          padding: 'calc(env(safe-area-inset-top, 0px) + 12px) 24px 10px',
           flexShrink: 0,
           position: 'relative',
           zIndex: 20,
@@ -162,26 +162,24 @@ export default function VoiceScreen({
           onClick={onBack}
           aria-label="Back"
           style={{
-            background: 'transparent',
+            width: 36,
+            height: 36,
+            borderRadius: '50%',
+            background: 'rgba(0,0,0,0.35)',
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
             border: 'none',
-            color: LF.muted,
-            cursor: 'pointer',
-            fontFamily: LF.display,
-            fontSize: 10,
-            letterSpacing: '0.2em',
-            minHeight: 44,
-            minWidth: 44,
-            padding: '12px 8px',
-            margin: '-12px -8px',
             display: 'flex',
             alignItems: 'center',
-            gap: 6,
+            justifyContent: 'center',
+            cursor: 'pointer',
+            flexShrink: 0,
+            color: 'rgba(255,255,255,0.9)',
           }}
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square">
-            <path d="M15 18l-6-6 6-6" />
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+            <path d="M15 19l-7-7 7-7" />
           </svg>
-          BACK
         </button>
         <button
           type="button"

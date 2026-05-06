@@ -1,7 +1,7 @@
 'use client'
 
 import type { ComponentType } from '@/app/lib/database.types'
-import { ACCENT, LF, PrimaryBtn, TorchLg } from './atoms'
+import { ACCENT, LF, PrimaryBtn } from './atoms'
 
 function toOrdinal(n: number) {
   const s = ['th', 'st', 'nd', 'rd']
@@ -35,6 +35,7 @@ export default function Satisfaction({
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
+        paddingTop: 'env(safe-area-inset-top, 0px)',
       }}
     >
       <div
@@ -61,57 +62,7 @@ export default function Satisfaction({
           zIndex: 1,
         }}
       >
-        <div style={{ animation: 'lf-torch-in 800ms cubic-bezier(.22,1,.36,1) both' }}>
-          <div
-            style={{
-              animation: 'lf-flicker 1.4s ease-in-out infinite',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 18,
-            }}
-          >
-            <TorchLg color={accent} size={72} />
-            <div>
-              <div
-                style={{
-                  fontFamily: LF.display,
-                  fontSize: 48,
-                  lineHeight: 0.9,
-                  letterSpacing: '0.02em',
-                  textTransform: 'uppercase',
-                  color: accent,
-                }}
-              >
-                IGNITE
-              </div>
-              <div
-                style={{
-                  fontFamily: LF.display,
-                  fontSize: 14,
-                  letterSpacing: '0.38em',
-                  color: LF.muted,
-                  textTransform: 'uppercase',
-                  marginTop: 8,
-                }}
-              >
-                COACH HUB
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div
-          aria-hidden
-          style={{
-            width: '60%',
-            height: 1,
-            background: accent,
-            margin: '32px 0 28px',
-            animation: 'lf-line-grow 600ms 400ms both',
-          }}
-        />
-
-        <div style={{ textAlign: 'center', animation: 'lf-rise-in 600ms 500ms both' }}>
+        <div style={{ textAlign: 'center', animation: 'lf-rise-in 600ms both' }}>
           <div
             style={{
               fontFamily: LF.display,

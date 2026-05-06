@@ -372,10 +372,10 @@ export default function EditComponentPage() {
         <Link
           href="/library?view=components"
           aria-label="Back to library"
-          className="inline-flex items-center justify-center w-11 h-11 rounded-lg text-text-dim hover:text-text-primary hover:bg-white/5 transition-colors -ml-1.5 mb-3"
+          className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-white/[0.07] text-white/80 hover:bg-white/[0.12] active:scale-95 transition-all -ml-1 mb-4"
         >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round">
+            <path d="M15 19l-7-7 7-7" />
           </svg>
         </Link>
         <p className="section-label mb-1">Editing</p>
