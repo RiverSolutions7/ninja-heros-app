@@ -85,7 +85,7 @@ export default function ConfirmSheet({
           className={[
             'w-full py-3.5 rounded-xl font-heading text-base active:scale-[0.98] transition-all disabled:opacity-70 min-h-[52px] inline-flex items-center justify-center gap-2',
             destructive
-              ? 'bg-red-500 text-white'
+              ? 'bg-accent-fire text-white'
               : 'bg-accent-fire text-white shadow-glow-fire',
           ].join(' ')}
         >
