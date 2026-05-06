@@ -370,15 +370,15 @@ export default function RevealScreen({
         style={{ flex: 1, overflowY: 'auto' }}
         onClick={() => { setActiveField(null); setEditingStepId(null) }}
       >
-        {/* Photo carousel — 220px, scrolls away as you edit */}
-        <div style={{ position: 'relative', height: 220, background: '#091230', overflow: 'hidden' }}>
+        {/* Photo — natural aspect ratio, scrolls away as you edit */}
+        <div style={{ position: 'relative', background: '#091230' }}>
           <div
             ref={carouselRef}
             onScroll={handleCarouselScroll}
             style={{
               display: 'flex',
+              alignItems: 'flex-start',
               width: '100%',
-              height: '100%',
               overflowX: multiPhoto ? 'auto' : 'hidden',
               overflowY: 'hidden',
               scrollSnapType: 'x mandatory',
@@ -392,18 +392,18 @@ export default function RevealScreen({
               photoPreviewUrls.map((url, i) => (
                 <div
                   key={url}
-                  style={{ minWidth: '100%', height: '100%', scrollSnapAlign: 'start', flexShrink: 0, background: '#091230' }}
+                  style={{ minWidth: '100%', scrollSnapAlign: 'start', flexShrink: 0, background: '#091230' }}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={url}
                     alt={`Photo ${i + 1}`}
-                    style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+                    style={{ width: '100%', height: 'auto', display: 'block' }}
                   />
                 </div>
               ))
             ) : (
-              <div style={{ minWidth: '100%', height: '100%', background: '#091230' }} />
+              <div style={{ minWidth: '100%', height: 200, background: '#091230' }} />
             )}
           </div>
 
