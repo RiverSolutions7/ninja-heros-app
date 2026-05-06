@@ -283,7 +283,7 @@ export default function S3Photo({
                     <button
                       onClick={() => onRemove(i + 3)}
                       aria-label={`Remove photo ${i + 4}`}
-                      style={{ position: 'absolute', top: 0, right: 0, padding: 10, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      style={{ position: 'absolute', top: 0, right: 0, padding: 12, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     >
                       <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <IconTrash size={10} color="#fff" />
@@ -323,7 +323,7 @@ export default function S3Photo({
         </PrimaryBtn>
       </div>
 
-      <BottomSheet visible={sheetVisible} onClose={() => setSheetVisible(false)}>
+      <BottomSheet visible={sheetVisible} onClose={() => setSheetVisible(false)} title="Add photo">
         <SheetRow
           icon={<IconCamera size={22} color="#fff" />}
           label="Take a photo"
