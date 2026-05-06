@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import type { ComponentType } from '@/app/lib/database.types'
-import { ACCENT, Chrome, LF, PrimaryBtn } from './atoms'
+import { ACCENT, Chrome, LF, Press, PrimaryBtn } from './atoms'
+import BottomSheet from '@/app/components/ui/BottomSheet'
 
 const MAX_PHOTOS = 5
 
@@ -34,105 +35,47 @@ function IconTrash({ size = 14, color = '#fff' }: { size?: number; color?: strin
   )
 }
 
-function AddSheet({
-  visible,
-  onClose,
-  onCamera,
-  onGallery,
+// Shared row for the add-photo bottom sheet
+function SheetRow({
+  icon,
+  label,
+  onClick,
+  hasBorder = false,
 }: {
-  visible: boolean
-  onClose: () => void
-  onCamera: () => void
-  onGallery: () => void
+  icon: React.ReactNode
+  label: string
+  onClick: () => void
+  hasBorder?: boolean
 }) {
-  const [animating, setAnimating] = useState(false)
-  const [show, setShow] = useState(false)
-
-  useEffect(() => {
-    if (visible) {
-      setShow(true)
-      requestAnimationFrame(() => setAnimating(true))
-    } else {
-      setAnimating(false)
-      const t = setTimeout(() => setShow(false), 320)
-      return () => clearTimeout(t)
-    }
-  }, [visible])
-
-  if (!show) return null
-
   return (
-    <div
-      onClick={onClose}
+    <Press
+      onClick={onClick}
+      ariaLabel={label}
       style={{
-        position: 'absolute',
-        inset: 0,
-        background: animating ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0)',
-        transition: 'background 0.32s ease',
-        zIndex: 50,
         display: 'flex',
-        alignItems: 'flex-end',
+        alignItems: 'center',
+        gap: 18,
+        padding: '16px 24px',
+        borderBottom: hasBorder ? `1px solid ${LF.hairline}` : 'none',
+        width: '100%',
       }}
     >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: '100%',
-          background: '#1a1a1a',
-          borderRadius: '20px 20px 0 0',
-          padding: '12px 0 40px',
-          transform: animating ? 'translateY(0)' : 'translateY(100%)',
-          transition: 'transform 0.32s cubic-bezier(0.32,0.72,0,1)',
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: '#3e3e3e' }} />
-        </div>
-
-        <button
-          onClick={onCamera}
-          style={{
-            width: '100%',
-            padding: '18px 24px',
-            background: 'transparent',
-            border: 'none',
-            borderBottom: '1px solid rgba(255,255,255,0.07)',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 18,
-            color: '#fff',
-            textAlign: 'left',
-          }}
-        >
-          <div style={{ width: 44, height: 44, borderRadius: 12, background: '#242424', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <IconCamera size={22} color="#fff" />
-          </div>
-          <span style={{ fontSize: 16, fontWeight: 600, letterSpacing: '-0.3px', fontFamily: LF.body }}>Take a photo</span>
-        </button>
-
-        <button
-          onClick={onGallery}
-          style={{
-            width: '100%',
-            padding: '18px 24px',
-            background: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 18,
-            color: '#fff',
-            textAlign: 'left',
-          }}
-        >
-          <div style={{ width: 44, height: 44, borderRadius: 12, background: '#242424', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <IconGallery size={22} color="#fff" />
-          </div>
-          <span style={{ fontSize: 16, fontWeight: 600, letterSpacing: '-0.3px', fontFamily: LF.body }}>Add from library</span>
-        </button>
+      <div style={{
+        width: 44,
+        height: 44,
+        borderRadius: 12,
+        background: LF.hairline,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+      }}>
+        {icon}
       </div>
-    </div>
+      <span style={{ fontFamily: LF.body, fontSize: 16, fontWeight: 600, letterSpacing: '-0.3px', color: '#fff' }}>
+        {label}
+      </span>
+    </Press>
   )
 }
 
@@ -155,7 +98,7 @@ export default function S3Photo({
   accent?: string
   type: ComponentType
 }) {
-  const cameraInputRef = useRef<HTMLInputElement | null>(null)
+  const cameraInputRef  = useRef<HTMLInputElement | null>(null)
   const libraryInputRef = useRef<HTMLInputElement | null>(null)
   const [sheetVisible, setSheetVisible] = useState(false)
 
@@ -168,10 +111,10 @@ export default function S3Photo({
     e.target.value = ''
   }
 
-  const isEmpty        = previewUrls.length === 0
-  const primaryFilled  = previewUrls.length > 0
-  const allGridFilled  = previewUrls.length >= 3
-  const canAddMore     = previewUrls.length < MAX_PHOTOS
+  const isEmpty       = previewUrls.length === 0
+  const primaryFilled = previewUrls.length > 0
+  const allGridFilled = previewUrls.length >= 3
+  const canAddMore    = previewUrls.length < MAX_PHOTOS
 
   const GRID_HEIGHT = 300
   const SLOT_GAP    = 6
@@ -223,49 +166,41 @@ export default function S3Photo({
               </h1>
             </div>
 
-            <div style={{ background: '#0a0f1e', borderRadius: 20, animation: 'lf-rise-in 500ms 80ms both' }}>
-              <button
+            <div style={{ background: '#0a0f1e', borderRadius: 20, overflow: 'hidden', animation: 'lf-rise-in 500ms 80ms both' }}>
+              <Press
                 onClick={() => cameraInputRef.current?.click()}
+                ariaLabel="Open camera"
                 style={{
-                  width: '100%',
-                  padding: '18px 20px',
-                  background: 'transparent',
-                  border: 'none',
-                  borderBottom: '1px solid rgba(255,255,255,0.07)',
-                  cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   gap: 18,
-                  color: '#fff',
-                  textAlign: 'left',
+                  padding: '18px 20px',
+                  borderBottom: `1px solid ${LF.hairline}`,
+                  width: '100%',
                 }}
               >
                 <div style={{ width: 46, height: 46, borderRadius: 12, background: accent, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <IconCamera size={22} color="#fff" />
                 </div>
-                <span style={{ fontSize: 16, fontWeight: 600, letterSpacing: '-0.3px', fontFamily: LF.body }}>Open camera.</span>
-              </button>
+                <span style={{ fontSize: 16, fontWeight: 600, letterSpacing: '-0.3px', fontFamily: LF.body, color: '#fff' }}>Open camera.</span>
+              </Press>
 
-              <button
+              <Press
                 onClick={() => libraryInputRef.current?.click()}
+                ariaLabel="Add from library"
                 style={{
-                  width: '100%',
-                  padding: '18px 20px',
-                  background: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   gap: 18,
-                  color: '#fff',
-                  textAlign: 'left',
+                  padding: '18px 20px',
+                  width: '100%',
                 }}
               >
                 <div style={{ width: 46, height: 46, borderRadius: 12, background: accent, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <IconGallery size={22} color="#fff" />
                 </div>
-                <span style={{ fontSize: 16, fontWeight: 600, letterSpacing: '-0.3px', fontFamily: LF.body }}>Add from library.</span>
-              </button>
+                <span style={{ fontSize: 16, fontWeight: 600, letterSpacing: '-0.3px', fontFamily: LF.body, color: '#fff' }}>Add from library.</span>
+              </Press>
             </div>
           </>
         ) : (
@@ -273,29 +208,33 @@ export default function S3Photo({
           <div style={{ animation: 'lf-rise-in 300ms both' }}>
             <div style={{ display: 'flex', gap: SLOT_GAP, height: GRID_HEIGHT }}>
 
-              {/* Large left slot — slot 0 */}
+              {/* Large left — slot 0 */}
               <div style={{ flex: 2, height: GRID_HEIGHT }}>
                 {previewUrls[0] ? (
                   <div style={{ position: 'relative', width: '100%', height: '100%', borderRadius: 12, overflow: 'hidden', background: '#222' }}>
-                    <img src={previewUrls[0]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                    <img src={previewUrls[0]} alt="Photo 1" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                    {/* 30×30 visible circle; absolute inset extends tap target to ~54pt */}
                     <button
                       onClick={() => onRemove(0)}
-                      aria-label="Remove photo"
-                      style={{ position: 'absolute', top: 8, right: 8, width: 30, height: 30, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      aria-label="Remove photo 1"
+                      style={{ position: 'absolute', top: 0, right: 0, padding: 12, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     >
-                      <IconTrash size={14} color="#fff" />
+                      <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <IconTrash size={14} color="#fff" />
+                      </div>
                     </button>
                   </div>
                 ) : (
-                  <button
+                  <Press
                     onClick={() => setSheetVisible(true)}
-                    style={{ width: '100%', height: '100%', borderRadius: 12, border: `1.5px dashed ${LF.faint}`, background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    ariaLabel="Add photo"
+                    style={{ width: '100%', height: '100%', borderRadius: 12, border: `1.5px dashed ${LF.faint}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                   >
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                       <line x1="12" y1="5" x2="12" y2="19" stroke={LF.faint} strokeWidth="2" strokeLinecap="round" />
                       <line x1="5" y1="12" x2="19" y2="12" stroke={LF.faint} strokeWidth="2" strokeLinecap="round" />
                     </svg>
-                  </button>
+                  </Press>
                 )}
               </div>
 
@@ -305,25 +244,29 @@ export default function S3Photo({
                   <div key={slot} style={{ flex: 1 }}>
                     {previewUrls[slot] ? (
                       <div style={{ position: 'relative', width: '100%', height: '100%', borderRadius: 12, overflow: 'hidden', background: '#222' }}>
-                        <img src={previewUrls[slot]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                        <img src={previewUrls[slot]} alt={`Photo ${slot + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                        {/* Transparent padding extends tap target to 44pt */}
                         <button
                           onClick={() => onRemove(slot)}
-                          aria-label="Remove photo"
-                          style={{ position: 'absolute', top: 6, right: 6, width: 26, height: 26, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                          aria-label={`Remove photo ${slot + 1}`}
+                          style={{ position: 'absolute', top: 0, right: 0, padding: 10, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                         >
-                          <IconTrash size={12} color="#fff" />
+                          <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <IconTrash size={12} color="#fff" />
+                          </div>
                         </button>
                       </div>
                     ) : (
-                      <button
+                      <Press
                         onClick={() => setSheetVisible(true)}
-                        style={{ width: '100%', height: '100%', borderRadius: 12, border: `1.5px dashed ${LF.faint}`, background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        ariaLabel="Add photo"
+                        style={{ width: '100%', height: '100%', borderRadius: 12, border: `1.5px dashed ${LF.faint}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                       >
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                           <line x1="12" y1="5" x2="12" y2="19" stroke={LF.faint} strokeWidth="2" strokeLinecap="round" />
                           <line x1="5" y1="12" x2="19" y2="12" stroke={LF.faint} strokeWidth="2" strokeLinecap="round" />
                         </svg>
-                      </button>
+                      </Press>
                     )}
                   </div>
                 ))}
@@ -335,13 +278,16 @@ export default function S3Photo({
               <div style={{ display: 'flex', gap: 6, marginTop: 8, overflowX: 'auto', scrollbarWidth: 'none' }}>
                 {previewUrls.slice(3).map((url, i) => (
                   <div key={url} style={{ position: 'relative', width: 64, height: 64, borderRadius: 10, overflow: 'hidden', flexShrink: 0, background: '#222' }}>
-                    <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                    <img src={url} alt={`Photo ${i + 4}`} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                    {/* Transparent padding gives 44pt tap target over 20pt visible circle */}
                     <button
                       onClick={() => onRemove(i + 3)}
-                      aria-label="Remove photo"
-                      style={{ position: 'absolute', top: 4, right: 4, width: 20, height: 20, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      aria-label={`Remove photo ${i + 4}`}
+                      style={{ position: 'absolute', top: 0, right: 0, padding: 10, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     >
-                      <IconTrash size={10} color="#fff" />
+                      <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <IconTrash size={10} color="#fff" />
+                      </div>
                     </button>
                   </div>
                 ))}
@@ -350,16 +296,17 @@ export default function S3Photo({
 
             {/* Add more — shown when grid is full but max not reached */}
             {allGridFilled && canAddMore && (
-              <button
+              <Press
                 onClick={() => setSheetVisible(true)}
-                style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10, background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px 0' }}
+                ariaLabel="Add more photos"
+                style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 10, padding: '4px 0' }}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                   <line x1="12" y1="5" x2="12" y2="19" stroke={LF.dim} strokeWidth="2" strokeLinecap="round" />
                   <line x1="5" y1="12" x2="19" y2="12" stroke={LF.dim} strokeWidth="2" strokeLinecap="round" />
                 </svg>
                 <span style={{ fontFamily: LF.body, fontSize: 13, color: LF.dim }}>Add more photos</span>
-              </button>
+              </Press>
             )}
 
             <div style={{ marginTop: allGridFilled && canAddMore ? 4 : 12, fontFamily: LF.body, fontSize: 12, color: LF.faint }}>
@@ -376,12 +323,19 @@ export default function S3Photo({
         </PrimaryBtn>
       </div>
 
-      <AddSheet
-        visible={sheetVisible}
-        onClose={() => setSheetVisible(false)}
-        onCamera={openCamera}
-        onGallery={openLibrary}
-      />
+      <BottomSheet visible={sheetVisible} onClose={() => setSheetVisible(false)}>
+        <SheetRow
+          icon={<IconCamera size={22} color="#fff" />}
+          label="Take a photo"
+          onClick={openCamera}
+          hasBorder
+        />
+        <SheetRow
+          icon={<IconGallery size={22} color="#fff" />}
+          label="Add from library"
+          onClick={openLibrary}
+        />
+      </BottomSheet>
     </div>
   )
 }
