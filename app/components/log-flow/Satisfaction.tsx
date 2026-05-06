@@ -1,7 +1,7 @@
 'use client'
 
 import type { ComponentType } from '@/app/lib/database.types'
-import { ACCENT, LF, PrimaryBtn, StatusBarLog, TorchLg } from './atoms'
+import { ACCENT, LF, PrimaryBtn, TorchLg } from './atoms'
 
 function toOrdinal(n: number) {
   const s = ['th', 'st', 'nd', 'rd']
@@ -37,8 +37,6 @@ export default function Satisfaction({
         overflow: 'hidden',
       }}
     >
-      <StatusBarLog />
-
       <div
         aria-hidden
         style={{

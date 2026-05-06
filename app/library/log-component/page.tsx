@@ -339,7 +339,17 @@ export default function LogComponentPage() {
             durationMinutes: draft.durationMinutes,
           }}
           onSave={handleSave}
-          onBack={() => { voice.reset(); setStep('voice') }}
+          onBack={(savedDraft) => {
+            setDraft((d) => ({
+              ...d,
+              title: savedDraft.title || d.title,
+              description: savedDraft.description || d.description,
+              skills: savedDraft.skills.length > 0 ? savedDraft.skills : d.skills,
+              durationMinutes: savedDraft.durationMinutes ?? d.durationMinutes,
+            }))
+            voice.reset()
+            setStep('voice')
+          }}
           onClose={handleClose}
           saving={saving}
         />

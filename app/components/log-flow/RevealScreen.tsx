@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { ComponentType, CurriculumRow } from '@/app/lib/database.types'
-import { ACCENT, Chrome, LF, StatusBarLog } from './atoms'
+import { ACCENT, Chrome, LF } from './atoms'
 import { useSwipeReveal, REVEAL_WIDTH_DEFAULT } from '../../hooks/useSwipeReveal'
 
 export interface RevealDraft {
@@ -257,7 +257,7 @@ export default function RevealScreen({
   photoPreviewUrls: string[]
   draft: RevealDraft
   onSave: (finalDraft: RevealDraft) => void
-  onBack: () => void
+  onBack: (currentDraft: RevealDraft) => void
   onClose: () => void
   saving?: boolean
   accent?: string
@@ -362,8 +362,7 @@ export default function RevealScreen({
         overflow: 'hidden',
       }}
     >
-      <StatusBarLog />
-      <Chrome step={4} total={5} accent={accent} label="STEP · 05 / REVIEW" onBack={onBack} onClose={onClose} />
+      <Chrome step={4} total={5} accent={accent} label="STEP · 05 / REVIEW" onBack={() => onBack(buildFinalDraft())} onClose={onClose} />
 
       {/* Single scroll container — photo scrolls with content so edit fields are accessible */}
       <div
@@ -398,7 +397,7 @@ export default function RevealScreen({
                   <img
                     src={url}
                     alt={`Photo ${i + 1}`}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
                   />
                 </div>
               ))

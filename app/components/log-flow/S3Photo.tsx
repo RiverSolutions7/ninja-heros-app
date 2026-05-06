@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import type { ComponentType } from '@/app/lib/database.types'
-import { ACCENT, Chrome, LF, Press, PrimaryBtn, StatusBarLog } from './atoms'
+import { ACCENT, Chrome, LF, Press, PrimaryBtn } from './atoms'
 
 const MAX_PHOTOS = 5
 
@@ -44,7 +44,6 @@ export default function S3Photo({
 
   return (
     <div style={{ position: 'absolute', inset: 0, background: LF.bg, color: '#fff', display: 'flex', flexDirection: 'column' }}>
-      <StatusBarLog />
       <Chrome step={2} total={5} accent={accent} label="STEP · 03 / PHOTO" onBack={onBack} onClose={onClose ?? onBack} />
 
       <div

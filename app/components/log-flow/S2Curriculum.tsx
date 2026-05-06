@@ -2,7 +2,7 @@
 
 import type { CurriculumRow } from '@/app/lib/database.types'
 import { curriculumDotColor } from '@/app/lib/curriculumColors'
-import { ACCENT, Chrome, LF, Press, PrimaryBtn, StatusBarLog } from './atoms'
+import { ACCENT, Chrome, LF, Press, PrimaryBtn } from './atoms'
 
 export default function S2Curriculum({
   value,
@@ -23,7 +23,6 @@ export default function S2Curriculum({
 }) {
   return (
     <div style={{ position: 'absolute', inset: 0, background: LF.bg, color: '#fff', display: 'flex', flexDirection: 'column' }}>
-      <StatusBarLog />
       <Chrome step={1} total={5} accent={accent} label="STEP · 02 / CURRICULUM" onBack={onBack} onClose={onClose ?? onBack} />
 
       <div style={{ padding: '120px 24px 0', flex: 1, display: 'flex', flexDirection: 'column' }}>

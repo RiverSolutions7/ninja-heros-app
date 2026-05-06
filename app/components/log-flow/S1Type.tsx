@@ -1,7 +1,7 @@
 'use client'
 
 import type { ComponentType } from '@/app/lib/database.types'
-import { ACCENT, Chrome, LF, Press, PrimaryBtn, StatusBarLog } from './atoms'
+import { ACCENT, Chrome, LF, Press, PrimaryBtn } from './atoms'
 
 const OPTIONS: Array<{ id: ComponentType; label: string; sub: string; rippleColor: string }> = [
   { id: 'station', label: 'Station', sub: 'A setup coaches rotate through', rippleColor: `${LF.stationBlue}22` },
@@ -23,7 +23,6 @@ export default function S1Type({
 }) {
   return (
     <div style={{ position: 'absolute', inset: 0, background: LF.bg, color: '#fff', display: 'flex', flexDirection: 'column' }}>
-      <StatusBarLog />
       <Chrome step={0} total={5} accent={accent} label="STEP · 01 / TYPE" onClose={onClose} />
 
       <div style={{ padding: '120px 24px 0', flex: 1, display: 'flex', flexDirection: 'column' }}>
