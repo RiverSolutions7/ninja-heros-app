@@ -1,6 +1,7 @@
 'use client'
 
 import { CSSProperties, Fragment, ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import BottomSheet from '@/app/components/ui/BottomSheet'
 
 export const LF = {
   bg: '#080c1a',
@@ -222,8 +223,8 @@ export function Chrome({
             onClick={onBack}
             aria-label="Back"
             style={{
-              width: 36,
-              height: 36,
+              width: 44,
+              height: 44,
               borderRadius: '50%',
               background: 'rgba(0,0,0,0.35)',
               backdropFilter: 'blur(10px)',
@@ -468,98 +469,59 @@ export function AdjustSheet({ visible, onClose }: { visible: boolean; onClose: (
     { key: 'duration',     label: 'Duration',        sub: 'Estimate station time' },
   ]
 
-  if (!visible) return null
-
   return (
-    <>
-      {/* Backdrop */}
-      <div
-        onClick={onClose}
-        style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0,0,0,0.55)',
-          backdropFilter: 'blur(4px)',
-          WebkitBackdropFilter: 'blur(4px)',
-          zIndex: 100,
-        }}
-      />
-      {/* Sheet */}
-      <div
-        style={{
-          position: 'fixed',
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: '#141c32',
-          borderRadius: '24px 24px 0 0',
-          zIndex: 101,
-          padding: '12px 0 calc(env(safe-area-inset-bottom, 0px) + 20px)',
-          animation: 'lf-slide-up 380ms cubic-bezier(0.32,0.72,0,1) both',
-        }}
-      >
-        {/* Handle bar */}
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.20)' }} />
-        </div>
-        {/* Title */}
-        <div style={{ padding: '0 20px 10px' }}>
-          <p style={{ fontSize: 17, fontWeight: 600, color: '#fff', fontFamily: LF.body, margin: 0 }}>Adjust</p>
-        </div>
-        {/* Toggle rows */}
-        {rows.map((row, i) => (
+    <BottomSheet visible={visible} onClose={onClose} title="Adjust">
+      {rows.map((row, i) => (
+        <div
+          key={row.key}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            height: 54,
+            padding: '0 20px',
+            borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : undefined,
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: 15, fontWeight: 500, color: '#fff', fontFamily: LF.body, margin: 0 }}>{row.label}</p>
+            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', fontFamily: LF.body, margin: 0 }}>{row.sub}</p>
+          </div>
           <div
-            key={row.key}
+            role="switch"
+            aria-checked={settings[row.key]}
+            tabIndex={0}
+            onClick={() => setSettings((s) => ({ ...s, [row.key]: !s[row.key] }))}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') setSettings((s) => ({ ...s, [row.key]: !s[row.key] }))
+            }}
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              height: 54,
-              padding: '0 20px',
-              borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : undefined,
+              width: 44,
+              height: 26,
+              borderRadius: 999,
+              background: settings[row.key] ? ACCENT : 'rgba(255,255,255,0.18)',
+              position: 'relative',
+              cursor: 'pointer',
+              transition: 'background 200ms',
+              flexShrink: 0,
             }}
           >
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ fontSize: 15, fontWeight: 500, color: '#fff', fontFamily: LF.body, margin: 0 }}>{row.label}</p>
-              <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', fontFamily: LF.body, margin: 0 }}>{row.sub}</p>
-            </div>
-            {/* iOS-style toggle */}
             <div
-              role="switch"
-              aria-checked={settings[row.key]}
-              tabIndex={0}
-              onClick={() => setSettings((s) => ({ ...s, [row.key]: !s[row.key] }))}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') setSettings((s) => ({ ...s, [row.key]: !s[row.key] }))
-              }}
               style={{
-                width: 44,
-                height: 26,
-                borderRadius: 999,
-                background: settings[row.key] ? ACCENT : 'rgba(255,255,255,0.18)',
-                position: 'relative',
-                cursor: 'pointer',
-                transition: 'background 200ms',
-                flexShrink: 0,
+                position: 'absolute',
+                top: 3,
+                left: settings[row.key] ? 21 : 3,
+                width: 20,
+                height: 20,
+                borderRadius: '50%',
+                background: '#fff',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                transition: 'left 200ms cubic-bezier(0.34,1.56,0.64,1)',
               }}
-            >
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 3,
-                  left: settings[row.key] ? 21 : 3,
-                  width: 20,
-                  height: 20,
-                  borderRadius: '50%',
-                  background: '#fff',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-                  transition: 'left 200ms cubic-bezier(0.34,1.56,0.64,1)',
-                }}
-              />
-            </div>
+            />
           </div>
-        ))}
-      </div>
-    </>
+        </div>
+      ))}
+    </BottomSheet>
   )
 }
 
@@ -817,8 +779,8 @@ export function VoiceControlBar({
               onClick={onCancel}
               ariaLabel="Cancel recording"
               style={{
-                width: 36,
-                height: 36,
+                width: 44,
+                height: 44,
                 borderRadius: '50%',
                 background: 'rgba(255,255,255,0.10)',
                 display: 'flex',
@@ -840,8 +802,8 @@ export function VoiceControlBar({
               ariaLabel="Stop recording"
               rippleColor="rgba(0,0,0,0.25)"
               style={{
-                width: 40,
-                height: 40,
+                width: 44,
+                height: 44,
                 borderRadius: '50%',
                 background: 'linear-gradient(160deg, #ff6a2a 0%, #e03a00 100%)',
                 display: 'flex',
@@ -897,8 +859,8 @@ export function VoiceControlBar({
                 onClick={onCancel}
                 ariaLabel="Discard recording"
                 style={{
-                  width: 40,
-                  height: 40,
+                  width: 44,
+                  height: 44,
                   borderRadius: '50%',
                   border: '1px solid rgba(255,255,255,0.18)',
                   display: 'flex',
@@ -915,8 +877,8 @@ export function VoiceControlBar({
                 ariaLabel="Submit recording"
                 rippleColor="rgba(0,0,0,0.25)"
                 style={{
-                  width: 40,
-                  height: 40,
+                  width: 44,
+                  height: 44,
                   borderRadius: '50%',
                   background: 'linear-gradient(160deg, #ff6a2a 0%, #e03a00 100%)',
                   display: 'flex',
@@ -960,12 +922,12 @@ export function VoiceControlBar({
                 onClick={onCancel}
                 ariaLabel="Cancel processing"
                 style={{
-                  height: 30,
+                  minHeight: 44,
                   borderRadius: 999,
                   background: 'rgba(255,255,255,0.08)',
                   display: 'flex',
                   alignItems: 'center',
-                  padding: '0 12px',
+                  padding: '0 16px',
                 }}
               >
                 <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', fontFamily: LF.body }}>
