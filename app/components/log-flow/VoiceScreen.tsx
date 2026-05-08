@@ -11,101 +11,133 @@ import {
   VoiceControlBar,
 } from './atoms'
 
-const CAROUSEL_H = 320
+// Design spec: 320px total zone; cards are 74% wide with 18px radius and peek effect
+const CAROUSEL_H   = 320
+const CARD_FRAC    = 0.74   // card width = 74% of container
+const GAP_FRAC     = 0.04   // gap between cards = 4% of container
+// Step between card centers expressed as % of card's own width (for translateX)
+const STEP_OF_CARD = (CARD_FRAC + GAP_FRAC) / CARD_FRAC  // ≈ 1.054
 
-// ─── Carousel with new design-spec dots ──────────────────────────────────────
+// ─── Carousel — 74%-wide cards, peek effect, drag to advance ─────────────────
 function PhotoCarousel({ urls, accent }: { urls: string[]; accent: string }) {
-  const scrollRef = useRef<HTMLDivElement | null>(null)
-  const [active, setActive] = useState(0)
-  const multi = urls.length > 1
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const [active, setActive]   = useState(0)
+  const [drag, setDrag]       = useState(0)
+  const dragStart             = useRef<number | null>(null)
+  const didDrag               = useRef(false)
 
-  const handleScroll = () => {
-    const el = scrollRef.current
-    if (!el) return
-    const slideW = el.clientWidth - 30
-    const i = Math.round(el.scrollLeft / slideW)
-    if (i !== active) setActive(i)
+  const items = urls.length > 0 ? urls : [null as unknown as string]
+  const multi = items.length > 1
+  const DOTS_H  = 30
+  const CARDS_H = CAROUSEL_H - DOTS_H
+
+  function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    dragStart.current = e.clientX
+    didDrag.current   = false
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+  function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (dragStart.current === null) return
+    const d = e.clientX - dragStart.current
+    if (Math.abs(d) > 5) didDrag.current = true
+    setDrag(d)
+  }
+  function onPointerUp() {
+    if (didDrag.current) {
+      if (drag < -40 && active < items.length - 1) setActive(a => a + 1)
+      if (drag >  40 && active > 0)                setActive(a => a - 1)
+    }
+    setDrag(0)
+    dragStart.current = null
+    didDrag.current   = false
   }
 
   return (
-    <div style={{ width: '100%', position: 'relative', flexShrink: 0, height: CAROUSEL_H }}>
+    <div style={{ width: '100%', flexShrink: 0, height: CAROUSEL_H }}>
+      {/* Card track */}
       <div
-        ref={scrollRef}
-        onScroll={multi ? handleScroll : undefined}
+        ref={containerRef}
         style={{
-          display: 'flex',
-          overflowX: multi ? 'auto' : 'hidden',
-          overflowY: 'hidden',
-          scrollSnapType: multi ? 'x mandatory' : 'none',
-          height: '100%',
-          scrollbarWidth: 'none',
-          WebkitOverflowScrolling: 'touch',
-        } as React.CSSProperties}
+          position: 'relative',
+          width: '100%',
+          height: CARDS_H,
+          overflow: 'hidden',
+          cursor: multi ? 'grab' : 'default',
+          userSelect: 'none',
+        }}
+        onPointerDown={multi ? onPointerDown : undefined}
+        onPointerMove={multi ? onPointerMove : undefined}
+        onPointerUp={multi ? onPointerUp : undefined}
+        onPointerCancel={multi ? onPointerUp : undefined}
       >
-        {urls.length > 0 ? (
-          urls.map((url, i) => (
+        {items.map((url, i) => {
+          const containerW = containerRef.current?.clientWidth ?? 390
+          const cardW      = containerW * CARD_FRAC
+          const offset     = i - active
+          // translateX in % of card's own width
+          const dragPct    = (drag / cardW) * 100
+          const xPct       = offset * STEP_OF_CARD * 100 + dragPct
+          const absOffset  = Math.abs(offset)
+          const isActive   = offset === 0
+          const scale      = isActive ? 1 : 0.92
+          const opacity    = absOffset === 0 ? 1 : absOffset === 1 ? 0.55 : 0.25
+          const animated   = drag === 0
+
+          return (
             <div
               key={i}
               style={{
-                flexShrink: 0,
-                width: multi ? 'calc(100% - 30px)' : '100%',
-                height: '100%',
-                scrollSnapAlign: 'start',
-                position: 'relative',
-                background: LF.bgDeep,
+                position: 'absolute',
+                left:         `${(1 - CARD_FRAC) / 2 * 100}%`,
+                width:        `${CARD_FRAC * 100}%`,
+                top: 0,
+                height:       '100%',
+                borderRadius: 18,
+                overflow:     'hidden',
+                background:   url
+                  ? LF.bgDeep
+                  : `radial-gradient(ellipse 80% 60% at 50% 50%, ${accent}1a 0%, transparent 70%), ${LF.bgDeep}`,
+                transform:    `translateX(${xPct}%) scale(${scale})`,
+                opacity,
+                transition:   animated
+                  ? 'transform 380ms cubic-bezier(0.32,0.72,0,1), opacity 380ms ease'
+                  : 'none',
+                boxShadow:    isActive
+                  ? '0 24px 48px rgba(0,0,0,0.55), 0 4px 12px rgba(0,0,0,0.35)'
+                  : 'none',
+                willChange:   'transform',
               }}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={url}
-                alt=""
-                aria-hidden
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-              />
+              {url && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={url}
+                  alt=""
+                  aria-hidden
+                  draggable={false}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }}
+                />
+              )}
             </div>
-          ))
-        ) : (
-          <div
-            style={{
-              flexShrink: 0,
-              width: '100%',
-              height: '100%',
-              background: `radial-gradient(ellipse 80% 60% at 50% 50%, ${accent}1a 0%, transparent 70%), ${LF.bgDeep}`,
-            }}
-          />
-        )}
-        {multi && <div style={{ flexShrink: 0, width: 30, height: '100%' }} />}
+          )
+        })}
       </div>
 
-      {/* Pagination dots — active: 18×6px pill, inactive: 6×6px circle */}
-      {multi && (
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 14,
-            left: 0,
-            right: 0,
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            gap: 6,
-            pointerEvents: 'none',
-          }}
-        >
-          {urls.map((_, i) => (
-            <div
-              key={i}
-              style={{
-                width: i === active ? 18 : 6,
-                height: 6,
-                borderRadius: 3,
-                background: i === active ? accent : 'rgba(255,255,255,0.22)',
-                transition: 'width 280ms ease, background 280ms ease',
-              }}
-            />
-          ))}
-        </div>
-      )}
+      {/* Pagination dots — only when multiple photos */}
+      <div style={{ height: DOTS_H, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6 }}>
+        {multi && items.map((_, i) => (
+          <div
+            key={i}
+            style={{
+              width:        i === active ? 18 : 6,
+              height:       6,
+              borderRadius: 3,
+              background:   i === active ? accent : 'rgba(255,255,255,0.22)',
+              transition:   'width 280ms ease, background 280ms ease',
+            }}
+          />
+        ))}
+      </div>
     </div>
   )
 }
