@@ -319,6 +319,9 @@ export function WaveformLive({
     []
   )
   const barRefs = useRef<(HTMLDivElement | null)[]>([])
+  // Keep a stable ref so the rAF loop never needs to restart when the prop changes.
+  const getAmpRef = useRef(getAmplitude)
+  getAmpRef.current = getAmplitude
 
   useEffect(() => {
     let raf: number
@@ -326,9 +329,7 @@ export function WaveformLive({
     const loop = (ts: number) => {
       if (!start) start = ts
       const t = (ts - start) / 1000
-      // Use real amplitude when the analyser is running; fall back to a gentle
-      // simulated pulse so the waveform always looks alive.
-      const real = getAmplitude ? getAmplitude() : 0
+      const real = getAmpRef.current ? getAmpRef.current() : 0
       const level = real > 0.01 ? real : 0.25 + Math.sin(t * 1.1) * 0.12
       phases.forEach((p, i) => {
         const bar = barRefs.current[i]
@@ -343,7 +344,7 @@ export function WaveformLive({
     }
     raf = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(raf)
-  }, [phases, getAmplitude])
+  }, [phases])
 
   return (
     <div
@@ -419,6 +420,8 @@ export function WaveformInline({
     []
   )
   const barRefs = useRef<(HTMLDivElement | null)[]>([])
+  const getAmpRef = useRef(getAmplitude)
+  getAmpRef.current = getAmplitude
 
   useEffect(() => {
     let raf: number
@@ -426,7 +429,7 @@ export function WaveformInline({
     const loop = (ts: number) => {
       if (!start) start = ts
       const t = (ts - start) / 1000
-      const real = getAmplitude ? getAmplitude() : 0
+      const real = getAmpRef.current ? getAmpRef.current() : 0
       const level = real > 0.01 ? real : 0.3 + Math.sin(t * 1.2) * 0.15
       phases.forEach((p, i) => {
         const bar = barRefs.current[i]
@@ -439,7 +442,7 @@ export function WaveformInline({
     }
     raf = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(raf)
-  }, [phases, getAmplitude])
+  }, [phases])
 
   return (
     <div aria-hidden style={{ display: 'flex', alignItems: 'center', gap: 2 }}>

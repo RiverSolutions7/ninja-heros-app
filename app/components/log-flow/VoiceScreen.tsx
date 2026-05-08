@@ -196,7 +196,7 @@ const CHIPS = [
 function ContextChips({ opacity, onAdjust }: { opacity: number; onAdjust: () => void }) {
   return (
     <div style={{ opacity, transition: 'opacity 320ms ease', padding: '0 16px 14px' }}>
-      {/* Adjust button — sits above the list */}
+      {/* Adjust button — sits above the list, plain orange */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
         <div
           role="button"
@@ -208,21 +208,18 @@ function ContextChips({ opacity, onAdjust }: { opacity: number; onAdjust: () => 
             display: 'flex',
             alignItems: 'center',
             gap: 5,
-            height: 28,
-            borderRadius: 999,
-            padding: '0 10px',
-            background: 'rgba(255,255,255,0.08)',
-            border: '1px solid rgba(255,255,255,0.10)',
+            minHeight: 44,
+            padding: '0 4px',
             cursor: 'pointer',
           }}
         >
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="2" strokeLinecap="round">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={ACCENT} strokeWidth="2" strokeLinecap="round">
             <line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" />
             <line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" />
             <line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" />
             <line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" />
           </svg>
-          <span style={{ fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,0.55)', fontFamily: LF.body }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: ACCENT, fontFamily: LF.body }}>
             Adjust
           </span>
         </div>
