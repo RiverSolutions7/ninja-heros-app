@@ -189,70 +189,143 @@ function CoachNotesFocusCard({
       style={{
         opacity,
         transition: 'opacity 320ms ease',
-        margin: '0 16px',
-        borderRadius: 18,
-        background: 'rgba(255,255,255,0.05)',
-        border: '1px solid rgba(255,255,255,0.10)',
+        margin: '20px 16px 0',
+        borderRadius: 20,
         overflow: 'hidden',
+        background: 'linear-gradient(180deg, rgba(255,255,255,0.038) 0%, rgba(255,255,255,0.018) 100%)',
+        border: '1px solid rgba(255,255,255,0.03)',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.22), 0 10px 24px rgba(0,0,0,0.28), 0 0 0 0.5px rgba(255,255,255,0.02)',
         cursor: 'pointer',
       }}
     >
-      {/* Image zone — phone frame with mic icon */}
-      <div style={{ background: LF.bgDeep, padding: '16px 0 12px', display: 'flex', justifyContent: 'center' }}>
-        <div
-          style={{
-            width: 160,
-            height: 80,
-            borderRadius: 16,
-            background: '#0a0e1e',
-            border: '1px solid rgba(255,255,255,0.14)',
-            position: 'relative',
-            overflow: 'hidden',
-          }}
+      {/* Phone bezel image zone */}
+      <div style={{
+        height: 148,
+        display: 'flex',
+        alignItems: 'flex-end',
+        justifyContent: 'center',
+        overflow: 'hidden',
+        background: 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+        position: 'relative',
+      }}>
+        {/* Subtle orange glow behind phone */}
+        <div style={{
+          position: 'absolute',
+          bottom: -20,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: 160,
+          height: 160,
+          borderRadius: '50%',
+          background: 'radial-gradient(ellipse, rgba(255,92,0,0.08) 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }} />
+        {/* Phone SVG — cropped at bottom, showing top portion only */}
+        <svg
+          width="128" height="208" viewBox="0 0 128 208" fill="none"
+          style={{ marginBottom: -72, position: 'relative', zIndex: 1, filter: 'drop-shadow(0 18px 28px rgba(0,0,0,0.55)) drop-shadow(0 4px 8px rgba(0,0,0,0.4))' }}
         >
-          {/* Dynamic island */}
-          <div style={{ position: 'absolute', top: 6, left: '50%', transform: 'translateX(-50%)', width: 36, height: 9, borderRadius: 999, background: '#000' }} />
+          <defs>
+            <linearGradient id="cnf-phoneFrame" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor="#3a4258"/>
+              <stop offset="22%" stopColor="#1d2333"/>
+              <stop offset="50%" stopColor="#10131e"/>
+              <stop offset="78%" stopColor="#1d2333"/>
+              <stop offset="100%" stopColor="#3a4258"/>
+            </linearGradient>
+            <linearGradient id="cnf-phoneInner" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#0a0e1a"/>
+              <stop offset="100%" stopColor="#050810"/>
+            </linearGradient>
+            <linearGradient id="cnf-phoneScreen" x1="0" y1="0" x2="0.6" y2="1">
+              <stop offset="0%" stopColor="#10162a"/>
+              <stop offset="55%" stopColor="#0b1020"/>
+              <stop offset="100%" stopColor="#080c18"/>
+            </linearGradient>
+            <linearGradient id="cnf-screenGloss" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor="rgba(255,255,255,0.10)"/>
+              <stop offset="35%" stopColor="rgba(255,255,255,0.00)"/>
+              <stop offset="100%" stopColor="rgba(255,255,255,0.00)"/>
+            </linearGradient>
+          </defs>
+          {/* Outer metal frame */}
+          <rect x="0" y="0" width="128" height="208" rx="22" fill="url(#cnf-phoneFrame)"/>
+          {/* Inner bezel */}
+          <rect x="3" y="3" width="122" height="202" rx="20" fill="url(#cnf-phoneInner)"/>
+          {/* Screen */}
+          <rect x="6" y="6" width="116" height="196" rx="17" fill="url(#cnf-phoneScreen)"/>
+          {/* Screen gloss */}
+          <rect x="6" y="6" width="116" height="196" rx="17" fill="url(#cnf-screenGloss)"/>
+          {/* Side buttons */}
+          <rect x="-0.5" y="36" width="2" height="14" rx="1" fill="#0a0d16"/>
+          <rect x="-0.5" y="58" width="2" height="22" rx="1" fill="#0a0d16"/>
+          <rect x="-0.5" y="86" width="2" height="22" rx="1" fill="#0a0d16"/>
+          <rect x="126.5" y="50" width="2" height="34" rx="1" fill="#0a0d16"/>
+          {/* Dynamic Island */}
+          <rect x="44" y="13" width="40" height="13" rx="6.5" fill="#000"/>
+          <circle cx="76" cy="19.5" r="1.6" fill="#0a1626"/>
+          <circle cx="76" cy="19.5" r="0.7" fill="#1a2940"/>
           {/* Status bar */}
-          <div style={{ position: 'absolute', top: 6, left: 10, right: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', pointerEvents: 'none' }}>
-            <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.7)', fontFamily: LF.body, fontWeight: 600 }}>9:41</span>
-            <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
-              <svg width="12" height="8" viewBox="0 0 12 8" fill="rgba(255,255,255,0.7)">
-                <rect x="0" y="5" width="2" height="3" rx="0.5" />
-                <rect x="3" y="3" width="2" height="5" rx="0.5" />
-                <rect x="6" y="1" width="2" height="7" rx="0.5" />
-                <rect x="9" y="0" width="2" height="8" rx="0.5" opacity="0.35" />
-              </svg>
-              <svg width="13" height="7" viewBox="0 0 13 7" fill="none">
-                <rect x="0.5" y="0.5" width="10" height="6" rx="1.5" stroke="rgba(255,255,255,0.7)" strokeWidth="1" />
-                <rect x="1.5" y="1.5" width="7" height="4" rx="0.5" fill="rgba(255,255,255,0.7)" />
-                <path d="M11.5 2.5v2" stroke="rgba(255,255,255,0.7)" strokeWidth="1" strokeLinecap="round" />
-              </svg>
-            </div>
-          </div>
+          <text x="16" y="22" fontFamily="-apple-system, system-ui" fontSize="6.5" fontWeight="600" fill="rgba(255,255,255,0.85)">9:41</text>
+          <g transform="translate(98 16.5)">
+            <rect x="0" y="3" width="1.5" height="3" rx="0.4" fill="rgba(255,255,255,0.85)"/>
+            <rect x="2.2" y="2" width="1.5" height="4" rx="0.4" fill="rgba(255,255,255,0.85)"/>
+            <rect x="4.4" y="1" width="1.5" height="5" rx="0.4" fill="rgba(255,255,255,0.85)"/>
+            <rect x="6.6" y="0" width="1.5" height="6" rx="0.4" fill="rgba(255,255,255,0.85)"/>
+            <rect x="10" y="0" width="9" height="6" rx="1.4" stroke="rgba(255,255,255,0.55)" strokeWidth="0.5" fill="none"/>
+            <rect x="11" y="1" width="6.5" height="4" rx="0.7" fill="rgba(255,255,255,0.85)"/>
+          </g>
           {/* Mic icon */}
-          <div style={{ position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', color: ACCENT }}>
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
-              <rect x="9" y="2" width="6" height="12" rx="3" />
-              <path d="M5 11a7 7 0 0 0 14 0" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" />
-              <line x1="12" y1="18" x2="12" y2="22" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-              <line x1="8" y1="22" x2="16" y2="22" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-          </div>
-        </div>
+          <g transform="translate(64 82)">
+            <rect x="-12" y="-22" width="24" height="38" rx="12" fill="#FF5C00"/>
+            <rect x="-12" y="-22" width="24" height="19" rx="12" fill="rgba(255,255,255,0.12)"/>
+            <path d="M-20 6 a20 20 0 0 0 40 0" stroke="#FF5C00" strokeWidth="3" strokeLinecap="round" fill="none"/>
+            <line x1="0" y1="26" x2="0" y2="36" stroke="#FF5C00" strokeWidth="3" strokeLinecap="round"/>
+            <line x1="-10" y1="36" x2="10" y2="36" stroke="#FF5C00" strokeWidth="3" strokeLinecap="round"/>
+          </g>
+          {/* Home indicator */}
+          <rect x="46" y="194" width="36" height="3" rx="1.5" fill="rgba(255,255,255,0.32)"/>
+          {/* Frame highlight */}
+          <rect x="0.5" y="0.5" width="127" height="207" rx="21.5" stroke="rgba(255,255,255,0.06)" strokeWidth="0.6" fill="none"/>
+        </svg>
       </div>
 
-      {/* Text zone */}
-      <div style={{ padding: '14px 16px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+      {/* Title + subtitle */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '14px 16px 16px',
+        borderTop: '1px solid rgba(255,255,255,0.06)',
+      }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ margin: '0 0 3px', fontSize: 17, fontWeight: 700, color: '#fff', fontFamily: LF.body }}>
+          <div style={{
+            color: 'rgba(255,255,255,0.94)',
+            fontSize: 15,
+            fontWeight: 600,
+            letterSpacing: '-0.015em',
+            fontFamily: '-apple-system, "SF Pro Display", system-ui',
+            lineHeight: 1.2,
+          }}>
             Coach Notes Focus
-          </p>
-          <p style={{ margin: 0, fontSize: 13, color: LF.muted, fontFamily: LF.body, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          </div>
+          <div style={{
+            marginTop: 4,
+            color: 'rgba(255,255,255,0.38)',
+            fontSize: 12,
+            fontWeight: 400,
+            letterSpacing: '-0.004em',
+            fontFamily: '-apple-system, "SF Pro Text", system-ui',
+            lineHeight: 1.45,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}>
             {subtitle}
-          </p>
+          </div>
         </div>
-        <svg width="8" height="14" viewBox="0 0 8 14" fill="none" stroke={LF.muted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M1 1l6 6-6 6" />
+        <svg width="7" height="12" viewBox="0 0 7 12" fill="none">
+          <path d="M1 1l5 5-5 5" stroke="rgba(255,255,255,0.24)" strokeWidth="1.6" strokeLinecap="round"/>
         </svg>
       </div>
     </div>
