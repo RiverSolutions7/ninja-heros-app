@@ -2,6 +2,7 @@
 
 import { CSSProperties, Fragment, ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import BottomSheet from '@/app/components/ui/BottomSheet'
+import Spinner from '@/app/components/ui/Spinner'
 
 export const LF = {
   bg: '#080c1a',
@@ -488,6 +489,7 @@ export function AdjustSheet({ visible, onClose }: { visible: boolean; onClose: (
           </div>
           <div
             role="switch"
+            aria-label={row.label}
             aria-checked={settings[row.key]}
             tabIndex={0}
             onClick={() => setSettings((s) => ({ ...s, [row.key]: !s[row.key] }))}
@@ -901,17 +903,7 @@ export function VoiceControlBar({
           <div style={{ padding: '14px 14px 12px' }}>
             {/* Row 1: spinner + text */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-              <div
-                style={{
-                  width: 15,
-                  height: 15,
-                  borderRadius: '50%',
-                  border: '1.5px solid rgba(255,255,255,0.22)',
-                  borderTopColor: 'rgba(255,255,255,0.55)',
-                  animation: 'lf-spin 0.9s linear infinite',
-                  flexShrink: 0,
-                }}
-              />
+              <Spinner size="xs" tone="muted" ariaLabel="Processing" />
               <span style={{ fontSize: 15, color: 'rgba(255,255,255,0.55)', fontFamily: LF.body }}>
                 Processing…
               </span>
