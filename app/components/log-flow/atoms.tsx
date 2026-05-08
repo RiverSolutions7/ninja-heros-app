@@ -654,6 +654,7 @@ export function VoiceControlBar({
                 cursor: 'text',
                 userSelect: 'none',
                 fontFamily: LF.body,
+                textAlign: 'center',
               }}
             >
               Tap to describe

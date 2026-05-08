@@ -343,7 +343,6 @@ export default function LogComponentPage() {
           state={micState}
           type={draft.type}
           photoPreviewUrls={draft.photoPreviewUrls}
-          transcript={voice.transcript}
           getAmplitude={voice.getAmplitude}
           onStart={handleVoiceStart}
           onTypingStart={handleTypingStart}
