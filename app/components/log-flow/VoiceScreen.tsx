@@ -152,13 +152,13 @@ function PhotoCarousel({ urls, accent }: { urls: string[]; accent: string }) {
   )
 }
 
-// ─── Context chips — 2×2 grid with square icon badges ────────────────────────
+// ─── Context chips — vertical list with Adjust header ────────────────────────
 const CHIPS = [
   {
     key: 'cues',
     label: 'Coaching Cues',
     icon: (
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
         <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
         <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
       </svg>
@@ -168,7 +168,7 @@ const CHIPS = [
     key: 'skills',
     label: 'Skills',
     icon: (
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
         <path d="M12 4v16m8-8H4" />
       </svg>
     ),
@@ -177,7 +177,7 @@ const CHIPS = [
     key: 'equipment',
     label: 'Equipment',
     icon: (
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
         <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
       </svg>
     ),
@@ -186,7 +186,7 @@ const CHIPS = [
     key: 'duration',
     label: 'Duration',
     icon: (
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
         <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
       </svg>
     ),
@@ -195,17 +195,9 @@ const CHIPS = [
 
 function ContextChips({ opacity, onAdjust }: { opacity: number; onAdjust: () => void }) {
   return (
-    <div style={{ opacity, transition: 'opacity 320ms ease' }}>
-      {/* Header row: empty left, Adjust button right */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'flex-end',
-          alignItems: 'center',
-          padding: '0 16px',
-          marginBottom: 10,
-        }}
-      >
+    <div style={{ opacity, transition: 'opacity 320ms ease', padding: '0 16px 14px' }}>
+      {/* Adjust button — sits above the list */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
         <div
           role="button"
           tabIndex={0}
@@ -236,23 +228,24 @@ function ContextChips({ opacity, onAdjust }: { opacity: number; onAdjust: () => 
         </div>
       </div>
 
-      {/* 2×2 chip grid */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          rowGap: 10,
-          columnGap: 14,
-          padding: '0 16px 18px',
-        }}
-      >
-        {CHIPS.map((chip) => (
-          <div key={chip.key} style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+      {/* Vertical chip list */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+        {CHIPS.map((chip, i) => (
+          <div
+            key={chip.key}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              height: 36,
+              borderTop: i > 0 ? '1px solid rgba(255,255,255,0.05)' : undefined,
+            }}
+          >
             <span
               style={{
-                width: 22,
-                height: 22,
-                borderRadius: 6,
+                width: 20,
+                height: 20,
+                borderRadius: 5,
                 background: 'rgba(255,92,0,0.12)',
                 border: '1px solid rgba(255,92,0,0.18)',
                 display: 'flex',
@@ -266,13 +259,10 @@ function ContextChips({ opacity, onAdjust }: { opacity: number; onAdjust: () => 
             </span>
             <span
               style={{
-                fontSize: 12.5,
+                fontSize: 13,
                 fontWeight: 500,
-                color: 'rgba(255,255,255,0.82)',
+                color: 'rgba(255,255,255,0.72)',
                 fontFamily: LF.body,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
               }}
             >
               {chip.label}

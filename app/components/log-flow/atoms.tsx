@@ -636,10 +636,12 @@ export function VoiceControlBar({
               height: 64,
               display: 'flex',
               alignItems: 'center',
-              padding: '0 9px 0 22px',
+              padding: '0 9px',
               gap: 10,
             }}
           >
+            {/* Left spacer — mirrors mic button width so text is optically centered */}
+            <div style={{ width: 46, height: 46, flexShrink: 0 }} />
             {/* Placeholder — tap → typing */}
             <div
               role="button"
