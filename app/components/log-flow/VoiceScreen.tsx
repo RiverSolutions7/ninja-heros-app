@@ -226,42 +226,16 @@ function ContextChips({ opacity, onAdjust }: { opacity: number; onAdjust: () => 
       </div>
 
       {/* Vertical chip list */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-        {CHIPS.map((chip, i) => (
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        {CHIPS.map((chip) => (
           <div
             key={chip.key}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              height: 36,
-              borderTop: i > 0 ? '1px solid rgba(255,255,255,0.05)' : undefined,
-            }}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, height: 36 }}
           >
-            <span
-              style={{
-                width: 20,
-                height: 20,
-                borderRadius: 5,
-                background: 'rgba(255,92,0,0.12)',
-                border: '1px solid rgba(255,92,0,0.18)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-                color: ACCENT,
-              }}
-            >
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: ACCENT }}>
               {chip.icon}
             </span>
-            <span
-              style={{
-                fontSize: 13,
-                fontWeight: 500,
-                color: 'rgba(255,255,255,0.72)',
-                fontFamily: LF.body,
-              }}
-            >
+            <span style={{ fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.72)', fontFamily: LF.body }}>
               {chip.label}
             </span>
           </div>

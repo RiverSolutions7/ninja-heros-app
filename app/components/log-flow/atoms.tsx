@@ -637,15 +637,13 @@ export function VoiceControlBar({
           <div
             style={{
               height: 64,
+              position: 'relative',
               display: 'flex',
               alignItems: 'center',
               padding: '0 9px',
-              gap: 10,
             }}
           >
-            {/* Left spacer — mirrors mic button width so text is optically centered */}
-            <div style={{ width: 46, height: 46, flexShrink: 0 }} />
-            {/* Placeholder — tap → typing */}
+            {/* Placeholder — absolutely centered in the pill so it never shifts */}
             <div
               role="button"
               tabIndex={0}
@@ -653,23 +651,29 @@ export function VoiceControlBar({
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onTypingStart() }}
               aria-label="Type to describe"
               style={{
-                flex: 1,
+                position: 'absolute',
+                inset: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
                 fontSize: 16,
                 color: 'rgba(255,255,255,0.38)',
                 cursor: 'text',
                 userSelect: 'none',
                 fontFamily: LF.body,
-                textAlign: 'center',
               }}
             >
               Tap to describe
             </div>
-            {/* Mic button — 46×46px rounded square */}
+            {/* Mic button — right side, above the centered text layer */}
             <Press
               onClick={onStart}
               ariaLabel="Start recording"
               rippleColor="rgba(0,0,0,0.25)"
               style={{
+                marginLeft: 'auto',
+                position: 'relative',
+                zIndex: 1,
                 width: 46,
                 height: 46,
                 borderRadius: 13,
