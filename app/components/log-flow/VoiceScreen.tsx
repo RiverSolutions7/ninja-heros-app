@@ -4,7 +4,9 @@ import { useRef, useState } from 'react'
 import type { ComponentType } from '@/app/lib/database.types'
 import {
   ACCENT,
+  AdjustSettings,
   AdjustSheet,
+  DEFAULT_ADJUST_SETTINGS,
   LF,
   MicState,
   VoiceControlBar,
@@ -152,94 +154,106 @@ function PhotoCarousel({ urls, accent }: { urls: string[]; accent: string }) {
   )
 }
 
-// ─── Context chips — vertical list with Adjust header ────────────────────────
-const CHIPS = [
-  {
-    key: 'cues',
-    label: 'Coaching Cues',
-    icon: (
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-        <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
-        <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
-      </svg>
-    ),
-  },
-  {
-    key: 'skills',
-    label: 'Skills',
-    icon: (
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-        <path d="M12 4v16m8-8H4" />
-      </svg>
-    ),
-  },
-  {
-    key: 'equipment',
-    label: 'Equipment',
-    icon: (
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-      </svg>
-    ),
-  },
-  {
-    key: 'duration',
-    label: 'Duration',
-    icon: (
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-        <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-      </svg>
-    ),
-  },
-]
+// ─── CoachNotesFocusCard — tappable card replacing the chip list ──────────────
+const SETTING_LABELS: Record<keyof AdjustSettings, string> = {
+  coachingCues: 'Coaching Cues',
+  skills: 'Skills',
+  equipment: 'Equipment',
+  duration: 'Duration',
+}
 
-function ContextChips({ opacity, onAdjust }: { opacity: number; onAdjust: () => void }) {
+function CoachNotesFocusCard({
+  opacity,
+  settings,
+  onTap,
+}: {
+  opacity: number
+  settings: AdjustSettings
+  onTap: () => void
+}) {
+  const activeLabels = (Object.keys(settings) as (keyof AdjustSettings)[])
+    .filter((k) => settings[k])
+    .map((k) => SETTING_LABELS[k])
+  const subtitle =
+    activeLabels.length === 0
+      ? 'Nothing active — tap to configure'
+      : activeLabels.join(' · ')
+
   return (
-    <div style={{ opacity, transition: 'opacity 320ms ease', padding: '0 16px 14px' }}>
-      {/* Adjust button — sits above the list, plain orange */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onTap}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onTap() }}
+      aria-label="Coach Notes Focus — tap to adjust"
+      style={{
+        opacity,
+        transition: 'opacity 320ms ease',
+        margin: '0 16px',
+        borderRadius: 18,
+        background: 'rgba(255,255,255,0.05)',
+        border: '1px solid rgba(255,255,255,0.10)',
+        overflow: 'hidden',
+        cursor: 'pointer',
+      }}
+    >
+      {/* Image zone — phone frame with mic icon */}
+      <div style={{ background: LF.bgDeep, padding: '16px 0 12px', display: 'flex', justifyContent: 'center' }}>
         <div
-          role="button"
-          tabIndex={0}
-          onClick={onAdjust}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onAdjust() }}
-          aria-label="Adjust context settings"
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 5,
-            minHeight: 44,
-            padding: '0 4px',
-            cursor: 'pointer',
+            width: 160,
+            height: 80,
+            borderRadius: 16,
+            background: '#0a0e1e',
+            border: '1px solid rgba(255,255,255,0.14)',
+            position: 'relative',
+            overflow: 'hidden',
           }}
         >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={ACCENT} strokeWidth="2" strokeLinecap="round">
-            <line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" />
-            <line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" />
-            <line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" />
-            <line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" />
-          </svg>
-          <span style={{ fontSize: 13, fontWeight: 600, color: ACCENT, fontFamily: LF.body }}>
-            Adjust
-          </span>
+          {/* Dynamic island */}
+          <div style={{ position: 'absolute', top: 6, left: '50%', transform: 'translateX(-50%)', width: 36, height: 9, borderRadius: 999, background: '#000' }} />
+          {/* Status bar */}
+          <div style={{ position: 'absolute', top: 6, left: 10, right: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', pointerEvents: 'none' }}>
+            <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.7)', fontFamily: LF.body, fontWeight: 600 }}>9:41</span>
+            <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+              <svg width="12" height="8" viewBox="0 0 12 8" fill="rgba(255,255,255,0.7)">
+                <rect x="0" y="5" width="2" height="3" rx="0.5" />
+                <rect x="3" y="3" width="2" height="5" rx="0.5" />
+                <rect x="6" y="1" width="2" height="7" rx="0.5" />
+                <rect x="9" y="0" width="2" height="8" rx="0.5" opacity="0.35" />
+              </svg>
+              <svg width="13" height="7" viewBox="0 0 13 7" fill="none">
+                <rect x="0.5" y="0.5" width="10" height="6" rx="1.5" stroke="rgba(255,255,255,0.7)" strokeWidth="1" />
+                <rect x="1.5" y="1.5" width="7" height="4" rx="0.5" fill="rgba(255,255,255,0.7)" />
+                <path d="M11.5 2.5v2" stroke="rgba(255,255,255,0.7)" strokeWidth="1" strokeLinecap="round" />
+              </svg>
+            </div>
+          </div>
+          {/* Mic icon */}
+          <div style={{ position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)', color: ACCENT }}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="9" y="2" width="6" height="12" rx="3" />
+              <path d="M5 11a7 7 0 0 0 14 0" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+              <line x1="12" y1="18" x2="12" y2="22" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              <line x1="8" y1="22" x2="16" y2="22" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          </div>
         </div>
       </div>
 
-      {/* Vertical chip list */}
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
-        {CHIPS.map((chip) => (
-          <div
-            key={chip.key}
-            style={{ display: 'flex', alignItems: 'center', gap: 10, height: 36 }}
-          >
-            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: ACCENT }}>
-              {chip.icon}
-            </span>
-            <span style={{ fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.72)', fontFamily: LF.body }}>
-              {chip.label}
-            </span>
-          </div>
-        ))}
+      {/* Text zone */}
+      <div style={{ padding: '14px 16px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ margin: '0 0 3px', fontSize: 17, fontWeight: 700, color: '#fff', fontFamily: LF.body }}>
+            Coach Notes Focus
+          </p>
+          <p style={{ margin: 0, fontSize: 13, color: LF.muted, fontFamily: LF.body, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {subtitle}
+          </p>
+        </div>
+        <svg width="8" height="14" viewBox="0 0 8 14" fill="none" stroke={LF.muted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M1 1l6 6-6 6" />
+        </svg>
       </div>
     </div>
   )
@@ -276,6 +290,7 @@ export default function VoiceScreen({
   accent?: string
 }) {
   const [adjustOpen, setAdjustOpen] = useState(false)
+  const [adjustSettings, setAdjustSettings] = useState<AdjustSettings>(DEFAULT_ADJUST_SETTINGS)
 
   const isRecording = state === 'recording'
 
@@ -388,11 +403,15 @@ export default function VoiceScreen({
         <div style={{ flex: 1, minHeight: 0 }} />
       </div>
 
-      {/* Bottom zone: context chips + pill */}
+      {/* Bottom zone: focus card + pill */}
       <div style={{ position: 'relative', zIndex: 1, flexShrink: 0 }}>
-        {/* Context chips */}
+        {/* Coach Notes Focus card */}
         <div style={{ paddingBottom: 10 }}>
-          <ContextChips opacity={chipsOpacity} onAdjust={() => setAdjustOpen(true)} />
+          <CoachNotesFocusCard
+            opacity={chipsOpacity}
+            settings={adjustSettings}
+            onTap={() => setAdjustOpen(true)}
+          />
         </div>
 
         {/* Pill */}
@@ -410,7 +429,12 @@ export default function VoiceScreen({
       </div>
 
       {/* Adjust sheet */}
-      <AdjustSheet visible={adjustOpen} onClose={() => setAdjustOpen(false)} />
+      <AdjustSheet
+        visible={adjustOpen}
+        onClose={() => setAdjustOpen(false)}
+        settings={adjustSettings}
+        onToggle={(key) => setAdjustSettings((s) => ({ ...s, [key]: !s[key] }))}
+      />
     </div>
   )
 }

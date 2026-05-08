@@ -457,16 +457,33 @@ export function WaveformInline({
   )
 }
 
-// ─── AdjustSheet — bottom sheet with context-extraction toggles ───────────────
-export function AdjustSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const [settings, setSettings] = useState({
-    coachingCues: true,
-    skills: true,
-    equipment: false,
-    duration: false,
-  })
+// ─── AdjustSettings — shared type so the card subtitle can read toggle state ──
+export type AdjustSettings = {
+  coachingCues: boolean
+  skills: boolean
+  equipment: boolean
+  duration: boolean
+}
+export const DEFAULT_ADJUST_SETTINGS: AdjustSettings = {
+  coachingCues: true,
+  skills: true,
+  equipment: false,
+  duration: false,
+}
 
-  const rows: { key: keyof typeof settings; label: string; sub: string }[] = [
+// ─── AdjustSheet — bottom sheet with context-extraction toggles ───────────────
+export function AdjustSheet({
+  visible,
+  onClose,
+  settings,
+  onToggle,
+}: {
+  visible: boolean
+  onClose: () => void
+  settings: AdjustSettings
+  onToggle: (key: keyof AdjustSettings) => void
+}) {
+  const rows: { key: keyof AdjustSettings; label: string; sub: string }[] = [
     { key: 'coachingCues', label: 'Coaching Cues', sub: 'Technique tips and progressions' },
     { key: 'skills',       label: 'Skills',         sub: 'Tag skill progressions' },
     { key: 'equipment',    label: 'Equipment',       sub: 'List gear needed' },
@@ -495,10 +512,8 @@ export function AdjustSheet({ visible, onClose }: { visible: boolean; onClose: (
             aria-label={row.label}
             aria-checked={settings[row.key]}
             tabIndex={0}
-            onClick={() => setSettings((s) => ({ ...s, [row.key]: !s[row.key] }))}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') setSettings((s) => ({ ...s, [row.key]: !s[row.key] }))
-            }}
+            onClick={() => onToggle(row.key)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onToggle(row.key) }}
             style={{
               width: 44,
               height: 26,
