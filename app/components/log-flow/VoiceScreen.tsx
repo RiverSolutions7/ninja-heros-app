@@ -39,7 +39,7 @@ function PhotoCarousel({ urls, accent }: { urls: string[]; accent: string }) {
   function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
     if (dragStart.current === null) return
     const d = e.clientX - dragStart.current
-    if (Math.abs(d) > 5) didDrag.current = true
+    if (Math.abs(d) > 18) didDrag.current = true
     setDrag(d)
   }
   function onPointerUp() {
@@ -368,8 +368,8 @@ export default function VoiceScreen({
           onClick={onBack}
           aria-label="Back"
           style={{
-            width: 36,
-            height: 36,
+            width: 44,
+            height: 44,
             borderRadius: '50%',
             background: 'rgba(0,0,0,0.35)',
             backdropFilter: 'blur(10px)',
