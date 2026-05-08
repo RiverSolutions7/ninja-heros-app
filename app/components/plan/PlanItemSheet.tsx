@@ -5,6 +5,7 @@ import type { PlanItem, ComponentType } from '@/app/lib/database.types'
 import { PhotoLightbox } from '@/app/components/ui/PhotoLightbox'
 import BottomSheet from '@/app/components/ui/BottomSheet'
 import { useVoiceNote } from '@/app/hooks/useVoiceNote'
+import { WaveformInline } from '@/app/components/log-flow/atoms'
 
 const TYPE_META: Record<ComponentType, { label: string; accent: string; placeholderBg: string }> = {
   station: { label: 'Station', accent: 'text-accent-blue', placeholderBg: 'bg-accent-blue/20' },
@@ -51,6 +52,7 @@ export function PlanItemSheet({ item, onSaveNote, onDurationChange, onClose }: P
     stopRecording,
     parseNote,
     reset,
+    getAmplitude,
   } = useVoiceNote()
 
   const meta = TYPE_META[item.component.type]
@@ -162,13 +164,10 @@ export function PlanItemSheet({ item, onSaveNote, onDurationChange, onClose }: P
     }
   }, [])
 
-  const micIcon = () => {
+  // Mic button content — recording shows inline waveform, others show icons
+  const micContent = () => {
     if (voiceState === 'recording') {
-      return (
-        <svg className="w-5 h-5 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zM8 11a4 4 0 008 0h2a6 6 0 01-5 5.91V19h3v2H8v-2h3v-2.09A6 6 0 016 11h2z"/>
-        </svg>
-      )
+      return <WaveformInline accent="#fff" getAmplitude={getAmplitude} />
     }
     if (voiceState === 'processing') {
       return <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -189,17 +188,27 @@ export function PlanItemSheet({ item, onSaveNote, onDurationChange, onClose }: P
     }
     return (
       <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-        <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zM8 11a4 4 0 008 0h2a6 6 0 01-5 5.91V19h3v2H8v-2h3v-2.09A6 6 0 016 11h2z"/>
+        <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zM8 11a4 4 0 008 0h2a6 6 0 01-5 5.91V19h3v2H8v-2h3v-2.09A6 6 0 016 11h2z" />
       </svg>
     )
   }
 
-  const micColors: Record<string, string> = {
-    idle: 'bg-bg-input border border-bg-border text-text-muted hover:bg-white/5',
-    recording: 'bg-accent-fire text-white shadow-glow-fire',
-    processing: 'bg-bg-input border border-bg-border text-text-dim',
-    done: 'bg-accent-green/20 border border-accent-green/40 text-accent-green',
-    error: 'bg-red-900/30 border border-red-500/40 text-red-400',
+  // Button style per state — recording uses fire-red rounded-square, others are circles
+  const micStyle = (): string => {
+    const base = 'w-11 h-11 flex items-center justify-center transition-all flex-shrink-0'
+    if (voiceState === 'recording') {
+      return `${base} rounded-[13px] bg-accent-fire text-white`
+    }
+    if (voiceState === 'processing') {
+      return `${base} rounded-full bg-bg-input border border-bg-border text-text-dim`
+    }
+    if (voiceState === 'done') {
+      return `${base} rounded-full bg-accent-green/20 border border-accent-green/40 text-accent-green`
+    }
+    if (voiceState === 'error') {
+      return `${base} rounded-full bg-red-900/30 border border-red-500/40 text-red-400`
+    }
+    return `${base} rounded-[13px] bg-accent-fire/10 border border-accent-fire/30 text-accent-fire hover:bg-accent-fire/20`
   }
 
   return (
@@ -312,13 +321,12 @@ export function PlanItemSheet({ item, onSaveNote, onDurationChange, onClose }: P
                   onClick={handleMicToggle}
                   disabled={voiceState === 'processing'}
                   className={[
-                    'w-11 h-11 flex items-center justify-center rounded-full transition-all flex-shrink-0',
-                    micColors[voiceState],
-                    voiceState === 'processing' ? 'cursor-not-allowed' : '',
+                    micStyle(),
+                    voiceState === 'processing' ? 'cursor-not-allowed opacity-50' : '',
                   ].join(' ')}
                   aria-label={voiceState === 'recording' ? 'Stop recording' : 'Start recording'}
                 >
-                  {micIcon()}
+                  {micContent()}
                 </button>
                 <div className="flex-1 min-w-0">
                   {voiceState === 'recording' && (

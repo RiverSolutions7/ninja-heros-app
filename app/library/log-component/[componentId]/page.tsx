@@ -14,6 +14,7 @@ import MediaAddSheet from '@/app/components/ui/MediaAddSheet'
 import Button from '@/app/components/ui/Button'
 import ConfirmSheet from '@/app/components/ui/ConfirmSheet'
 import { useVoiceNote } from '@/app/hooks/useVoiceNote'
+import { WaveformInline } from '@/app/components/log-flow/atoms'
 import { useUnsavedGuard } from '@/app/hooks/useUnsavedGuard'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -117,6 +118,7 @@ export default function EditComponentPage() {
     stopRecording,
     parseComponent,
     reset: resetVoice,
+    getAmplitude,
   } = useVoiceNote()
 
   // Derived media flags
@@ -394,6 +396,7 @@ export default function EditComponentPage() {
         transcript={transcript}
         errorMessage={voiceError}
         editing
+        getAmplitude={getAmplitude}
         onToggle={handleMicToggle}
       />
       {voiceState === 'done' && (
@@ -576,7 +579,7 @@ export default function EditComponentPage() {
   )
 }
 
-// ── Voice hero — same layout as create page, editing=true swaps copy ──────────
+// ── Voice hero — full-width card with inline waveform during recording ────────
 
 function VoiceHero({
   voiceState,
@@ -584,6 +587,7 @@ function VoiceHero({
   transcript,
   errorMessage,
   editing = false,
+  getAmplitude,
   onToggle,
 }: {
   voiceState: 'idle' | 'recording' | 'processing' | 'done' | 'error'
@@ -591,6 +595,7 @@ function VoiceHero({
   transcript: string
   errorMessage: string | null
   editing?: boolean
+  getAmplitude?: () => number
   onToggle: () => void
 }) {
   const idleTitle = editing ? 'Speak to update the form' : 'Speak to fill the form'
@@ -616,6 +621,22 @@ function VoiceHero({
 
   const disabled = voiceState === 'processing' || !voiceSupported
 
+  // Circle button: idle/done = fire-red rounded-square, others = circle
+  const btnClass = [
+    'w-[72px] h-[72px] flex items-center justify-center flex-shrink-0 transition-all',
+    voiceState === 'recording'
+      ? 'rounded-[20px] bg-accent-fire text-white shadow-glow-fire'
+      : voiceState === 'processing'
+        ? 'rounded-full bg-bg-input text-text-dim'
+        : voiceState === 'done'
+          ? 'rounded-full bg-accent-green/20 text-accent-green'
+          : voiceState === 'error'
+            ? 'rounded-full bg-red-500/20 text-red-400'
+            : !voiceSupported
+              ? 'rounded-full bg-bg-input text-text-dim/60'
+              : 'rounded-[20px] bg-accent-fire text-white shadow-glow-fire',
+  ].join(' ')
+
   return (
     <div>
       <button
@@ -637,21 +658,9 @@ function VoiceHero({
           disabled ? 'cursor-not-allowed' : 'active:scale-[0.99]',
         ].join(' ')}
       >
-        <div
-          className={[
-            'w-[72px] h-[72px] rounded-full flex items-center justify-center flex-shrink-0 transition-all',
-            voiceState === 'recording'  ? 'bg-accent-fire text-white shadow-glow-fire' :
-            voiceState === 'processing' ? 'bg-bg-input text-text-dim' :
-            voiceState === 'done'       ? 'bg-accent-green/20 text-accent-green' :
-            voiceState === 'error'      ? 'bg-red-500/20 text-red-400' :
-            !voiceSupported             ? 'bg-bg-input text-text-dim/60' :
-                                          'bg-accent-fire text-white shadow-glow-fire',
-          ].join(' ')}
-        >
+        <div className={btnClass}>
           {voiceState === 'recording' ? (
-            <svg className="w-8 h-8 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 1a4 4 0 014 4v6a4 4 0 01-8 0V5a4 4 0 014-4zm0 2a2 2 0 00-2 2v6a2 2 0 004 0V5a2 2 0 00-2-2zM8 11a4 4 0 008 0h2a6 6 0 01-5 5.91V19h3v2H8v-2h3v-2.09A6 6 0 016 11h2z" />
-            </svg>
+            <WaveformInline accent="#fff" getAmplitude={getAmplitude} />
           ) : voiceState === 'processing' ? (
             <div className="w-6 h-6 border-2 border-current border-t-transparent rounded-full animate-spin" />
           ) : voiceState === 'done' ? (

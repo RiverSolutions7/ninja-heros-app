@@ -51,7 +51,8 @@ export default function LogComponentPage() {
   const [curriculumRows, setCurriculumRows] = useState<CurriculumRow[]>([])
   const [availableSkills, setAvailableSkills] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
-  const [isPaused, setIsPaused] = useState(false)
+  const [isStopped, setIsStopped] = useState(false)
+  const [isTyping, setIsTyping] = useState(false)
   const [satisfactionCount, setSatisfactionCount] = useState<number>(1)
   const [error, setError] = useState<string | null>(null)
   const [guardDest, setGuardDest] = useState<string | null>(null)
@@ -97,12 +98,11 @@ export default function LogComponentPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Voice-not-supported fallback — skip voice step entirely on unsupported browsers
+  // On unsupported browsers, auto-open the typing state instead of voice
   useEffect(() => {
     if (step !== 'voice') return
     if (voice.isSupported) return
-    setError("Voice isn't supported on this browser. Tap the card to type details.")
-    setStep('reveal')
+    setIsTyping(true)
   }, [step, voice.isSupported])
 
   // Dirty detection — anything captured beyond the empty draft
@@ -127,31 +127,59 @@ export default function LogComponentPage() {
   const handleVoiceStart = () => {
     if (!draft.type) return
     if (!voice.isSupported) {
-      setError("Voice isn't supported on this browser. Tap the card to type details.")
-      setStep('reveal')
+      setError("Voice isn't supported on this browser. Tap to type instead.")
       return
     }
-    setIsPaused(false)
+    setIsStopped(false)
     voice.startRecording()
   }
 
-  const handlePause = () => {
-    voice.stopRecording()   // stops recognition; transcript preserved in transcriptRef
-    setIsPaused(true)       // override micState to 'paused' instead of 'parsing'
+  const handleTypingStart = () => {
+    setIsTyping(true)
   }
 
-  const handleRedo = () => {
-    voice.reset()           // clears transcript + voiceState → idle
-    setIsPaused(false)
-    voice.startRecording()  // immediately start fresh
+  // Called when the coach taps × in any active state → back to idle
+  const handleCancel = () => {
+    voice.reset()
+    setIsStopped(false)
+    setIsTyping(false)
   }
 
+  // ■ stop button in recording → stopped (review before submit)
+  const handleStop = () => {
+    voice.stopRecording()
+    setIsStopped(true)
+  }
+
+  // ↑ submit from stopped state (voice recording)
   const handleDone = async () => {
     if (!draft.type) return
-    if (voice.voiceState === 'recording') voice.stopRecording()
-    setIsPaused(false)
+    setIsStopped(false)
     try {
       const result = await voice.parseComponent(draft.type, availableSkills)
+      if (!result.title && !result.description && result.skills.length === 0 && result.durationMinutes == null) {
+        return
+      }
+      setDraft((d) => ({
+        ...d,
+        title: result.title || d.title,
+        description: result.description || d.description,
+        skills: result.skills.length > 0 ? result.skills : d.skills,
+        durationMinutes: result.durationMinutes ?? d.durationMinutes,
+      }))
+      voice.reset()
+      setStep('reveal')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Voice parse failed')
+    }
+  }
+
+  // ↑ submit from typing state (text input)
+  const handleTypeSubmit = async (text: string) => {
+    if (!draft.type) return
+    setIsTyping(false)
+    try {
+      const result = await voice.parseComponent(draft.type, availableSkills, undefined, text)
       if (!result.title && !result.description && result.skills.length === 0 && result.durationMinutes == null) {
         return
       }
@@ -257,7 +285,8 @@ export default function LogComponentPage() {
   const handleLogAnother = () => {
     draft.photoPreviewUrls.forEach((url) => URL.revokeObjectURL(url))
     voice.reset()
-    setIsPaused(false)
+    setIsStopped(false)
+    setIsTyping(false)
     setError(null)
     setDraft(EMPTY_DRAFT)
     setStep('type')
@@ -265,8 +294,10 @@ export default function LogComponentPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  const micState: import('@/app/components/log-flow/atoms').MicState = isPaused
-    ? 'paused'
+  const micState: import('@/app/components/log-flow/atoms').MicState = isTyping
+    ? 'typing'
+    : isStopped
+    ? 'stopped'
     : voice.voiceState === 'recording'
     ? 'recording'
     : voice.voiceState === 'processing'
@@ -313,13 +344,17 @@ export default function LogComponentPage() {
           type={draft.type}
           photoPreviewUrls={draft.photoPreviewUrls}
           transcript={voice.transcript}
+          getAmplitude={voice.getAmplitude}
           onStart={handleVoiceStart}
-          onPause={handlePause}
-          onRedo={handleRedo}
+          onTypingStart={handleTypingStart}
+          onTypeSubmit={handleTypeSubmit}
+          onCancel={handleCancel}
+          onStop={handleStop}
           onDone={handleDone}
           onBack={() => {
             voice.reset()
-            setIsPaused(false)
+            setIsStopped(false)
+            setIsTyping(false)
             setStep('photo')
           }}
           onClose={handleClose}

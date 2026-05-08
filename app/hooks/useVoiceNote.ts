@@ -36,14 +36,12 @@ declare global {
   interface Window {
     SpeechRecognition?: SpeechRecognitionConstructor
     webkitSpeechRecognition?: SpeechRecognitionConstructor
+    webkitAudioContext?: typeof AudioContext
   }
 }
 
 export type VoiceNoteState = 'idle' | 'recording' | 'processing' | 'done' | 'error'
 
-// Dev-mode grepable logs for voice-state transitions. Low volume —
-// one line per state change / api call.
-// Format: [gesture:voice] event=... key=value
 function devLog(event: string, extras: Record<string, string | number | boolean> = {}) {
   if (process.env.NODE_ENV !== 'development') return
   const parts = Object.entries(extras).map(([k, v]) => `${k}=${v}`).join(' ')
@@ -63,6 +61,55 @@ export function useVoiceNote() {
 
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null)
   const transcriptRef = useRef('')
+
+  // ─── Web Audio API — real waveform amplitude ──────────────────────────────
+  // Runs in parallel with SpeechRecognition so we get both live text AND
+  // accurate amplitude data for the waveform bars at 60fps.
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const analyserRef = useRef<AnalyserNode | null>(null)
+  const audioStreamRef = useRef<MediaStream | null>(null)
+  const freqDataRef = useRef<Uint8Array<ArrayBuffer> | null>(null)
+
+  async function startAudioAnalyser() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+      audioStreamRef.current = stream
+      const AudioCtxImpl = window.AudioContext ?? window.webkitAudioContext
+      if (!AudioCtxImpl) return
+      const ctx = new AudioCtxImpl()
+      const source = ctx.createMediaStreamSource(stream)
+      const analyser = ctx.createAnalyser()
+      analyser.fftSize = 256
+      analyser.smoothingTimeConstant = 0.8
+      source.connect(analyser)
+      audioCtxRef.current = ctx
+      analyserRef.current = analyser
+      freqDataRef.current = new Uint8Array(analyser.frequencyBinCount)
+    } catch {
+      devLog('audio-analyser-fail')
+    }
+  }
+
+  function stopAudioAnalyser() {
+    audioStreamRef.current?.getTracks().forEach((t) => t.stop())
+    audioStreamRef.current = null
+    audioCtxRef.current?.close().catch(() => {})
+    audioCtxRef.current = null
+    analyserRef.current = null
+    freqDataRef.current = null
+  }
+
+  // Called by waveform components on every animation frame.
+  // Returns a 0–1 amplitude value; 0 when the analyser isn't running.
+  function getAmplitude(): number {
+    const analyser = analyserRef.current
+    const data = freqDataRef.current
+    if (!analyser || !data) return 0
+    analyser.getByteFrequencyData(data)
+    let sum = 0
+    for (let i = 0; i < data.length; i++) sum += data[i]
+    return sum / (data.length * 255)
+  }
 
   function startRecording() {
     if (!isSupported) {
@@ -101,6 +148,7 @@ export function useVoiceNote() {
           : 'Could not process audio. Try typing instead.'
       setErrorMessage(msg)
       setVoiceState('error')
+      stopAudioAnalyser()
     }
 
     recognition.onend = () => {
@@ -114,12 +162,15 @@ export function useVoiceNote() {
     recognitionRef.current = recognition
     recognition.start()
     setVoiceState('recording')
+    // Fire-and-forget — analyser will be ready within milliseconds
+    void startAudioAnalyser()
   }
 
   function stopRecording() {
     devLog('stop')
     recognitionRef.current?.stop()
     setVoiceState('processing')
+    stopAudioAnalyser()
   }
 
   async function parseNote(existing?: string): Promise<string> {
@@ -156,16 +207,18 @@ export function useVoiceNote() {
   async function parseComponent(
     componentType: string,
     availableSkills?: string[],
-    existing?: { title?: string; description?: string; skills?: string[]; durationMinutes?: number | null }
+    existing?: { title?: string; description?: string; skills?: string[]; durationMinutes?: number | null },
+    textOverride?: string
   ): Promise<{ title: string; description: string; skills: string[]; durationMinutes: number | null }> {
-    const text = transcriptRef.current.trim()
+    const text = (textOverride ?? transcriptRef.current).trim()
     if (!text) {
       devLog('parse-component-skip', { reason: 'empty' })
       setVoiceState('error')
       setErrorMessage('No speech detected. Try again.')
       return { title: '', description: '', skills: [], durationMinutes: null }
     }
-    devLog('parse-component', { chars: text.length, type: componentType, refine: !!existing })
+    devLog('parse-component', { chars: text.length, type: componentType, refine: !!existing, typed: !!textOverride })
+    setVoiceState('processing')
 
     try {
       const result = await parseComponentTranscript(text, componentType, availableSkills, existing)
@@ -184,6 +237,7 @@ export function useVoiceNote() {
     devLog('reset')
     recognitionRef.current?.stop()
     recognitionRef.current = null
+    stopAudioAnalyser()
     setVoiceState('idle')
     setTranscript('')
     setErrorMessage(null)
@@ -200,5 +254,6 @@ export function useVoiceNote() {
     parseNote,
     parseComponent,
     reset,
+    getAmplitude,
   }
 }

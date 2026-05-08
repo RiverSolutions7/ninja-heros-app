@@ -2,11 +2,18 @@
 
 import { useRef, useState } from 'react'
 import type { ComponentType } from '@/app/lib/database.types'
-import { ACCENT, LF, LiveTranscript, MicState, VoiceControlBar } from './atoms'
+import {
+  ACCENT,
+  AdjustSheet,
+  LF,
+  LiveTranscript,
+  MicState,
+  VoiceControlBar,
+} from './atoms'
 
-const CAROUSEL_H = 380
+const CAROUSEL_H = 320
 
-// ─── full-bleed carousel (30px peek only when multiple photos) ───────────
+// ─── Carousel with new design-spec dots ──────────────────────────────────────
 function PhotoCarousel({ urls, accent }: { urls: string[]; accent: string }) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [active, setActive] = useState(0)
@@ -41,7 +48,6 @@ function PhotoCarousel({ urls, accent }: { urls: string[]; accent: string }) {
               key={i}
               style={{
                 flexShrink: 0,
-                // single photo: full width; multiple: leave 30px peek of next
                 width: multi ? 'calc(100% - 30px)' : '100%',
                 height: '100%',
                 scrollSnapAlign: 'start',
@@ -49,6 +55,7 @@ function PhotoCarousel({ urls, accent }: { urls: string[]; accent: string }) {
                 background: LF.bgDeep,
               }}
             >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={url}
                 alt=""
@@ -58,7 +65,6 @@ function PhotoCarousel({ urls, accent }: { urls: string[]; accent: string }) {
             </div>
           ))
         ) : (
-          // no photos yet: gradient placeholder
           <div
             style={{
               flexShrink: 0,
@@ -68,11 +74,10 @@ function PhotoCarousel({ urls, accent }: { urls: string[]; accent: string }) {
             }}
           />
         )}
-        {/* trailing spacer lets the last multi-photo slide snap fully */}
         {multi && <div style={{ flexShrink: 0, width: 30, height: '100%' }} />}
       </div>
 
-      {/* dots — only when 2+ photos */}
+      {/* Pagination dots — active: 18×6px pill, inactive: 6×6px circle */}
       {multi && (
         <div
           style={{
@@ -82,6 +87,7 @@ function PhotoCarousel({ urls, accent }: { urls: string[]; accent: string }) {
             right: 0,
             display: 'flex',
             justifyContent: 'center',
+            alignItems: 'center',
             gap: 6,
             pointerEvents: 'none',
           }}
@@ -90,12 +96,11 @@ function PhotoCarousel({ urls, accent }: { urls: string[]; accent: string }) {
             <div
               key={i}
               style={{
-                width: 6,
+                width: i === active ? 18 : 6,
                 height: 6,
-                borderRadius: '50%',
-                background: '#fff',
-                opacity: i === active ? 1 : 0.45,
-                transition: 'opacity 220ms',
+                borderRadius: 3,
+                background: i === active ? accent : 'rgba(255,255,255,0.22)',
+                transition: 'width 280ms ease, background 280ms ease',
               }}
             />
           ))}
@@ -105,33 +110,200 @@ function PhotoCarousel({ urls, accent }: { urls: string[]; accent: string }) {
   )
 }
 
-// ─── main screen ─────────────────────────────────────────────────────────
+// ─── Context chips row ────────────────────────────────────────────────────────
+// Visual placeholders — functionality wired up in a future pass.
+const CHIPS = [
+  {
+    key: 'cues',
+    label: 'Coaching Cues',
+    active: true,
+    icon: (
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+        <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
+        <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
+      </svg>
+    ),
+    color: '#ff5a1f',
+  },
+  {
+    key: 'skills',
+    label: 'Skills',
+    active: true,
+    icon: (
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+        <path d="M12 4v16m8-8H4" />
+      </svg>
+    ),
+    color: '#22c55e',
+  },
+  {
+    key: 'equipment',
+    label: 'Equipment',
+    active: false,
+    icon: (
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+      </svg>
+    ),
+    color: '#3b82f6',
+  },
+  {
+    key: 'duration',
+    label: 'Duration',
+    active: false,
+    icon: (
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+        <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+      </svg>
+    ),
+    color: '#a855f7',
+  },
+]
+
+function ContextChips({
+  opacity,
+  onAdjust,
+}: {
+  opacity: number
+  onAdjust: () => void
+}) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: '0 16px',
+        overflowX: 'auto',
+        scrollbarWidth: 'none',
+        opacity,
+        transition: 'opacity 320ms ease',
+      } as React.CSSProperties}
+    >
+      {CHIPS.map((chip) => (
+        <div
+          key={chip.key}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+            height: 34,
+            borderRadius: 999,
+            padding: '0 12px',
+            background: chip.active
+              ? `${chip.color}22`
+              : 'rgba(255,255,255,0.08)',
+            border: `1px solid ${chip.active ? chip.color + '44' : 'rgba(255,255,255,0.10)'}`,
+            flexShrink: 0,
+          }}
+        >
+          <span
+            style={{
+              color: chip.active ? chip.color : 'rgba(255,255,255,0.55)',
+              display: 'flex',
+              alignItems: 'center',
+            }}
+          >
+            {chip.icon}
+          </span>
+          <span
+            style={{
+              fontSize: 13,
+              fontWeight: 500,
+              color: chip.active ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.55)',
+              fontFamily: LF.body,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {chip.label}
+          </span>
+        </div>
+      ))}
+
+      {/* Adjust chip — rightmost, always visible */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onAdjust}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onAdjust() }}
+        aria-label="Adjust context settings"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 5,
+          height: 34,
+          borderRadius: 999,
+          padding: '0 12px',
+          background: 'rgba(255,255,255,0.08)',
+          border: '1px solid rgba(255,255,255,0.10)',
+          flexShrink: 0,
+          cursor: 'pointer',
+        }}
+      >
+        {/* Sliders icon */}
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="2" strokeLinecap="round">
+          <line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" />
+          <line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" />
+          <line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" />
+          <line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" />
+        </svg>
+        <span
+          style={{
+            fontSize: 13,
+            fontWeight: 500,
+            color: 'rgba(255,255,255,0.55)',
+            fontFamily: LF.body,
+          }}
+        >
+          Adjust
+        </span>
+      </div>
+    </div>
+  )
+}
+
+// ─── Main screen ──────────────────────────────────────────────────────────────
 export default function VoiceScreen({
   state,
   photoPreviewUrls,
   transcript,
+  getAmplitude,
   onStart,
-  onPause,
-  onRedo,
+  onTypingStart,
+  onTypeSubmit,
+  onCancel,
+  onStop,
   onDone,
   onBack,
   onClose,
   accent = ACCENT,
 }: {
   state: MicState
-  type: ComponentType        // kept for caller compatibility; not used in body
+  type: ComponentType        // kept for caller compatibility
   photoPreviewUrls: string[]
   transcript: string
+  getAmplitude: () => number
   onStart: () => void
-  onPause: () => void
-  onRedo: () => void
+  onTypingStart: () => void
+  onTypeSubmit: (text: string) => void
+  onCancel: () => void
+  onStop: () => void
   onDone: () => void
   onBack: () => void
   onClose?: () => void
-  step?: number              // kept for caller compatibility; not used in body
+  step?: number              // kept for caller compatibility
   accent?: string
 }) {
-  const transcriptWords = transcript.trim().length > 0 ? transcript.trim().split(/\s+/) : []
+  const [adjustOpen, setAdjustOpen] = useState(false)
+
+  const isRecording = state === 'recording'
+  const transcriptWords =
+    (state === 'recording' || state === 'stopped') && transcript.trim().length > 0
+      ? transcript.trim().split(/\s+/)
+      : []
+
+  // Chips fade slightly during recording, more during typing
+  const chipsOpacity = isRecording ? 0.4 : state === 'typing' ? 0.3 : 1
 
   return (
     <div
@@ -145,7 +317,7 @@ export default function VoiceScreen({
         overflow: 'hidden',
       }}
     >
-      {/* In-flow header — back circle + X only */}
+      {/* Header — dims during recording */}
       <div
         style={{
           display: 'flex',
@@ -155,6 +327,8 @@ export default function VoiceScreen({
           flexShrink: 0,
           position: 'relative',
           zIndex: 20,
+          opacity: isRecording ? 0.3 : 1,
+          transition: 'opacity 320ms ease',
         }}
       >
         <button
@@ -212,8 +386,23 @@ export default function VoiceScreen({
           inset: 0,
           zIndex: 0,
           pointerEvents: 'none',
-          background: `radial-gradient(ellipse 70% 40% at 50% 45%, ${accent}${state === 'recording' ? '22' : '14'} 0%, transparent 70%)`,
+          background: `radial-gradient(ellipse 70% 40% at 50% 45%, ${accent}${isRecording ? '22' : '14'} 0%, transparent 70%)`,
           transition: 'background 500ms',
+        }}
+      />
+
+      {/* Vignette overlay — fades in during recording */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: 0,
+          zIndex: 0,
+          pointerEvents: 'none',
+          background:
+            'radial-gradient(ellipse at center top, transparent 0%, rgba(0,0,0,0.18) 65%, rgba(0,0,0,0.32) 100%)',
+          opacity: isRecording ? 1 : 0,
+          transition: 'opacity 320ms ease',
         }}
       />
 
@@ -231,7 +420,7 @@ export default function VoiceScreen({
       >
         <PhotoCarousel urls={photoPreviewUrls} accent={accent} />
 
-        {/* Middle — live words when recording, empty otherwise */}
+        {/* Live transcript while recording or stopped */}
         <div
           style={{
             flex: 1,
@@ -241,23 +430,35 @@ export default function VoiceScreen({
             minHeight: 0,
           }}
         >
-          {state === 'recording' && (
+          {transcriptWords.length > 0 && (
             <LiveTranscript accent={accent} words={transcriptWords} />
           )}
         </div>
       </div>
 
-      {/* Bottom controls */}
+      {/* Bottom zone: context chips + pill */}
       <div style={{ position: 'relative', zIndex: 1, flexShrink: 0 }}>
+        {/* Context chips */}
+        <div style={{ paddingBottom: 10 }}>
+          <ContextChips opacity={chipsOpacity} onAdjust={() => setAdjustOpen(true)} />
+        </div>
+
+        {/* Pill */}
         <VoiceControlBar
           state={state}
           accent={accent}
+          getAmplitude={getAmplitude}
           onStart={onStart}
-          onPause={onPause}
-          onRedo={onRedo}
+          onTypingStart={onTypingStart}
+          onTypeSubmit={onTypeSubmit}
+          onCancel={onCancel}
+          onStop={onStop}
           onDone={onDone}
         />
       </div>
+
+      {/* Adjust sheet */}
+      <AdjustSheet visible={adjustOpen} onClose={() => setAdjustOpen(false)} />
     </div>
   )
 }

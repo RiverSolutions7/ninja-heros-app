@@ -54,3 +54,23 @@
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+/* ── Pill animations ──────────────────────────────────────────────── */
+
+/* Border-color pulse while recording (fire red glow) */
+@keyframes lf-pill-glow {
+  0%, 100% { border-color: rgba(255, 90, 31, 0.32); }
+  50%      { border-color: rgba(255, 90, 31, 0.62); }
+}
+
+/* Fade in the recording pill contents (cancel + stop buttons) */
+@keyframes lf-pill-fade-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Whole pill fades in when entering recording state */
+@keyframes lf-pill-glow-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
