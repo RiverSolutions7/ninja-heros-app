@@ -9,6 +9,7 @@ import {
   DEFAULT_ADJUST_SETTINGS,
   LF,
   MicState,
+  Press,
   VoiceControlBar,
 } from './atoms'
 
@@ -26,6 +27,7 @@ function PhotoCarousel({ urls, accent }: { urls: string[]; accent: string }) {
   const [drag, setDrag]       = useState(0)
   const dragStart             = useRef<number | null>(null)
   const didDrag               = useRef(false)
+  const moveCount             = useRef(0)
 
   const items = urls.length > 0 ? urls : [null as unknown as string]
   const multi = items.length > 1
@@ -35,12 +37,14 @@ function PhotoCarousel({ urls, accent }: { urls: string[]; accent: string }) {
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     dragStart.current = e.clientX
     didDrag.current   = false
+    moveCount.current = 0
     e.currentTarget.setPointerCapture(e.pointerId)
   }
   function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
     if (dragStart.current === null) return
+    moveCount.current++
     const d = e.clientX - dragStart.current
-    if (Math.abs(d) > 18) didDrag.current = true
+    if (moveCount.current >= 2 && Math.abs(d) > 18) didDrag.current = true
     setDrag(d)
   }
   function onPointerUp() {
@@ -51,6 +55,14 @@ function PhotoCarousel({ urls, accent }: { urls: string[]; accent: string }) {
     setDrag(0)
     dragStart.current = null
     didDrag.current   = false
+    moveCount.current = 0
+  }
+  function onPointerCancelClean(e: React.PointerEvent<HTMLDivElement>) {
+    e.currentTarget.releasePointerCapture(e.pointerId)
+    setDrag(0)
+    dragStart.current = null
+    didDrag.current   = false
+    moveCount.current = 0
   }
 
   return (
@@ -69,7 +81,7 @@ function PhotoCarousel({ urls, accent }: { urls: string[]; accent: string }) {
         onPointerDown={multi ? onPointerDown : undefined}
         onPointerMove={multi ? onPointerMove : undefined}
         onPointerUp={multi ? onPointerUp : undefined}
-        onPointerCancel={multi ? onPointerUp : undefined}
+        onPointerCancel={onPointerCancelClean}
       >
         {items.map((url, i) => {
           const containerW = containerRef.current?.clientWidth ?? 390
@@ -101,7 +113,7 @@ function PhotoCarousel({ urls, accent }: { urls: string[]; accent: string }) {
                 transform:    `translateX(${xPct}%) scale(${scale})`,
                 opacity,
                 transition:   animated
-                  ? 'transform 380ms cubic-bezier(0.32,0.72,0,1), opacity 380ms ease'
+                  ? 'transform 320ms cubic-bezier(0.32,0.72,0,1), opacity 320ms ease'
                   : 'none',
                 boxShadow:    isActive
                   ? '0 24px 48px rgba(0,0,0,0.55), 0 4px 12px rgba(0,0,0,0.35)'
@@ -180,22 +192,17 @@ function CoachNotesFocusCard({
       : activeLabels.join(' · ')
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
+    <Press
       onClick={onTap}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onTap() }}
-      aria-label="Coach Notes Focus — tap to adjust"
+      ariaLabel="Coach Notes Focus — tap to adjust"
       style={{
         opacity,
-        transition: 'opacity 320ms ease',
+        transition: 'opacity 320ms ease, transform 140ms ease',
         margin: '20px 16px 0',
         borderRadius: 20,
-        overflow: 'hidden',
         background: 'linear-gradient(180deg, rgba(255,255,255,0.038) 0%, rgba(255,255,255,0.018) 100%)',
         border: '1px solid rgba(255,255,255,0.03)',
         boxShadow: '0 2px 4px rgba(0,0,0,0.22), 0 10px 24px rgba(0,0,0,0.28), 0 0 0 0.5px rgba(255,255,255,0.02)',
-        cursor: 'pointer',
       }}
     >
       {/* Phone bezel image zone */}
@@ -291,6 +298,7 @@ function CoachNotesFocusCard({
       </div>
 
       {/* Title + subtitle */}
+
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -304,7 +312,7 @@ function CoachNotesFocusCard({
             fontSize: 15,
             fontWeight: 600,
             letterSpacing: '-0.015em',
-            fontFamily: '-apple-system, "SF Pro Display", system-ui',
+            fontFamily: LF.body,
             lineHeight: 1.2,
           }}>
             Coach Notes Focus
@@ -315,7 +323,7 @@ function CoachNotesFocusCard({
             fontSize: 12,
             fontWeight: 400,
             letterSpacing: '-0.004em',
-            fontFamily: '-apple-system, "SF Pro Text", system-ui',
+            fontFamily: LF.body,
             lineHeight: 1.45,
             whiteSpace: 'nowrap',
             overflow: 'hidden',
@@ -328,7 +336,7 @@ function CoachNotesFocusCard({
           <path d="M1 1l5 5-5 5" stroke="rgba(255,255,255,0.24)" strokeWidth="1.6" strokeLinecap="round"/>
         </svg>
       </div>
-    </div>
+    </Press>
   )
 }
 
