@@ -17,9 +17,10 @@ import S3Photo from '@/app/components/log-flow/S3Photo'
 import VoiceScreen from '@/app/components/log-flow/VoiceScreen'
 import RevealScreen, { type RevealDraft } from '@/app/components/log-flow/RevealScreen'
 import Satisfaction from '@/app/components/log-flow/Satisfaction'
+import Card1Skills from '@/app/components/log-flow/Card1Skills'
 import '@/app/components/log-flow/log-flow.css'
 
-type LogStep = 'type' | 'curriculum' | 'photo' | 'voice' | 'reveal' | 'satisfaction'
+type LogStep = 'type' | 'curriculum' | 'photo' | 'voice' | 'card-skills' | 'reveal' | 'satisfaction'
 
 interface LogDraft {
   type: ComponentType | null
@@ -168,7 +169,7 @@ export default function LogComponentPage() {
         durationMinutes: result.durationMinutes ?? d.durationMinutes,
       }))
       voice.reset()
-      setStep('reveal')
+      setStep('card-skills')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Voice parse failed')
     }
@@ -191,7 +192,7 @@ export default function LogComponentPage() {
         durationMinutes: result.durationMinutes ?? d.durationMinutes,
       }))
       voice.reset()
-      setStep('reveal')
+      setStep('card-skills')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Voice parse failed')
     }
@@ -357,6 +358,20 @@ export default function LogComponentPage() {
             setStep('photo')
           }}
           onClose={handleClose}
+        />
+      )}
+
+      {step === 'card-skills' && (
+        <Card1Skills
+          availableSkills={availableSkills}
+          initialSelected={draft.skills}
+          onApprove={(approvedSkills) => {
+            setDraft((d) => ({ ...d, skills: approvedSkills }))
+            setStep('reveal')
+          }}
+          onClose={handleClose}
+          cardIndex={0}
+          totalCards={3}
         />
       )}
 
