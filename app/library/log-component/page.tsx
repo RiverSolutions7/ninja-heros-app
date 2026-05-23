@@ -18,9 +18,11 @@ import VoiceScreen from '@/app/components/log-flow/VoiceScreen'
 import RevealScreen, { type RevealDraft } from '@/app/components/log-flow/RevealScreen'
 import Satisfaction from '@/app/components/log-flow/Satisfaction'
 import Card1Skills from '@/app/components/log-flow/Card1Skills'
+import Card2Sequence from '@/app/components/log-flow/Card2Sequence'
+import Card3CoachTips from '@/app/components/log-flow/Card3CoachTips'
 import '@/app/components/log-flow/log-flow.css'
 
-type LogStep = 'type' | 'curriculum' | 'photo' | 'voice' | 'card-skills' | 'reveal' | 'satisfaction'
+type LogStep = 'type' | 'curriculum' | 'photo' | 'voice' | 'card-skills' | 'card-sequence' | 'card-coach-tips' | 'reveal' | 'satisfaction'
 
 interface LogDraft {
   type: ComponentType | null
@@ -28,6 +30,8 @@ interface LogDraft {
   photoFiles: File[]
   photoPreviewUrls: string[]
   title: string
+  sequenceSteps: string[]
+  coachTips: string[]
   description: string
   skills: string[]
   durationMinutes: number | null
@@ -39,6 +43,8 @@ const EMPTY_DRAFT: LogDraft = {
   photoFiles: [],
   photoPreviewUrls: [],
   title: '',
+  sequenceSteps: [],
+  coachTips: [],
   description: '',
   skills: [],
   durationMinutes: null,
@@ -115,6 +121,8 @@ export default function LogComponentPage() {
       draft.photoFiles.length > 0 ||
       draft.title.trim() !== '' ||
       draft.description.trim() !== '' ||
+      draft.sequenceSteps.length > 0 ||
+      draft.coachTips.length > 0 ||
       draft.skills.length > 0 ||
       draft.durationMinutes !== null
     )
@@ -158,12 +166,14 @@ export default function LogComponentPage() {
     setIsStopped(false)
     try {
       const result = await voice.parseComponent(draft.type, availableSkills)
-      if (!result.title && !result.description && result.skills.length === 0 && result.durationMinutes == null) {
+      if (!result.title && result.sequenceSteps.length === 0 && result.skills.length === 0 && result.durationMinutes == null) {
         return
       }
       setDraft((d) => ({
         ...d,
         title: result.title || d.title,
+        sequenceSteps: result.sequenceSteps.length > 0 ? result.sequenceSteps : d.sequenceSteps,
+        coachTips: result.coachTips.length > 0 ? result.coachTips : d.coachTips,
         description: result.description || d.description,
         skills: result.skills.length > 0 ? result.skills : d.skills,
         durationMinutes: result.durationMinutes ?? d.durationMinutes,
@@ -181,12 +191,14 @@ export default function LogComponentPage() {
     setIsTyping(false)
     try {
       const result = await voice.parseComponent(draft.type, availableSkills, undefined, text)
-      if (!result.title && !result.description && result.skills.length === 0 && result.durationMinutes == null) {
+      if (!result.title && result.sequenceSteps.length === 0 && result.skills.length === 0 && result.durationMinutes == null) {
         return
       }
       setDraft((d) => ({
         ...d,
         title: result.title || d.title,
+        sequenceSteps: result.sequenceSteps.length > 0 ? result.sequenceSteps : d.sequenceSteps,
+        coachTips: result.coachTips.length > 0 ? result.coachTips : d.coachTips,
         description: result.description || d.description,
         skills: result.skills.length > 0 ? result.skills : d.skills,
         durationMinutes: result.durationMinutes ?? d.durationMinutes,
@@ -367,10 +379,41 @@ export default function LogComponentPage() {
           initialSelected={draft.skills}
           onApprove={(approvedSkills) => {
             setDraft((d) => ({ ...d, skills: approvedSkills }))
-            setStep('reveal')
+            setStep('card-sequence')
           }}
           onClose={handleClose}
           cardIndex={0}
+          totalCards={3}
+        />
+      )}
+
+      {step === 'card-sequence' && (
+        <Card2Sequence
+          initialSteps={draft.sequenceSteps}
+          onApprove={(approvedSteps) => {
+            setDraft((d) => ({ ...d, sequenceSteps: approvedSteps }))
+            setStep('card-coach-tips')
+          }}
+          onClose={handleClose}
+          cardIndex={1}
+          totalCards={3}
+        />
+      )}
+
+      {step === 'card-coach-tips' && (
+        <Card3CoachTips
+          sequenceSteps={draft.sequenceSteps}
+          initialTips={draft.coachTips}
+          onApprove={(approvedTips) => {
+            const description = [
+              ...draft.sequenceSteps.map((s) => `• ${s}`),
+              ...approvedTips.map((t) => `• ${t}`),
+            ].join('\n')
+            setDraft((d) => ({ ...d, coachTips: approvedTips, description }))
+            setStep('reveal')
+          }}
+          onClose={handleClose}
+          cardIndex={2}
           totalCards={3}
         />
       )}

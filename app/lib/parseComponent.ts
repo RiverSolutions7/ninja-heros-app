@@ -15,7 +15,7 @@ export async function parseComponentTranscript(
 ): Promise<WalkthroughParsed> {
   const text = transcript.trim()
   if (!text) {
-    return { title: '', description: '', skills: [], durationMinutes: null }
+    return { title: '', description: '', sequenceSteps: [], coachTips: [], skills: [], durationMinutes: null }
   }
 
   const res = await fetch('/api/parse-component', {
@@ -34,6 +34,8 @@ export async function parseComponentTranscript(
   const data = (await res.json()) as {
     title: string
     description: string
+    sequenceSteps: string[]
+    coachTips: string[]
     skills: string[]
     duration_minutes: number | null
   }
@@ -41,6 +43,8 @@ export async function parseComponentTranscript(
   return {
     title: data.title ?? '',
     description: data.description ?? '',
+    sequenceSteps: data.sequenceSteps ?? [],
+    coachTips: data.coachTips ?? [],
     skills: data.skills ?? [],
     durationMinutes: data.duration_minutes ?? null,
   }
