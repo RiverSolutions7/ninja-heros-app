@@ -392,6 +392,7 @@ export default function LogComponentPage() {
           initialTips={draft.coachTips}
           title={draft.title}
           curriculum={draft.curriculums[0] ?? ''}
+          onBack={() => setStep('card-skills')}
           onApprove={({ steps, tips }) => {
             const description = [
               ...steps.map((s) => `• ${s}`),

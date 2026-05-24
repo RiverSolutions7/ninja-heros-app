@@ -145,6 +145,7 @@ interface CardReviewProps {
   /** Curriculum name shown in subtitle, e.g. "Mini Ninjas" */
   curriculum: string
   onApprove: (data: { steps: string[]; tips: string[] }) => void
+  onBack?: () => void
   onClose?: () => void
   /** 0-based card index. Default 1 (second of 2 cards). */
   cardIndex?: number
@@ -159,6 +160,7 @@ export default function CardReview({
   title,
   curriculum,
   onApprove,
+  onBack,
   onClose,
   cardIndex = 1,
   totalCards = 2,
@@ -182,7 +184,7 @@ export default function CardReview({
 
   // ── AI split ─────────────────────────────────────────────────────────────
   const [splittingIndex, setSplittingIndex] = useState<number | null>(null)
-  const [splitUndo, setSplitUndo] = useState<{ text: string; atIndex: number } | null>(null)
+  const [splitUndo, setSplitUndo] = useState<{ original: string; part1: string; part2: string } | null>(null)
   const [splitError, setSplitError] = useState<string | null>(null)
   const splitUndoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -403,7 +405,7 @@ export default function CardReview({
         return a
       })
       if (splitUndoTimer.current) clearTimeout(splitUndoTimer.current)
-      setSplitUndo({ text: original, atIndex: index })
+      setSplitUndo({ original, part1, part2 })
       splitUndoTimer.current = setTimeout(() => setSplitUndo(null), 5000)
     } catch {
       setSplitError('AI split failed — edit the step manually')
@@ -417,7 +419,11 @@ export default function CardReview({
     if (!splitUndo) return
     setSteps((prev) => {
       const a = [...prev]
-      a.splice(splitUndo.atIndex, 2, splitUndo.text)
+      // Find part1 by value — immune to array shifts from concurrent moves/deletes
+      const idx = a.indexOf(splitUndo.part1)
+      if (idx !== -1 && a[idx + 1] === splitUndo.part2) {
+        a.splice(idx, 2, splitUndo.original)
+      }
       return a
     })
     if (splitUndoTimer.current) clearTimeout(splitUndoTimer.current)
@@ -489,6 +495,34 @@ export default function CardReview({
         ))}
       </div>
 
+      {/* ── Back button ─────────────────────────────────────────────────── */}
+      {onBack && (
+        <button
+          onClick={onBack}
+          aria-label="Back"
+          style={{
+            position: 'absolute',
+            top: 74,
+            left: 18,
+            width: 30,
+            height: 30,
+            borderRadius: '50%',
+            background: 'rgba(255,255,255,0.07)',
+            border: '1px solid rgba(255,255,255,0.09)',
+            color: 'rgba(255,255,255,0.55)',
+            fontSize: 16,
+            lineHeight: 1,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9,
+          }}
+        >
+          ‹
+        </button>
+      )}
+
       {/* ── Close button ────────────────────────────────────────────────── */}
       {onClose && (
         <button
@@ -525,7 +559,8 @@ export default function CardReview({
           left: 0,
           right: 0,
           padding: '0 20px',
-          paddingRight: 56,
+          paddingLeft: onBack ? 56 : 20,
+          paddingRight: onClose ? 56 : 20,
         }}
       >
         <div
