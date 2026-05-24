@@ -2,17 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { ACCENT, LF } from './atoms'
+import BottomSheet from '@/app/components/ui/BottomSheet'
+import MenuList, { type MenuItem } from '@/app/components/ui/MenuList'
+import { useToast } from '@/app/components/ui/Toast'
+import { LONG_PRESS_STYLE } from '@/app/hooks/useLongPress'
 
 // ─── Animations ──────────────────────────────────────────────────────────────
 const ANIM_CSS = `
-@keyframes sheetSlideIn {
-  from { transform: translateY(100%); }
-  to   { transform: translateY(0); }
-}
-@keyframes toastSlideIn {
-  from { transform: translateY(16px); opacity: 0; }
-  to   { transform: translateY(0); opacity: 1; }
-}
 @keyframes crSpin {
   to { transform: rotate(360deg); }
 }
@@ -185,8 +181,8 @@ export default function CardReview({
   // ── AI split ─────────────────────────────────────────────────────────────
   const [splittingIndex, setSplittingIndex] = useState<number | null>(null)
   const [splitUndo, setSplitUndo] = useState<{ original: string; part1: string; part2: string } | null>(null)
-  const [splitError, setSplitError] = useState<string | null>(null)
   const splitUndoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const toast = useToast()
 
   // ── Refs ─────────────────────────────────────────────────────────────────
   const inputRef = useRef<HTMLInputElement>(null)
@@ -292,7 +288,7 @@ export default function CardReview({
     if (dragMode !== null) return
     const dx = Math.abs(e.clientX - pointerDownPos.current.x)
     const dy = Math.abs(e.clientY - pointerDownPos.current.y)
-    if (dx > 6 || dy > 6) {
+    if (dx > 12 || dy > 12) {
       pointerMoved.current = true
       if (longPressTimer.current) {
         clearTimeout(longPressTimer.current)
@@ -389,7 +385,6 @@ export default function CardReview({
   const doAiSplit = async (index: number) => {
     setActionSheetItem(null)
     setSplittingIndex(index)
-    setSplitError(null)
     try {
       const res = await fetch('/api/split-step', {
         method: 'POST',
@@ -408,8 +403,7 @@ export default function CardReview({
       setSplitUndo({ original, part1, part2 })
       splitUndoTimer.current = setTimeout(() => setSplitUndo(null), 5000)
     } catch {
-      setSplitError('AI split failed — edit the step manually')
-      setTimeout(() => setSplitError(null), 3500)
+      toast.error('AI split failed — edit the step manually', 3500)
     } finally {
       setSplittingIndex(null)
     }
@@ -465,6 +459,8 @@ export default function CardReview({
         background: LF.bg,
         overflow: 'hidden',
         userSelect: 'none',
+        WebkitUserSelect: 'none',
+        WebkitTouchCallout: 'none',
       }}
     >
       <style>{ANIM_CSS}</style>
@@ -500,17 +496,18 @@ export default function CardReview({
         <button
           onClick={onBack}
           aria-label="Back"
+          className="active:opacity-60 transition-opacity"
           style={{
             position: 'absolute',
-            top: 74,
+            top: 70,
             left: 18,
-            width: 30,
-            height: 30,
+            width: 44,
+            height: 44,
             borderRadius: '50%',
             background: 'rgba(255,255,255,0.07)',
             border: '1px solid rgba(255,255,255,0.09)',
             color: 'rgba(255,255,255,0.55)',
-            fontSize: 16,
+            fontSize: 20,
             lineHeight: 1,
             cursor: 'pointer',
             display: 'flex',
@@ -528,17 +525,18 @@ export default function CardReview({
         <button
           onClick={onClose}
           aria-label="Close"
+          className="active:opacity-60 transition-opacity"
           style={{
             position: 'absolute',
-            top: 74,
+            top: 70,
             right: 18,
-            width: 30,
-            height: 30,
+            width: 44,
+            height: 44,
             borderRadius: '50%',
             background: 'rgba(255,255,255,0.07)',
             border: '1px solid rgba(255,255,255,0.09)',
             color: 'rgba(255,255,255,0.55)',
-            fontSize: 16,
+            fontSize: 18,
             lineHeight: 1,
             cursor: 'pointer',
             display: 'flex',
@@ -653,7 +651,9 @@ export default function CardReview({
                   onPointerUp={
                     isThisEditing ? undefined : (e) => onItemPointerUp(e, 'steps', index)
                   }
+                  onContextMenu={(e) => e.preventDefault()}
                   style={{
+                    ...LONG_PRESS_STYLE,
                     background: isThisEditing
                       ? 'rgba(255,90,31,0.08)'
                       : isThisDragSelected
@@ -870,7 +870,9 @@ export default function CardReview({
                   onPointerUp={
                     isThisEditing ? undefined : (e) => onItemPointerUp(e, 'tips', index)
                   }
+                  onContextMenu={(e) => e.preventDefault()}
                   style={{
+                    ...LONG_PRESS_STYLE,
                     background: isThisEditing
                       ? 'rgba(255,90,31,0.06)'
                       : isThisDragSelected
@@ -1160,217 +1162,74 @@ export default function CardReview({
         )}
       </div>
 
-      {/* ── Split undo / error toast ─────────────────────────────────────── */}
-      {(splitUndo || splitError) && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: 96,
-            left: 18,
-            right: 18,
-            background: LF.card,
-            borderRadius: 12,
-            padding: '13px 16px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-            border: `1px solid ${splitError ? 'rgba(240,64,64,0.35)' : LF.hairline}`,
-            zIndex: 60,
-            animation: 'toastSlideIn 200ms ease-out',
-            boxShadow: '0 4px 24px rgba(0,0,0,0.45)',
-          }}
-        >
-          <span
-            style={{
-              fontFamily: LF.body,
-              fontSize: 14,
-              color: splitError ? '#f04040' : 'rgba(255,255,255,0.9)',
-              lineHeight: 1.3,
-            }}
-          >
-            {splitError ?? 'Split! Review the two steps.'}
-          </span>
-          {splitUndo && (
+      {/* ── Split undo toast (interactive — can't use useToast which is pointer-events-none) */}
+      {splitUndo && (
+        <div className="fixed bottom-24 left-4 right-4 z-[200] animate-slide-up">
+          <div className="flex items-center justify-between gap-3 bg-bg-card border border-bg-border rounded-xl px-4 py-3 shadow-card">
+            <span className="text-sm text-text-primary leading-snug">Split! Review the two steps.</span>
             <button
               onClick={undoSplit}
-              style={{
-                color: ACCENT,
-                fontFamily: LF.body,
-                fontSize: 14,
-                fontWeight: 700,
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                padding: 0,
-                flexShrink: 0,
-              }}
+              className="text-sm font-bold text-accent-fire flex-shrink-0 active:opacity-60 transition-opacity"
             >
               Undo
             </button>
-          )}
+          </div>
         </div>
       )}
 
       {/* ── Action sheet ─────────────────────────────────────────────────── */}
-      {actionSheetItem !== null &&
-        (() => {
-          const { section, index } = actionSheetItem
-          const items = section === 'steps' ? steps : tips
-          const itemLabel = section === 'steps' ? 'Step' : 'Tip'
+      {actionSheetItem !== null && (() => {
+        const { section, index } = actionSheetItem
+        const items = section === 'steps' ? steps : tips
+        const itemLabel = section === 'steps' ? 'Step' : 'Tip'
 
-          type ActionEntry = {
-            icon: string
-            label: string
-            action: () => void
-            disabled: boolean
-            danger: boolean
-          }
-
-          const actions: ActionEntry[] = [
+        const menuItems: MenuItem[] = [
+          {
+            icon: <span aria-hidden="true">⠿</span>,
+            label: 'Move',
+            onClick: () => enterDragMode(section, index),
+            disabled: items.length <= 1,
+          },
+          ...(section === 'steps' ? [
             {
-              icon: '⠿',
-              label: 'Move',
-              action: () => enterDragMode(section, index),
-              disabled: items.length <= 1,
-              danger: false,
+              icon: <span aria-hidden="true">⤧</span>,
+              label: 'Split into two steps',
+              onClick: () => doAiSplit(index),
+              disabled: !steps[index]?.trim(),
             },
-            ...(section === 'steps'
-              ? [
-                  {
-                    icon: '⤧',
-                    label: 'Split into two steps',
-                    action: () => doAiSplit(index),
-                    disabled: !steps[index]?.trim(),
-                    danger: false,
-                  },
-                  {
-                    icon: '↕',
-                    label: 'Merge with next',
-                    action: () => doMerge(index),
-                    disabled: index >= steps.length - 1,
-                    danger: false,
-                  },
-                ]
-              : []),
             {
-              icon: '✕',
-              label: `Delete ${itemLabel.toLowerCase()}`,
-              action: () => doDelete(section, index),
-              disabled: false,
-              danger: true,
+              icon: <span aria-hidden="true">↕</span>,
+              label: 'Merge with next',
+              onClick: () => doMerge(index),
+              disabled: index >= steps.length - 1,
             },
-          ]
+          ] : []),
+          {
+            icon: <span aria-hidden="true">✕</span>,
+            label: `Delete ${itemLabel.toLowerCase()}`,
+            onClick: () => doDelete(section, index),
+            destructive: true,
+          },
+        ]
 
-          return (
-            <>
-              <div
-                onClick={() => setActionSheetItem(null)}
-                style={{
-                  position: 'fixed',
-                  inset: 0,
-                  background: 'rgba(0,0,0,0.5)',
-                  zIndex: 50,
-                }}
-              />
-              <div
-                style={{
-                  position: 'fixed',
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  background: LF.card,
-                  borderRadius: '18px 18px 0 0',
-                  paddingBottom: 'max(20px, env(safe-area-inset-bottom))',
-                  boxShadow: '0 -12px 40px rgba(0,0,0,0.55)',
-                  zIndex: 51,
-                  animation: 'sheetSlideIn 220ms ease-out',
-                }}
+        return (
+          <BottomSheet
+            visible
+            onClose={() => setActionSheetItem(null)}
+          >
+            <div className="px-5 pb-3 pt-1 border-b border-bg-border">
+              <p
+                className="text-xs text-text-dim leading-relaxed"
+                style={{ fontStyle: section === 'tips' ? 'italic' : 'normal' }}
               >
-                {/* Drag pill */}
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'center',
-                    paddingTop: 12,
-                    paddingBottom: 4,
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 40,
-                      height: 4,
-                      borderRadius: 2,
-                      background: 'rgba(255,255,255,0.18)',
-                    }}
-                  />
-                </div>
-
-                {/* Item preview */}
-                <div
-                  style={{
-                    padding: '8px 20px 12px',
-                    borderBottom: `1px solid ${LF.hairline}`,
-                  }}
-                >
-                  <span
-                    style={{
-                      fontFamily: LF.body,
-                      fontSize: 13,
-                      color: LF.muted,
-                      lineHeight: 1.4,
-                      fontStyle: section === 'tips' ? 'italic' : 'normal',
-                    }}
-                  >
-                    {itemLabel} {index + 1}:{' '}
-                    {items[index] || `Empty ${itemLabel.toLowerCase()}`}
-                  </span>
-                </div>
-
-                {actions.map(({ icon, label, action, disabled, danger }) => (
-                  <button
-                    key={label}
-                    onClick={disabled ? undefined : action}
-                    style={{
-                      width: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 14,
-                      padding: '14px 20px',
-                      background: 'transparent',
-                      border: 'none',
-                      borderBottom: `1px solid ${LF.hairline}`,
-                      cursor: disabled ? 'not-allowed' : 'pointer',
-                      opacity: disabled ? 0.35 : 1,
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: 22,
-                        textAlign: 'center',
-                        fontSize: 16,
-                        flexShrink: 0,
-                        color: danger ? '#f04040' : LF.muted,
-                      }}
-                    >
-                      {icon}
-                    </span>
-                    <span
-                      style={{
-                        fontFamily: LF.body,
-                        fontSize: 15,
-                        fontWeight: 400,
-                        color: danger ? '#f04040' : '#fff',
-                      }}
-                    >
-                      {label}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </>
-          )
-        })()}
+                {itemLabel} {index + 1}:{' '}
+                {items[index] || `Empty ${itemLabel.toLowerCase()}`}
+              </p>
+            </div>
+            <MenuList items={menuItems} ariaLabel={`${itemLabel} actions`} />
+          </BottomSheet>
+        )
+      })()}
     </div>
   )
 }
