@@ -23,7 +23,7 @@ interface Card1SkillsProps {
   onClose?: () => void
   /** Which card in the swipe deck this is (0-based). Default 0. */
   cardIndex?: number
-  /** Total cards in the deck. Default 3. */
+  /** Total cards in the deck. Default 2. */
   totalCards?: number
 }
 
@@ -34,7 +34,7 @@ export default function Card1Skills({
   onApprove,
   onClose,
   cardIndex = 0,
-  totalCards = 3,
+  totalCards = 2,
 }: Card1SkillsProps) {
   const [selected, setSelected] = useState<string[]>(initialSelected)
   // Skills added this session — tracked separately so we can play pop-in once

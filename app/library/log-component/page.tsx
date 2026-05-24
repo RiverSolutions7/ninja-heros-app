@@ -18,11 +18,10 @@ import VoiceScreen from '@/app/components/log-flow/VoiceScreen'
 import RevealScreen, { type RevealDraft } from '@/app/components/log-flow/RevealScreen'
 import Satisfaction from '@/app/components/log-flow/Satisfaction'
 import Card1Skills from '@/app/components/log-flow/Card1Skills'
-import Card2Sequence from '@/app/components/log-flow/Card2Sequence'
-import Card3CoachTips from '@/app/components/log-flow/Card3CoachTips'
+import CardReview from '@/app/components/log-flow/CardReview'
 import '@/app/components/log-flow/log-flow.css'
 
-type LogStep = 'type' | 'curriculum' | 'photo' | 'voice' | 'card-skills' | 'card-sequence' | 'card-coach-tips' | 'reveal' | 'satisfaction'
+type LogStep = 'type' | 'curriculum' | 'photo' | 'voice' | 'card-skills' | 'card-review' | 'reveal' | 'satisfaction'
 
 interface LogDraft {
   type: ComponentType | null
@@ -379,42 +378,31 @@ export default function LogComponentPage() {
           initialSelected={draft.skills}
           onApprove={(approvedSkills) => {
             setDraft((d) => ({ ...d, skills: approvedSkills }))
-            setStep('card-sequence')
+            setStep('card-review')
           }}
           onClose={handleClose}
           cardIndex={0}
-          totalCards={3}
+          totalCards={2}
         />
       )}
 
-      {step === 'card-sequence' && (
-        <Card2Sequence
+      {step === 'card-review' && draft.type && (
+        <CardReview
           initialSteps={draft.sequenceSteps}
-          onApprove={(approvedSteps) => {
-            setDraft((d) => ({ ...d, sequenceSteps: approvedSteps }))
-            setStep('card-coach-tips')
-          }}
-          onClose={handleClose}
-          cardIndex={1}
-          totalCards={3}
-        />
-      )}
-
-      {step === 'card-coach-tips' && (
-        <Card3CoachTips
-          sequenceSteps={draft.sequenceSteps}
           initialTips={draft.coachTips}
-          onApprove={(approvedTips) => {
+          title={draft.title}
+          curriculum={draft.curriculums[0] ?? ''}
+          onApprove={({ steps, tips }) => {
             const description = [
-              ...draft.sequenceSteps.map((s) => `• ${s}`),
-              ...approvedTips.map((t) => `• ${t}`),
+              ...steps.map((s) => `• ${s}`),
+              ...tips.map((t) => `• ${t}`),
             ].join('\n')
-            setDraft((d) => ({ ...d, coachTips: approvedTips, description }))
+            setDraft((d) => ({ ...d, sequenceSteps: steps, coachTips: tips, description }))
             setStep('reveal')
           }}
           onClose={handleClose}
-          cardIndex={2}
-          totalCards={3}
+          cardIndex={1}
+          totalCards={2}
         />
       )}
 
