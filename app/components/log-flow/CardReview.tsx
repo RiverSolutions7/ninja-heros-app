@@ -9,6 +9,13 @@ const ANIM_CSS = `
   from { transform: translateY(100%); }
   to   { transform: translateY(0); }
 }
+@keyframes toastSlideIn {
+  from { transform: translateY(16px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+@keyframes crSpin {
+  to { transform: rotate(360deg); }
+}
 `
 
 // ─── Section header ───────────────────────────────────────────────────────────
@@ -47,21 +54,14 @@ function SectionHeader({
         {label}
       </span>
       <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
-      <span
-        style={{
-          fontFamily: LF.body,
-          fontSize: 11,
-          color: LF.muted,
-          flexShrink: 0,
-        }}
-      >
+      <span style={{ fontFamily: LF.body, fontSize: 11, color: LF.muted, flexShrink: 0 }}>
         {count}
       </span>
     </div>
   )
 }
 
-// ─── Mic icon (header helper) ─────────────────────────────────────────────────
+// ─── Mic icon ─────────────────────────────────────────────────────────────────
 function MicIcon() {
   return (
     <svg width="10" height="13" viewBox="0 0 10 14" fill="none" aria-hidden="true">
@@ -78,7 +78,7 @@ function MicIcon() {
   )
 }
 
-// ─── Pin icon (tips) ──────────────────────────────────────────────────────────
+// ─── Pin icon ─────────────────────────────────────────────────────────────────
 function PinIcon({ color }: { color: string }) {
   return (
     <svg width="14" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -94,9 +94,45 @@ function PinIcon({ color }: { color: string }) {
   )
 }
 
+// ─── Grip icon ────────────────────────────────────────────────────────────────
+function GripIcon() {
+  return (
+    <svg width="16" height="12" viewBox="0 0 16 12" fill="none" aria-hidden="true">
+      <rect y="0" width="16" height="2" rx="1" fill={ACCENT} opacity="0.7" />
+      <rect y="5" width="16" height="2" rx="1" fill={ACCENT} opacity="0.7" />
+      <rect y="10" width="16" height="2" rx="1" fill={ACCENT} opacity="0.7" />
+    </svg>
+  )
+}
+
+// ─── Inline spinner ───────────────────────────────────────────────────────────
+function InlineSpinner() {
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        width: 14,
+        height: 14,
+        border: `2px solid rgba(255,90,31,0.20)`,
+        borderTopColor: ACCENT,
+        borderRadius: '50%',
+        animation: 'crSpin 0.75s linear infinite',
+        verticalAlign: 'middle',
+        flexShrink: 0,
+      }}
+    />
+  )
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 type EditSection = 'steps' | 'tips'
+
 interface ActionSheetItem {
+  section: EditSection
+  index: number
+}
+
+interface DragMode {
   section: EditSection
   index: number
 }
@@ -104,9 +140,9 @@ interface ActionSheetItem {
 interface CardReviewProps {
   initialSteps: string[]
   initialTips: string[]
-  /** Component title, shown in subtitle (e.g. "Obstacle Course") */
+  /** Component title shown in subtitle, e.g. "Obstacle Course" */
   title: string
-  /** Curriculum name, shown in subtitle (e.g. "Mini Ninjas") */
+  /** Curriculum name shown in subtitle, e.g. "Mini Ninjas" */
   curriculum: string
   onApprove: (data: { steps: string[]; tips: string[] }) => void
   onClose?: () => void
@@ -127,27 +163,53 @@ export default function CardReview({
   cardIndex = 1,
   totalCards = 2,
 }: CardReviewProps) {
+  // ── Content ──────────────────────────────────────────────────────────────
   const [steps, setSteps] = useState<string[]>(initialSteps)
   const [tips, setTips] = useState<string[]>(initialTips)
 
+  // ── Inline edit ──────────────────────────────────────────────────────────
   const [editingSection, setEditingSection] = useState<EditSection | null>(null)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editingText, setEditingText] = useState('')
 
+  // ── Action sheet ─────────────────────────────────────────────────────────
   const [actionSheetItem, setActionSheetItem] = useState<ActionSheetItem | null>(null)
 
+  // ── Drag mode ────────────────────────────────────────────────────────────
+  const [dragMode, setDragMode] = useState<DragMode | null>(null)
+  const [dragTarget, setDragTarget] = useState<number | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+
+  // ── AI split ─────────────────────────────────────────────────────────────
+  const [splittingIndex, setSplittingIndex] = useState<number | null>(null)
+  const [splitUndo, setSplitUndo] = useState<{ text: string; atIndex: number } | null>(null)
+  const [splitError, setSplitError] = useState<string | null>(null)
+  const splitUndoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // ── Refs ─────────────────────────────────────────────────────────────────
   const inputRef = useRef<HTMLInputElement>(null)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pointerDownPos = useRef({ x: 0, y: 0 })
   const pointerMoved = useRef(false)
+  const stepRowRefs = useRef<(HTMLDivElement | null)[]>([])
+  const tipRowRefs = useRef<(HTMLDivElement | null)[]>([])
 
-  // Focus input whenever edit mode starts
+  // ── Effects ──────────────────────────────────────────────────────────────
+
+  // Auto-focus input when edit mode starts
   useEffect(() => {
     if (editingIndex !== null) {
       const t = setTimeout(() => inputRef.current?.focus(), 50)
       return () => clearTimeout(t)
     }
   }, [editingIndex, editingSection])
+
+  // Cleanup split undo timer on unmount
+  useEffect(() => {
+    return () => {
+      if (splitUndoTimer.current) clearTimeout(splitUndoTimer.current)
+    }
+  }, [])
 
   // ── Edit helpers ─────────────────────────────────────────────────────────
 
@@ -213,6 +275,9 @@ export default function CardReview({
     section: EditSection,
     index: number,
   ) => {
+    // In drag mode: tapping the highlighted row will cancel it on pointer up
+    if (dragMode !== null) return
+
     pointerDownPos.current = { x: e.clientX, y: e.clientY }
     pointerMoved.current = false
     longPressTimer.current = setTimeout(() => {
@@ -222,6 +287,7 @@ export default function CardReview({
   }
 
   const onItemPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (dragMode !== null) return
     const dx = Math.abs(e.clientX - pointerDownPos.current.x)
     const dy = Math.abs(e.clientY - pointerDownPos.current.y)
     if (dx > 6 || dy > 6) {
@@ -238,6 +304,15 @@ export default function CardReview({
     section: EditSection,
     index: number,
   ) => {
+    // Drag mode: tap on the highlighted row → cancel drag mode without moving
+    if (dragMode !== null) {
+      if (dragMode.section === section && dragMode.index === index) {
+        setDragMode(null)
+        setDragTarget(null)
+      }
+      return
+    }
+
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current)
       longPressTimer.current = null
@@ -248,36 +323,115 @@ export default function CardReview({
     pointerMoved.current = false
   }
 
-  // ── Action sheet operations ───────────────────────────────────────────────
+  // ── Drag helpers ──────────────────────────────────────────────────────────
 
-  const doMove = (section: EditSection, index: number, dir: -1 | 1) => {
-    const setter = section === 'steps' ? setSteps : setTips
-    const items = section === 'steps' ? steps : tips
-    const newIndex = index + dir
-    if (newIndex < 0 || newIndex >= items.length) {
-      setActionSheetItem(null)
-      return
+  const computeTarget = (clientY: number, section: EditSection): number => {
+    const refs = section === 'steps' ? stepRowRefs.current : tipRowRefs.current
+    for (let i = 0; i < refs.length; i++) {
+      const rect = refs[i]?.getBoundingClientRect()
+      if (!rect) continue
+      const midY = rect.top + rect.height / 2
+      if (clientY < midY) return i
     }
-    setter((prev) => {
-      const a = [...prev]
-      ;[a[index], a[newIndex]] = [a[newIndex], a[index]]
-      return a
-    })
-    setActionSheetItem(null)
+    return Math.max(0, refs.length - 1)
   }
 
-  const doSplit = (index: number) => {
+  const enterDragMode = (section: EditSection, index: number) => {
+    setActionSheetItem(null)
+    setDragMode({ section, index })
+    setDragTarget(index)
+  }
+
+  const onGripPointerDown = (e: React.PointerEvent<HTMLDivElement>, _index: number) => {
+    e.preventDefault()
+    e.stopPropagation()
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    setIsDragging(true)
+  }
+
+  const onGripPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragMode || !isDragging) return
+    const target = computeTarget(e.clientY, dragMode.section)
+    setDragTarget(target)
+  }
+
+  const onGripPointerUp = (_e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragMode) {
+      setIsDragging(false)
+      return
+    }
+    const fromIndex = dragMode.index
+    const toIndex = dragTarget ?? fromIndex
+    if (fromIndex !== toIndex) {
+      const setter = dragMode.section === 'steps' ? setSteps : setTips
+      setter((prev) => {
+        const a = [...prev]
+        const [removed] = a.splice(fromIndex, 1)
+        a.splice(toIndex, 0, removed)
+        return a
+      })
+    }
+    setIsDragging(false)
+    setDragMode(null)
+    setDragTarget(null)
+  }
+
+  const exitDragMode = () => {
+    setDragMode(null)
+    setDragTarget(null)
+    setIsDragging(false)
+  }
+
+  // ── Action sheet operations ───────────────────────────────────────────────
+
+  const doAiSplit = async (index: number) => {
+    setActionSheetItem(null)
+    setSplittingIndex(index)
+    setSplitError(null)
+    try {
+      const res = await fetch('/api/split-step', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ step: steps[index] }),
+      })
+      if (!res.ok) throw new Error(`api ${res.status}`)
+      const { part1, part2 } = (await res.json()) as { part1: string; part2: string }
+      const original = steps[index]
+      setSteps((prev) => {
+        const a = [...prev]
+        a.splice(index, 1, part1, part2)
+        return a
+      })
+      if (splitUndoTimer.current) clearTimeout(splitUndoTimer.current)
+      setSplitUndo({ text: original, atIndex: index })
+      splitUndoTimer.current = setTimeout(() => setSplitUndo(null), 5000)
+    } catch {
+      setSplitError('AI split failed — edit the step manually')
+      setTimeout(() => setSplitError(null), 3500)
+    } finally {
+      setSplittingIndex(null)
+    }
+  }
+
+  const undoSplit = () => {
+    if (!splitUndo) return
     setSteps((prev) => {
       const a = [...prev]
-      a.splice(index + 1, 0, '')
+      a.splice(splitUndo.atIndex, 2, splitUndo.text)
+      return a
+    })
+    if (splitUndoTimer.current) clearTimeout(splitUndoTimer.current)
+    setSplitUndo(null)
+  }
+
+  const doMerge = (index: number) => {
+    setSteps((prev) => {
+      const a = [...prev]
+      const merged = `${a[index]} ${a[index + 1]}`
+      a.splice(index, 2, merged)
       return a
     })
     setActionSheetItem(null)
-    setTimeout(() => {
-      setEditingSection('steps')
-      setEditingIndex(index + 1)
-      setEditingText('')
-    }, 120)
   }
 
   const doDelete = (section: EditSection, index: number) => {
@@ -289,6 +443,7 @@ export default function CardReview({
   // ── Derived state ─────────────────────────────────────────────────────────
 
   const isEditing = editingSection !== null && editingIndex !== null
+  const isDragMode = dragMode !== null
   const validSteps = steps.filter((s) => s.trim())
   const validTips = tips.filter((t) => t.trim())
   const accentFaded = 'rgba(255,90,31,0.40)'
@@ -356,7 +511,6 @@ export default function CardReview({
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 9,
-            flexShrink: 0,
           }}
         >
           ×
@@ -384,41 +538,36 @@ export default function CardReview({
             lineHeight: 1.2,
           }}
         >
-          Review
+          {isDragMode ? 'Drag to reorder' : 'Review'}
         </div>
-        {subtitle && (
-          <div
-            style={{
-              fontFamily: LF.body,
-              fontSize: 13,
-              color: LF.muted,
-              marginTop: 3,
-              lineHeight: 1,
-            }}
-          >
-            {subtitle}
-          </div>
-        )}
         <div
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 5,
-            marginTop: 7,
+            fontFamily: LF.body,
+            fontSize: 13,
+            color: LF.muted,
+            marginTop: 3,
+            lineHeight: 1,
           }}
         >
-          <MicIcon />
-          <span
+          {isDragMode
+            ? `${dragMode!.section === 'steps' ? 'Step' : 'Tip'} ${dragMode!.index + 1} — drag grip handle to move`
+            : subtitle || ' '}
+        </div>
+        {!isDragMode && (
+          <div
             style={{
-              fontFamily: LF.body,
-              fontSize: 12,
-              color: LF.muted,
-              lineHeight: 1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              marginTop: 7,
             }}
           >
-            Parsed from voice note
-          </span>
-        </div>
+            <MicIcon />
+            <span style={{ fontFamily: LF.body, fontSize: 12, color: LF.muted, lineHeight: 1 }}>
+              Parsed from voice note
+            </span>
+          </div>
+        )}
       </div>
 
       {/* ── Scrollable content ──────────────────────────────────────────── */}
@@ -434,7 +583,7 @@ export default function CardReview({
           padding: '14px 18px 0',
         }}
       >
-        {/* ── SEQUENCE section ────────────────────────────────────────── */}
+        {/* ── SEQUENCE section ──────────────────────────────────────────── */}
         <div style={{ marginBottom: 20 }}>
           <SectionHeader
             label="Sequence"
@@ -445,6 +594,13 @@ export default function CardReview({
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {steps.map((step, index) => {
               const isThisEditing = editingSection === 'steps' && editingIndex === index
+              const isThisDragSelected =
+                isDragMode && dragMode!.section === 'steps' && dragMode!.index === index
+              const isThisDragTarget =
+                isDragging &&
+                dragTarget === index &&
+                dragMode?.section === 'steps' &&
+                dragTarget !== dragMode.index
               const isDimmed =
                 (isEditing && editingSection === 'steps' && !isThisEditing) ||
                 (isEditing && editingSection === 'tips')
@@ -452,6 +608,9 @@ export default function CardReview({
               return (
                 <div
                   key={index}
+                  ref={(el) => {
+                    stepRowRefs.current[index] = el
+                  }}
                   onPointerDown={
                     isThisEditing ? undefined : (e) => onItemPointerDown(e, 'steps', index)
                   }
@@ -462,19 +621,58 @@ export default function CardReview({
                   style={{
                     background: isThisEditing
                       ? 'rgba(255,90,31,0.08)'
+                      : isThisDragSelected
+                      ? 'rgba(255,90,31,0.06)'
                       : 'rgba(255,255,255,0.04)',
                     borderRadius: 14,
                     padding: '15px 16px',
                     display: 'flex',
                     alignItems: 'flex-start',
-                    gap: 12,
-                    border: isThisEditing ? `1px solid ${ACCENT}` : '1px solid transparent',
-                    opacity: isDimmed ? 0.45 : 1,
+                    gap: 10,
+                    border: isThisEditing
+                      ? `1px solid ${ACCENT}`
+                      : isThisDragTarget
+                      ? `2px solid ${ACCENT}`
+                      : '1px solid transparent',
+                    opacity:
+                      isDimmed
+                        ? 0.45
+                        : isThisDragSelected && isDragging
+                        ? 0.55
+                        : 1,
                     transition: 'opacity 180ms, border-color 180ms, background 180ms',
-                    cursor: isThisEditing ? 'text' : 'pointer',
+                    cursor: isThisEditing
+                      ? 'text'
+                      : isDragMode && dragMode!.section === 'steps'
+                      ? 'default'
+                      : 'pointer',
                   }}
                 >
-                  {/* Badge */}
+                  {/* Grip handle — only visible in drag mode for steps section */}
+                  {isDragMode && dragMode!.section === 'steps' && (
+                    <div
+                      onPointerDown={(e) => onGripPointerDown(e, index)}
+                      onPointerMove={onGripPointerMove}
+                      onPointerUp={onGripPointerUp}
+                      onPointerCancel={onGripPointerUp}
+                      aria-label="Drag to reorder"
+                      style={{
+                        width: 28,
+                        height: 30,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'grab',
+                        flexShrink: 0,
+                        touchAction: 'none',
+                        opacity: isThisDragSelected ? 1 : 0.45,
+                      }}
+                    >
+                      <GripIcon />
+                    </div>
+                  )}
+
+                  {/* Numbered badge */}
                   <div
                     style={{
                       width: 30,
@@ -495,8 +693,25 @@ export default function CardReview({
                     {index + 1}
                   </div>
 
-                  {/* Text or input */}
-                  {isThisEditing ? (
+                  {/* Text / spinner / input */}
+                  {splittingIndex === index ? (
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        flex: 1,
+                        paddingTop: 5,
+                        fontFamily: LF.body,
+                        fontSize: 14,
+                        color: LF.muted,
+                        fontStyle: 'italic',
+                      }}
+                    >
+                      <InlineSpinner />
+                      Splitting…
+                    </div>
+                  ) : isThisEditing ? (
                     <input
                       ref={inputRef}
                       type="text"
@@ -541,8 +756,8 @@ export default function CardReview({
               )
             })}
 
-            {/* ADD STEP */}
-            {!isEditing && (
+            {/* ADD STEP button — hidden during edit or drag */}
+            {!isEditing && !isDragMode && (
               <button
                 onClick={() => addItem('steps')}
                 style={{
@@ -585,7 +800,7 @@ export default function CardReview({
           </div>
         </div>
 
-        {/* ── COACH TIPS section ──────────────────────────────────────── */}
+        {/* ── COACH TIPS section ──────────────────────────────────────────── */}
         <div style={{ marginBottom: 12 }}>
           <SectionHeader
             label="Coach Tips"
@@ -596,6 +811,13 @@ export default function CardReview({
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {tips.map((tip, index) => {
               const isThisEditing = editingSection === 'tips' && editingIndex === index
+              const isThisDragSelected =
+                isDragMode && dragMode!.section === 'tips' && dragMode!.index === index
+              const isThisDragTarget =
+                isDragging &&
+                dragTarget === index &&
+                dragMode?.section === 'tips' &&
+                dragTarget !== dragMode.index
               const isDimmed =
                 (isEditing && editingSection === 'tips' && !isThisEditing) ||
                 (isEditing && editingSection === 'steps')
@@ -603,6 +825,9 @@ export default function CardReview({
               return (
                 <div
                   key={index}
+                  ref={(el) => {
+                    tipRowRefs.current[index] = el
+                  }}
                   onPointerDown={
                     isThisEditing ? undefined : (e) => onItemPointerDown(e, 'tips', index)
                   }
@@ -613,18 +838,57 @@ export default function CardReview({
                   style={{
                     background: isThisEditing
                       ? 'rgba(255,90,31,0.06)'
+                      : isThisDragSelected
+                      ? 'rgba(255,90,31,0.06)'
                       : 'rgba(255,255,255,0.025)',
                     borderRadius: 14,
                     padding: 16,
                     display: 'flex',
                     alignItems: 'flex-start',
-                    gap: 12,
-                    border: isThisEditing ? `1px solid ${ACCENT}` : '1px solid transparent',
-                    opacity: isDimmed ? 0.45 : 1,
+                    gap: 10,
+                    border: isThisEditing
+                      ? `1px solid ${ACCENT}`
+                      : isThisDragTarget
+                      ? `2px solid ${ACCENT}`
+                      : '1px solid transparent',
+                    opacity:
+                      isDimmed
+                        ? 0.45
+                        : isThisDragSelected && isDragging
+                        ? 0.55
+                        : 1,
                     transition: 'opacity 180ms, border-color 180ms, background 180ms',
-                    cursor: isThisEditing ? 'text' : 'pointer',
+                    cursor: isThisEditing
+                      ? 'text'
+                      : isDragMode && dragMode!.section === 'tips'
+                      ? 'default'
+                      : 'pointer',
                   }}
                 >
+                  {/* Grip handle — only visible in drag mode for tips section */}
+                  {isDragMode && dragMode!.section === 'tips' && (
+                    <div
+                      onPointerDown={(e) => onGripPointerDown(e, index)}
+                      onPointerMove={onGripPointerMove}
+                      onPointerUp={onGripPointerUp}
+                      onPointerCancel={onGripPointerUp}
+                      aria-label="Drag to reorder"
+                      style={{
+                        width: 28,
+                        height: 30,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'grab',
+                        flexShrink: 0,
+                        touchAction: 'none',
+                        opacity: isThisDragSelected ? 1 : 0.45,
+                      }}
+                    >
+                      <GripIcon />
+                    </div>
+                  )}
+
                   {/* Pin icon container */}
                   <div
                     style={{
@@ -643,7 +907,7 @@ export default function CardReview({
                     <PinIcon color={ACCENT} />
                   </div>
 
-                  {/* Text or input */}
+                  {/* Text / input */}
                   {isThisEditing ? (
                     <input
                       ref={inputRef}
@@ -690,8 +954,8 @@ export default function CardReview({
               )
             })}
 
-            {/* ADD TIP */}
-            {!isEditing && (
+            {/* ADD TIP button — hidden during edit or drag */}
+            {!isEditing && !isDragMode && (
               <button
                 onClick={() => addItem('tips')}
                 style={{
@@ -749,7 +1013,25 @@ export default function CardReview({
           zIndex: 8,
         }}
       >
-        {isEditing ? (
+        {isDragMode ? (
+          <button
+            onClick={exitDragMode}
+            style={{
+              width: '100%',
+              height: 54,
+              borderRadius: 12,
+              background: 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.10)',
+              fontFamily: LF.body,
+              fontSize: 15,
+              fontWeight: 600,
+              color: 'rgba(255,255,255,0.85)',
+              cursor: 'pointer',
+            }}
+          >
+            Done moving
+          </button>
+        ) : isEditing ? (
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               onClick={cancelEdit}
@@ -843,167 +1125,217 @@ export default function CardReview({
         )}
       </div>
 
-      {/* ── Action sheet ────────────────────────────────────────────────── */}
-      {actionSheetItem !== null && (() => {
-        const { section, index } = actionSheetItem
-        const items = section === 'steps' ? steps : tips
-        const itemLabel = section === 'steps' ? 'Step' : 'Tip'
-        const actions: Array<{
-          icon: string
-          label: string
-          action: () => void
-          disabled: boolean
-          danger: boolean
-        }> = [
-          {
-            icon: '✏️',
-            label: 'Edit text',
-            action: () => startEdit(section, index),
-            disabled: false,
-            danger: false,
-          },
-          {
-            icon: '↑',
-            label: 'Move up',
-            action: () => doMove(section, index, -1),
-            disabled: index === 0,
-            danger: false,
-          },
-          {
-            icon: '↓',
-            label: 'Move down',
-            action: () => doMove(section, index, 1),
-            disabled: index === items.length - 1,
-            danger: false,
-          },
-          ...(section === 'steps'
-            ? [
-                {
-                  icon: '⤧',
-                  label: 'Split into two steps',
-                  action: () => doSplit(index),
-                  disabled: false,
-                  danger: false,
-                },
-              ]
-            : []),
-          {
-            icon: '✕',
-            label: `Delete ${itemLabel.toLowerCase()}`,
-            action: () => doDelete(section, index),
-            disabled: false,
-            danger: true,
-          },
-        ]
-
-        return (
-          <>
-            <div
-              onClick={() => setActionSheetItem(null)}
+      {/* ── Split undo / error toast ─────────────────────────────────────── */}
+      {(splitUndo || splitError) && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 96,
+            left: 18,
+            right: 18,
+            background: LF.card,
+            borderRadius: 12,
+            padding: '13px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            border: `1px solid ${splitError ? 'rgba(240,64,64,0.35)' : LF.hairline}`,
+            zIndex: 60,
+            animation: 'toastSlideIn 200ms ease-out',
+            boxShadow: '0 4px 24px rgba(0,0,0,0.45)',
+          }}
+        >
+          <span
+            style={{
+              fontFamily: LF.body,
+              fontSize: 14,
+              color: splitError ? '#f04040' : 'rgba(255,255,255,0.9)',
+              lineHeight: 1.3,
+            }}
+          >
+            {splitError ?? 'Split! Review the two steps.'}
+          </span>
+          {splitUndo && (
+            <button
+              onClick={undoSplit}
               style={{
-                position: 'fixed',
-                inset: 0,
-                background: 'rgba(0,0,0,0.5)',
-                zIndex: 50,
-              }}
-            />
-            <div
-              style={{
-                position: 'fixed',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                background: LF.card,
-                borderRadius: '18px 18px 0 0',
-                paddingBottom: 'max(20px, env(safe-area-inset-bottom))',
-                boxShadow: '0 -12px 40px rgba(0,0,0,0.55)',
-                zIndex: 51,
-                animation: 'sheetSlideIn 220ms ease-out',
+                color: ACCENT,
+                fontFamily: LF.body,
+                fontSize: 14,
+                fontWeight: 700,
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 0,
+                flexShrink: 0,
               }}
             >
-              {/* Drag pill */}
+              Undo
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ── Action sheet ─────────────────────────────────────────────────── */}
+      {actionSheetItem !== null &&
+        (() => {
+          const { section, index } = actionSheetItem
+          const items = section === 'steps' ? steps : tips
+          const itemLabel = section === 'steps' ? 'Step' : 'Tip'
+
+          type ActionEntry = {
+            icon: string
+            label: string
+            action: () => void
+            disabled: boolean
+            danger: boolean
+          }
+
+          const actions: ActionEntry[] = [
+            {
+              icon: '⠿',
+              label: 'Move',
+              action: () => enterDragMode(section, index),
+              disabled: items.length <= 1,
+              danger: false,
+            },
+            ...(section === 'steps'
+              ? [
+                  {
+                    icon: '⤧',
+                    label: 'Split into two steps',
+                    action: () => doAiSplit(index),
+                    disabled: !steps[index]?.trim(),
+                    danger: false,
+                  },
+                  {
+                    icon: '↕',
+                    label: 'Merge with next',
+                    action: () => doMerge(index),
+                    disabled: index >= steps.length - 1,
+                    danger: false,
+                  },
+                ]
+              : []),
+            {
+              icon: '✕',
+              label: `Delete ${itemLabel.toLowerCase()}`,
+              action: () => doDelete(section, index),
+              disabled: false,
+              danger: true,
+            },
+          ]
+
+          return (
+            <>
+              <div
+                onClick={() => setActionSheetItem(null)}
+                style={{
+                  position: 'fixed',
+                  inset: 0,
+                  background: 'rgba(0,0,0,0.5)',
+                  zIndex: 50,
+                }}
+              />
               <div
                 style={{
-                  display: 'flex',
-                  justifyContent: 'center',
-                  paddingTop: 12,
-                  paddingBottom: 4,
+                  position: 'fixed',
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  background: LF.card,
+                  borderRadius: '18px 18px 0 0',
+                  paddingBottom: 'max(20px, env(safe-area-inset-bottom))',
+                  boxShadow: '0 -12px 40px rgba(0,0,0,0.55)',
+                  zIndex: 51,
+                  animation: 'sheetSlideIn 220ms ease-out',
                 }}
               >
+                {/* Drag pill */}
                 <div
                   style={{
-                    width: 40,
-                    height: 4,
-                    borderRadius: 2,
-                    background: 'rgba(255,255,255,0.18)',
-                  }}
-                />
-              </div>
-
-              {/* Item preview */}
-              <div
-                style={{
-                  padding: '8px 20px 12px',
-                  borderBottom: `1px solid ${LF.hairline}`,
-                }}
-              >
-                <span
-                  style={{
-                    fontFamily: LF.body,
-                    fontSize: 13,
-                    color: LF.muted,
-                    lineHeight: 1.4,
-                    fontStyle: section === 'tips' ? 'italic' : 'normal',
-                  }}
-                >
-                  {itemLabel} {index + 1}: {items[index] || `Empty ${itemLabel.toLowerCase()}`}
-                </span>
-              </div>
-
-              {actions.map(({ icon, label, action, disabled, danger }) => (
-                <button
-                  key={label}
-                  onClick={disabled ? undefined : action}
-                  style={{
-                    width: '100%',
                     display: 'flex',
-                    alignItems: 'center',
-                    gap: 14,
-                    padding: '14px 20px',
-                    background: 'transparent',
-                    border: 'none',
-                    borderBottom: `1px solid ${LF.hairline}`,
-                    cursor: disabled ? 'not-allowed' : 'pointer',
-                    opacity: disabled ? 0.35 : 1,
+                    justifyContent: 'center',
+                    paddingTop: 12,
+                    paddingBottom: 4,
                   }}
                 >
-                  <span
+                  <div
                     style={{
-                      width: 22,
-                      textAlign: 'center',
-                      fontSize: 16,
-                      flexShrink: 0,
-                      color: danger ? '#f04040' : LF.muted,
+                      width: 40,
+                      height: 4,
+                      borderRadius: 2,
+                      background: 'rgba(255,255,255,0.18)',
                     }}
-                  >
-                    {icon}
-                  </span>
+                  />
+                </div>
+
+                {/* Item preview */}
+                <div
+                  style={{
+                    padding: '8px 20px 12px',
+                    borderBottom: `1px solid ${LF.hairline}`,
+                  }}
+                >
                   <span
                     style={{
                       fontFamily: LF.body,
-                      fontSize: 15,
-                      fontWeight: 400,
-                      color: danger ? '#f04040' : '#fff',
+                      fontSize: 13,
+                      color: LF.muted,
+                      lineHeight: 1.4,
+                      fontStyle: section === 'tips' ? 'italic' : 'normal',
                     }}
                   >
-                    {label}
+                    {itemLabel} {index + 1}:{' '}
+                    {items[index] || `Empty ${itemLabel.toLowerCase()}`}
                   </span>
-                </button>
-              ))}
-            </div>
-          </>
-        )
-      })()}
+                </div>
+
+                {actions.map(({ icon, label, action, disabled, danger }) => (
+                  <button
+                    key={label}
+                    onClick={disabled ? undefined : action}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 14,
+                      padding: '14px 20px',
+                      background: 'transparent',
+                      border: 'none',
+                      borderBottom: `1px solid ${LF.hairline}`,
+                      cursor: disabled ? 'not-allowed' : 'pointer',
+                      opacity: disabled ? 0.35 : 1,
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 22,
+                        textAlign: 'center',
+                        fontSize: 16,
+                        flexShrink: 0,
+                        color: danger ? '#f04040' : LF.muted,
+                      }}
+                    >
+                      {icon}
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: LF.body,
+                        fontSize: 15,
+                        fontWeight: 400,
+                        color: danger ? '#f04040' : '#fff',
+                      }}
+                    >
+                      {label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )
+        })()}
     </div>
   )
 }
