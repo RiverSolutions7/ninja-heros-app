@@ -381,8 +381,8 @@ export default function LogComponentPage() {
             setStep('card-review')
           }}
           onClose={handleClose}
-          cardIndex={0}
-          totalCards={2}
+          cardIndex={4}
+          totalCards={7}
         />
       )}
 
@@ -392,7 +392,10 @@ export default function LogComponentPage() {
           initialTips={draft.coachTips}
           title={draft.title}
           curriculum={draft.curriculums[0] ?? ''}
-          onBack={() => setStep('card-skills')}
+          onBack={({ steps, tips }) => {
+            setDraft((d) => ({ ...d, sequenceSteps: steps, coachTips: tips }))
+            setStep('card-skills')
+          }}
           onApprove={({ steps, tips }) => {
             const description = [
               ...steps.map((s) => `• ${s}`),
@@ -402,8 +405,8 @@ export default function LogComponentPage() {
             setStep('reveal')
           }}
           onClose={handleClose}
-          cardIndex={1}
-          totalCards={2}
+          cardIndex={5}
+          totalCards={7}
         />
       )}
 

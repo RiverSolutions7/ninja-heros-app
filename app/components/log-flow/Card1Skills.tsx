@@ -122,7 +122,7 @@ export default function Card1Skills({
               flex: 1,
               height: 3,
               borderRadius: 2,
-              background: i === cardIndex ? ACCENT : 'rgba(255,255,255,0.14)',
+              background: i === cardIndex ? ACCENT : i < cardIndex ? 'rgba(255,255,255,0.50)' : 'rgba(255,255,255,0.14)',
               transition: 'background 0.3s ease',
             }}
           />

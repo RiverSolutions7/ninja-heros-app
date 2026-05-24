@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { ACCENT, LF } from './atoms'
 import BottomSheet from '@/app/components/ui/BottomSheet'
 import MenuList, { type MenuItem } from '@/app/components/ui/MenuList'
@@ -141,7 +141,7 @@ interface CardReviewProps {
   /** Curriculum name shown in subtitle, e.g. "Mini Ninjas" */
   curriculum: string
   onApprove: (data: { steps: string[]; tips: string[] }) => void
-  onBack?: () => void
+  onBack?: (state: { steps: string[]; tips: string[] }) => void
   onClose?: () => void
   /** 0-based card index. Default 1 (second of 2 cards). */
   cardIndex?: number
@@ -185,7 +185,7 @@ export default function CardReview({
   const toast = useToast()
 
   // ── Refs ─────────────────────────────────────────────────────────────────
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pointerDownPos = useRef({ x: 0, y: 0 })
   const pointerMoved = useRef(false)
@@ -201,6 +201,14 @@ export default function CardReview({
       return () => clearTimeout(t)
     }
   }, [editingIndex, editingSection])
+
+  // Auto-resize textarea height as edit text changes
+  useEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [editingText])
 
   // Cleanup split undo timer on unmount
   useEffect(() => {
@@ -331,7 +339,7 @@ export default function CardReview({
       const midY = rect.top + rect.height / 2
       if (clientY < midY) return i
     }
-    return Math.max(0, refs.length - 1)
+    return refs.length
   }
 
   const enterDragMode = (section: EditSection, index: number) => {
@@ -453,6 +461,7 @@ export default function CardReview({
 
   return (
     <div
+      onPointerCancel={() => { if (isDragMode || isDragging) exitDragMode() }}
       style={{
         position: 'fixed',
         inset: 0,
@@ -484,7 +493,7 @@ export default function CardReview({
               flex: 1,
               height: 3,
               borderRadius: 2,
-              background: i === cardIndex ? ACCENT : 'rgba(255,255,255,0.14)',
+              background: i === cardIndex ? ACCENT : i < cardIndex ? 'rgba(255,255,255,0.50)' : 'rgba(255,255,255,0.14)',
               transition: 'background 0.3s ease',
             }}
           />
@@ -494,7 +503,7 @@ export default function CardReview({
       {/* ── Back button ─────────────────────────────────────────────────── */}
       {onBack && (
         <button
-          onClick={onBack}
+          onClick={() => onBack?.({ steps, tips })}
           aria-label="Back"
           className="active:opacity-60 transition-opacity"
           style={{
@@ -614,6 +623,7 @@ export default function CardReview({
           overflowY: 'auto',
           WebkitOverflowScrolling: 'touch',
           padding: '14px 18px 0',
+          ...(isDragMode && { touchAction: 'none' }),
         }}
       >
         {/* ── SEQUENCE section ──────────────────────────────────────────── */}
@@ -629,7 +639,7 @@ export default function CardReview({
               const isThisEditing = editingSection === 'steps' && editingIndex === index
               const isThisDragSelected =
                 isDragMode && dragMode!.section === 'steps' && dragMode!.index === index
-              const isThisDragTarget =
+              const showInsertAbove =
                 isDragging &&
                 dragTarget === index &&
                 dragMode?.section === 'steps' &&
@@ -639,157 +649,165 @@ export default function CardReview({
                 (isEditing && editingSection === 'tips')
 
               return (
-                <div
-                  key={index}
-                  ref={(el) => {
-                    stepRowRefs.current[index] = el
-                  }}
-                  onPointerDown={
-                    isThisEditing ? undefined : (e) => onItemPointerDown(e, 'steps', index)
-                  }
-                  onPointerMove={isThisEditing ? undefined : onItemPointerMove}
-                  onPointerUp={
-                    isThisEditing ? undefined : (e) => onItemPointerUp(e, 'steps', index)
-                  }
-                  onContextMenu={(e) => e.preventDefault()}
-                  style={{
-                    ...LONG_PRESS_STYLE,
-                    background: isThisEditing
-                      ? 'rgba(255,90,31,0.08)'
-                      : isThisDragSelected
-                      ? 'rgba(255,90,31,0.06)'
-                      : 'rgba(255,255,255,0.04)',
-                    borderRadius: 14,
-                    padding: '15px 16px',
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: 10,
-                    border: isThisEditing
-                      ? `1px solid ${ACCENT}`
-                      : isThisDragTarget
-                      ? `2px solid ${ACCENT}`
-                      : '1px solid transparent',
-                    opacity:
-                      isDimmed
-                        ? 0.45
+                <Fragment key={index}>
+                  {/* Insertion indicator line above this row */}
+                  {showInsertAbove && (
+                    <div style={{ height: 2, background: ACCENT, borderRadius: 1, margin: '0 12px' }} />
+                  )}
+                  <div
+                    ref={(el) => {
+                      stepRowRefs.current[index] = el
+                    }}
+                    onPointerDown={
+                      isThisEditing ? undefined : (e) => onItemPointerDown(e, 'steps', index)
+                    }
+                    onPointerMove={isThisEditing ? undefined : onItemPointerMove}
+                    onPointerUp={
+                      isThisEditing ? undefined : (e) => onItemPointerUp(e, 'steps', index)
+                    }
+                    onContextMenu={(e) => e.preventDefault()}
+                    style={{
+                      ...LONG_PRESS_STYLE,
+                      background: isThisEditing
+                        ? 'rgba(255,90,31,0.08)'
                         : isThisDragSelected && isDragging
-                        ? 0.55
-                        : 1,
-                    transition: 'opacity 180ms, border-color 180ms, background 180ms',
-                    cursor: isThisEditing
-                      ? 'text'
-                      : isDragMode && dragMode!.section === 'steps'
-                      ? 'default'
-                      : 'pointer',
-                  }}
-                >
-                  {/* Grip handle — only visible in drag mode for steps section */}
-                  {isDragMode && dragMode!.section === 'steps' && (
+                        ? 'rgba(255,90,31,0.14)'
+                        : isThisDragSelected
+                        ? 'rgba(255,90,31,0.06)'
+                        : 'rgba(255,255,255,0.04)',
+                      borderRadius: 14,
+                      padding: '15px 16px',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 10,
+                      border: isThisEditing ? `1px solid ${ACCENT}` : '1px solid transparent',
+                      opacity: isDimmed ? 0.45 : 1,
+                      transform: isThisDragSelected && isDragging ? 'scale(1.015)' : 'none',
+                      boxShadow: isThisDragSelected && isDragging ? '0 4px 20px rgba(0,0,0,0.5)' : 'none',
+                      position: 'relative',
+                      zIndex: isThisDragSelected && isDragging ? 1 : 'auto',
+                      transition: 'opacity 180ms, border-color 180ms, background 180ms',
+                      cursor: isThisEditing
+                        ? 'text'
+                        : isDragMode && dragMode!.section === 'steps'
+                        ? 'default'
+                        : 'pointer',
+                    }}
+                  >
+                    {/* Grip handle — only visible in drag mode for steps section */}
+                    {isDragMode && dragMode!.section === 'steps' && (
+                      <div
+                        onPointerDown={(e) => onGripPointerDown(e, index)}
+                        onPointerMove={onGripPointerMove}
+                        onPointerUp={onGripPointerUp}
+                        onPointerCancel={onGripPointerUp}
+                        aria-label="Drag to reorder"
+                        style={{
+                          width: 28,
+                          height: 30,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'grab',
+                          flexShrink: 0,
+                          touchAction: 'none',
+                          opacity: isThisDragSelected ? 1 : 0.45,
+                        }}
+                      >
+                        <GripIcon />
+                      </div>
+                    )}
+
+                    {/* Numbered badge */}
                     <div
-                      onPointerDown={(e) => onGripPointerDown(e, index)}
-                      onPointerMove={onGripPointerMove}
-                      onPointerUp={onGripPointerUp}
-                      onPointerCancel={onGripPointerUp}
-                      aria-label="Drag to reorder"
                       style={{
-                        width: 28,
+                        width: 30,
                         height: 30,
+                        borderRadius: '50%',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        cursor: 'grab',
+                        fontFamily: LF.display,
+                        fontSize: 13,
+                        fontWeight: 900,
                         flexShrink: 0,
-                        touchAction: 'none',
-                        opacity: isThisDragSelected ? 1 : 0.45,
+                        background: isThisEditing ? ACCENT : 'rgba(255,90,31,0.15)',
+                        border: isThisEditing ? 'none' : `1.5px solid rgba(255,90,31,0.35)`,
+                        color: isThisEditing ? LF.bg : ACCENT,
                       }}
                     >
-                      <GripIcon />
+                      {index + 1}
                     </div>
-                  )}
 
-                  {/* Numbered badge */}
-                  <div
-                    style={{
-                      width: 30,
-                      height: 30,
-                      borderRadius: '50%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontFamily: LF.display,
-                      fontSize: 13,
-                      fontWeight: 900,
-                      flexShrink: 0,
-                      background: isThisEditing ? ACCENT : 'rgba(255,90,31,0.15)',
-                      border: isThisEditing ? 'none' : `1.5px solid rgba(255,90,31,0.35)`,
-                      color: isThisEditing ? LF.bg : ACCENT,
-                    }}
-                  >
-                    {index + 1}
+                    {/* Text / spinner / textarea */}
+                    {splittingIndex === index ? (
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          flex: 1,
+                          paddingTop: 5,
+                          fontFamily: LF.body,
+                          fontSize: 14,
+                          color: LF.muted,
+                          fontStyle: 'italic',
+                        }}
+                      >
+                        <InlineSpinner />
+                        Splitting…
+                      </div>
+                    ) : isThisEditing ? (
+                      <textarea
+                        ref={inputRef}
+                        value={editingText}
+                        onChange={(e) => setEditingText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') { e.preventDefault(); commitEdit() }
+                          if (e.key === 'Escape') cancelEdit()
+                        }}
+                        placeholder="Describe this step…"
+                        rows={1}
+                        style={{
+                          fontFamily: LF.body,
+                          fontSize: 15,
+                          fontWeight: 500,
+                          color: '#fff',
+                          background: 'transparent',
+                          border: 'none',
+                          outline: 'none',
+                          flex: 1,
+                          paddingTop: 3,
+                          lineHeight: 1.45,
+                          resize: 'none',
+                          overflow: 'hidden',
+                          minHeight: 24,
+                        }}
+                      />
+                    ) : (
+                      <span
+                        style={{
+                          fontFamily: LF.body,
+                          fontSize: 15,
+                          fontWeight: 500,
+                          color: step.trim() ? 'rgba(255,255,255,0.92)' : LF.muted,
+                          fontStyle: step.trim() ? 'normal' : 'italic',
+                          flex: 1,
+                          paddingTop: 3,
+                          lineHeight: 1.45,
+                        }}
+                      >
+                        {step || 'Empty step'}
+                      </span>
+                    )}
                   </div>
-
-                  {/* Text / spinner / input */}
-                  {splittingIndex === index ? (
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        flex: 1,
-                        paddingTop: 5,
-                        fontFamily: LF.body,
-                        fontSize: 14,
-                        color: LF.muted,
-                        fontStyle: 'italic',
-                      }}
-                    >
-                      <InlineSpinner />
-                      Splitting…
-                    </div>
-                  ) : isThisEditing ? (
-                    <input
-                      ref={inputRef}
-                      type="text"
-                      value={editingText}
-                      onChange={(e) => setEditingText(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') commitEdit()
-                        if (e.key === 'Escape') cancelEdit()
-                      }}
-                      placeholder="Describe this step…"
-                      style={{
-                        fontFamily: LF.body,
-                        fontSize: 15,
-                        fontWeight: 500,
-                        color: '#fff',
-                        background: 'transparent',
-                        border: 'none',
-                        outline: 'none',
-                        flex: 1,
-                        minWidth: 0,
-                        paddingTop: 3,
-                        lineHeight: 1.45,
-                      }}
-                    />
-                  ) : (
-                    <span
-                      style={{
-                        fontFamily: LF.body,
-                        fontSize: 15,
-                        fontWeight: 500,
-                        color: step.trim() ? 'rgba(255,255,255,0.92)' : LF.muted,
-                        fontStyle: step.trim() ? 'normal' : 'italic',
-                        flex: 1,
-                        paddingTop: 3,
-                        lineHeight: 1.45,
-                      }}
-                    >
-                      {step || 'Empty step'}
-                    </span>
-                  )}
-                </div>
+                </Fragment>
               )
             })}
+            {/* Insertion indicator at end of list */}
+            {isDragging && dragMode?.section === 'steps' && dragTarget === steps.length && (
+              <div style={{ height: 2, background: ACCENT, borderRadius: 1, margin: '0 12px' }} />
+            )}
 
             {/* ADD STEP button — hidden during edit or drag */}
             {!isEditing && !isDragMode && (
@@ -848,7 +866,7 @@ export default function CardReview({
               const isThisEditing = editingSection === 'tips' && editingIndex === index
               const isThisDragSelected =
                 isDragMode && dragMode!.section === 'tips' && dragMode!.index === index
-              const isThisDragTarget =
+              const showInsertAbove =
                 isDragging &&
                 dragTarget === index &&
                 dragMode?.section === 'tips' &&
@@ -858,138 +876,146 @@ export default function CardReview({
                 (isEditing && editingSection === 'steps')
 
               return (
-                <div
-                  key={index}
-                  ref={(el) => {
-                    tipRowRefs.current[index] = el
-                  }}
-                  onPointerDown={
-                    isThisEditing ? undefined : (e) => onItemPointerDown(e, 'tips', index)
-                  }
-                  onPointerMove={isThisEditing ? undefined : onItemPointerMove}
-                  onPointerUp={
-                    isThisEditing ? undefined : (e) => onItemPointerUp(e, 'tips', index)
-                  }
-                  onContextMenu={(e) => e.preventDefault()}
-                  style={{
-                    ...LONG_PRESS_STYLE,
-                    background: isThisEditing
-                      ? 'rgba(255,90,31,0.06)'
-                      : isThisDragSelected
-                      ? 'rgba(255,90,31,0.06)'
-                      : 'rgba(255,255,255,0.025)',
-                    borderRadius: 14,
-                    padding: 16,
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: 10,
-                    border: isThisEditing
-                      ? `1px solid ${ACCENT}`
-                      : isThisDragTarget
-                      ? `2px solid ${ACCENT}`
-                      : '1px solid transparent',
-                    opacity:
-                      isDimmed
-                        ? 0.45
+                <Fragment key={index}>
+                  {/* Insertion indicator line above this row */}
+                  {showInsertAbove && (
+                    <div style={{ height: 2, background: ACCENT, borderRadius: 1, margin: '0 12px' }} />
+                  )}
+                  <div
+                    ref={(el) => {
+                      tipRowRefs.current[index] = el
+                    }}
+                    onPointerDown={
+                      isThisEditing ? undefined : (e) => onItemPointerDown(e, 'tips', index)
+                    }
+                    onPointerMove={isThisEditing ? undefined : onItemPointerMove}
+                    onPointerUp={
+                      isThisEditing ? undefined : (e) => onItemPointerUp(e, 'tips', index)
+                    }
+                    onContextMenu={(e) => e.preventDefault()}
+                    style={{
+                      ...LONG_PRESS_STYLE,
+                      background: isThisEditing
+                        ? 'rgba(255,90,31,0.06)'
                         : isThisDragSelected && isDragging
-                        ? 0.55
-                        : 1,
-                    transition: 'opacity 180ms, border-color 180ms, background 180ms',
-                    cursor: isThisEditing
-                      ? 'text'
-                      : isDragMode && dragMode!.section === 'tips'
-                      ? 'default'
-                      : 'pointer',
-                  }}
-                >
-                  {/* Grip handle — only visible in drag mode for tips section */}
-                  {isDragMode && dragMode!.section === 'tips' && (
+                        ? 'rgba(255,90,31,0.14)'
+                        : isThisDragSelected
+                        ? 'rgba(255,90,31,0.06)'
+                        : 'rgba(255,255,255,0.025)',
+                      borderRadius: 14,
+                      padding: 16,
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 10,
+                      border: isThisEditing ? `1px solid ${ACCENT}` : '1px solid transparent',
+                      opacity: isDimmed ? 0.45 : 1,
+                      transform: isThisDragSelected && isDragging ? 'scale(1.015)' : 'none',
+                      boxShadow: isThisDragSelected && isDragging ? '0 4px 20px rgba(0,0,0,0.5)' : 'none',
+                      position: 'relative',
+                      zIndex: isThisDragSelected && isDragging ? 1 : 'auto',
+                      transition: 'opacity 180ms, border-color 180ms, background 180ms',
+                      cursor: isThisEditing
+                        ? 'text'
+                        : isDragMode && dragMode!.section === 'tips'
+                        ? 'default'
+                        : 'pointer',
+                    }}
+                  >
+                    {/* Grip handle — only visible in drag mode for tips section */}
+                    {isDragMode && dragMode!.section === 'tips' && (
+                      <div
+                        onPointerDown={(e) => onGripPointerDown(e, index)}
+                        onPointerMove={onGripPointerMove}
+                        onPointerUp={onGripPointerUp}
+                        onPointerCancel={onGripPointerUp}
+                        aria-label="Drag to reorder"
+                        style={{
+                          width: 28,
+                          height: 30,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'grab',
+                          flexShrink: 0,
+                          touchAction: 'none',
+                          opacity: isThisDragSelected ? 1 : 0.45,
+                        }}
+                      >
+                        <GripIcon />
+                      </div>
+                    )}
+
+                    {/* Pin icon container */}
                     <div
-                      onPointerDown={(e) => onGripPointerDown(e, index)}
-                      onPointerMove={onGripPointerMove}
-                      onPointerUp={onGripPointerUp}
-                      onPointerCancel={onGripPointerUp}
-                      aria-label="Drag to reorder"
                       style={{
-                        width: 28,
+                        width: 30,
                         height: 30,
+                        borderRadius: 8,
+                        background: isThisEditing
+                          ? 'rgba(255,90,31,0.20)'
+                          : 'rgba(255,90,31,0.12)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        cursor: 'grab',
                         flexShrink: 0,
-                        touchAction: 'none',
-                        opacity: isThisDragSelected ? 1 : 0.45,
                       }}
                     >
-                      <GripIcon />
+                      <PinIcon color={ACCENT} />
                     </div>
-                  )}
 
-                  {/* Pin icon container */}
-                  <div
-                    style={{
-                      width: 30,
-                      height: 30,
-                      borderRadius: 8,
-                      background: isThisEditing
-                        ? 'rgba(255,90,31,0.20)'
-                        : 'rgba(255,90,31,0.12)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                    }}
-                  >
-                    <PinIcon color={ACCENT} />
+                    {/* Text / textarea */}
+                    {isThisEditing ? (
+                      <textarea
+                        ref={inputRef}
+                        value={editingText}
+                        onChange={(e) => setEditingText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') { e.preventDefault(); commitEdit() }
+                          if (e.key === 'Escape') cancelEdit()
+                        }}
+                        placeholder="Coach tip…"
+                        rows={1}
+                        style={{
+                          fontFamily: LF.body,
+                          fontSize: 15,
+                          fontWeight: 400,
+                          fontStyle: 'italic',
+                          color: '#fff',
+                          background: 'transparent',
+                          border: 'none',
+                          outline: 'none',
+                          flex: 1,
+                          paddingTop: 3,
+                          lineHeight: 1.45,
+                          resize: 'none',
+                          overflow: 'hidden',
+                          minHeight: 24,
+                        }}
+                      />
+                    ) : (
+                      <span
+                        style={{
+                          fontFamily: LF.body,
+                          fontSize: 15,
+                          fontWeight: 400,
+                          fontStyle: 'italic',
+                          color: tip.trim() ? '#d6dbe6' : LF.muted,
+                          flex: 1,
+                          paddingTop: 3,
+                          lineHeight: 1.45,
+                        }}
+                      >
+                        {tip || 'Empty tip'}
+                      </span>
+                    )}
                   </div>
-
-                  {/* Text / input */}
-                  {isThisEditing ? (
-                    <input
-                      ref={inputRef}
-                      type="text"
-                      value={editingText}
-                      onChange={(e) => setEditingText(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') commitEdit()
-                        if (e.key === 'Escape') cancelEdit()
-                      }}
-                      placeholder="Coach tip…"
-                      style={{
-                        fontFamily: LF.body,
-                        fontSize: 15,
-                        fontWeight: 400,
-                        fontStyle: 'italic',
-                        color: '#fff',
-                        background: 'transparent',
-                        border: 'none',
-                        outline: 'none',
-                        flex: 1,
-                        minWidth: 0,
-                        paddingTop: 3,
-                        lineHeight: 1.45,
-                      }}
-                    />
-                  ) : (
-                    <span
-                      style={{
-                        fontFamily: LF.body,
-                        fontSize: 15,
-                        fontWeight: 400,
-                        fontStyle: 'italic',
-                        color: tip.trim() ? '#d6dbe6' : LF.muted,
-                        flex: 1,
-                        paddingTop: 3,
-                        lineHeight: 1.45,
-                      }}
-                    >
-                      {tip || 'Empty tip'}
-                    </span>
-                  )}
-                </div>
+                </Fragment>
               )
             })}
+            {/* Insertion indicator at end of list */}
+            {isDragging && dragMode?.section === 'tips' && dragTarget === tips.length && (
+              <div style={{ height: 2, background: ACCENT, borderRadius: 1, margin: '0 12px' }} />
+            )}
 
             {/* ADD TIP button — hidden during edit or drag */}
             {!isEditing && !isDragMode && (

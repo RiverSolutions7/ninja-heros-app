@@ -65,6 +65,7 @@ Update the content based on what the coach just said:
 1. Keep the existing name UNLESS the coach is clearly renaming it.
 2. Update or expand the sequence steps to incorporate what the coach added. Keep valid existing steps.
 3. Update or expand the coach tips similarly.
+   IMPORTANT: Tips must NOT repeat or restate any sequence step. Tips are observational; steps are procedural.
 ${skillsSection}
 ${skillsSection ? '5.' : '4.'} Update the duration ONLY if the coach explicitly mentions a new time. Otherwise keep the existing value (${existing.durationMinutes ?? 'null'}).
 
@@ -77,6 +78,7 @@ ${jsonExample}` : null
 1. A short, clear name for this ${typeLabel} (2–5 words). Infer the most natural title from what they described — the coach does not need to say the name explicitly.
 2. 2–4 clear sequence steps (setup → how to run it → any key variation). Each step is one action-oriented sentence a substitute coach can follow. No bullet prefix needed.
 3. 1–3 coach tips: things to watch for, common mistakes, or encouragement cues. Short sentences.
+   IMPORTANT: Tips must NOT repeat or restate any sequence step. Steps are procedural ("what to do"); tips are observational ("what to watch for, warn about, or encourage"). If information belongs in a step, omit it from tips entirely.
 ${skillsSection}
 ${skillsSection ? '5.' : '4.'} Duration in minutes as an integer if the coach explicitly mentions a time (e.g. "15 minutes", "half an hour", "five minute"). Otherwise null.
 
