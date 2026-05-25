@@ -94,7 +94,7 @@ export default function BottomSheet({
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/60 transition-opacity duration-300"
+        className="fixed inset-0 bg-black/40 transition-opacity duration-300"
         style={{ zIndex: 9999, opacity: animateIn ? 1 : 0 }}
         onClick={onClose}
         aria-hidden="true"
@@ -105,12 +105,19 @@ export default function BottomSheet({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="fixed inset-x-0 bottom-0 bg-bg-card rounded-t-2xl flex flex-col ease-out"
+        className="fixed inset-x-0 bottom-0 rounded-t-2xl flex flex-col"
         style={{
           zIndex: 10000,
           maxHeight,
+          background: 'rgba(12, 18, 38, 0.88)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
           transform: animateIn ? `translateY(${swipeDy}px)` : 'translateY(100%)',
-          transition: swipeStartRef.current !== null ? 'none' : 'transform 300ms ease-out',
+          transition: swipeStartRef.current !== null
+            ? 'none'
+            : animateIn
+              ? 'transform 420ms cubic-bezier(0.34, 1.56, 0.64, 1)'
+              : 'transform 250ms ease-in',
         }}
       >
         {/* Drag handle — swipe-down dismiss target */}

@@ -200,6 +200,7 @@ export default function CardReview({
 
   // ── Action sheet ─────────────────────────────────────────────────────────
   const [actionSheetItem, setActionSheetItem] = useState<ActionSheetItem | null>(null)
+  const [pressedItem, setPressedItem] = useState<ActionSheetItem | null>(null)
 
   // ── Drag mode ────────────────────────────────────────────────────────────
   const [dragMode, setDragMode] = useState<DragMode | null>(null)
@@ -314,8 +315,10 @@ export default function CardReview({
 
     pointerDownPos.current = { x: e.clientX, y: e.clientY }
     pointerMoved.current = false
+    setPressedItem({ section, index })
     longPressTimer.current = setTimeout(() => {
       longPressTimer.current = null
+      setPressedItem(null)
       setActionSheetItem({ section, index })
     }, 500)
   }
@@ -326,6 +329,7 @@ export default function CardReview({
     const dy = Math.abs(e.clientY - pointerDownPos.current.y)
     if (dx > 12 || dy > 12) {
       pointerMoved.current = true
+      setPressedItem(null)
       if (longPressTimer.current) {
         clearTimeout(longPressTimer.current)
         longPressTimer.current = null
@@ -347,6 +351,7 @@ export default function CardReview({
       return
     }
 
+    setPressedItem(null)
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current)
       longPressTimer.current = null
@@ -704,11 +709,15 @@ export default function CardReview({
                       gap: 10,
                       border: isThisEditing ? `1px solid ${ACCENT}` : '1px solid transparent',
                       opacity: isDimmed ? 0.45 : 1,
-                      transform: isThisDragSelected && isDragging ? 'scale(1.015)' : 'none',
+                      transform: isThisDragSelected && isDragging
+                        ? 'scale(1.015)'
+                        : pressedItem?.section === 'steps' && pressedItem?.index === index
+                        ? 'scale(0.97)'
+                        : 'scale(1)',
                       boxShadow: isThisDragSelected && isDragging ? '0 4px 20px rgba(0,0,0,0.5)' : 'none',
                       position: 'relative',
                       zIndex: isThisDragSelected && isDragging ? 1 : 'auto',
-                      transition: 'opacity 180ms, border-color 180ms, background 180ms',
+                      transition: 'opacity 180ms, border-color 180ms, background 180ms, transform 150ms ease-out',
                       cursor: isThisEditing
                         ? 'text'
                         : isDragMode && dragMode!.section === 'steps'
@@ -930,11 +939,15 @@ export default function CardReview({
                       gap: 10,
                       border: isThisEditing ? `1px solid ${ACCENT}` : '1px solid transparent',
                       opacity: isDimmed ? 0.45 : 1,
-                      transform: isThisDragSelected && isDragging ? 'scale(1.015)' : 'none',
+                      transform: isThisDragSelected && isDragging
+                        ? 'scale(1.015)'
+                        : pressedItem?.section === 'tips' && pressedItem?.index === index
+                        ? 'scale(0.97)'
+                        : 'scale(1)',
                       boxShadow: isThisDragSelected && isDragging ? '0 4px 20px rgba(0,0,0,0.5)' : 'none',
                       position: 'relative',
                       zIndex: isThisDragSelected && isDragging ? 1 : 'auto',
-                      transition: 'opacity 180ms, border-color 180ms, background 180ms',
+                      transition: 'opacity 180ms, border-color 180ms, background 180ms, transform 150ms ease-out',
                       cursor: isThisEditing
                         ? 'text'
                         : isDragMode && dragMode!.section === 'tips'
@@ -1232,30 +1245,51 @@ export default function CardReview({
 
         const menuItems: MenuItem[] = [
           {
-            icon: <span aria-hidden="true">⠿</span>,
+            icon: (
+              <svg viewBox="0 0 16 16" fill="currentColor" width="20" height="20" aria-hidden="true">
+                <circle cx="5.5" cy="3.5" r="1.5"/><circle cx="10.5" cy="3.5" r="1.5"/>
+                <circle cx="5.5" cy="8" r="1.5"/><circle cx="10.5" cy="8" r="1.5"/>
+                <circle cx="5.5" cy="12.5" r="1.5"/><circle cx="10.5" cy="12.5" r="1.5"/>
+              </svg>
+            ),
             label: 'Move',
             onClick: () => enterDragMode(section, index),
             disabled: items.length <= 1,
           },
           ...(section === 'steps' ? [
             {
-              icon: <span aria-hidden="true">⤧</span>,
+              icon: (
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
+                  <circle cx="4" cy="4" r="2"/><circle cx="4" cy="12" r="2"/>
+                  <line x1="5.8" y1="4.8" x2="14" y2="12"/><line x1="14" y1="4" x2="9" y2="8.5"/>
+                </svg>
+              ),
               label: 'Split into two steps',
               onClick: () => doAiSplit(index),
               disabled: !steps[index]?.trim(),
             },
             {
-              icon: <span aria-hidden="true">↕</span>,
+              icon: (
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
+                  <path d="M3 2L8 8L13 2"/><line x1="8" y1="8" x2="8" y2="14"/>
+                </svg>
+              ),
               label: 'Merge with next',
               onClick: () => doMerge(index),
               disabled: index >= steps.length - 1,
             },
           ] : []),
           {
-            icon: <span aria-hidden="true">✕</span>,
+            icon: (
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden="true">
+                <path d="M2 4h12"/><path d="M5 4V2.5h6V4"/><path d="M3 4l1 9.5h8L13 4"/>
+                <line x1="6.5" y1="7" x2="6.5" y2="11"/><line x1="9.5" y1="7" x2="9.5" y2="11"/>
+              </svg>
+            ),
             label: `Delete ${itemLabel.toLowerCase()}`,
             onClick: () => doDelete(section, index),
             destructive: true,
+            dividerAbove: true,
           },
         ]
 
@@ -1264,16 +1298,17 @@ export default function CardReview({
             visible
             onClose={() => setActionSheetItem(null)}
           >
-            <div className="px-5 pb-3 pt-1 border-b border-bg-border">
-              <p
-                className="text-xs text-text-dim leading-relaxed"
-                style={{ fontStyle: section === 'tips' ? 'italic' : 'normal' }}
-              >
-                {itemLabel} {index + 1}:{' '}
-                {items[index] || `Empty ${itemLabel.toLowerCase()}`}
-              </p>
-            </div>
             <MenuList items={menuItems} ariaLabel={`${itemLabel} actions`} />
+            <div className="px-4 pt-2 pb-6">
+              <button
+                type="button"
+                onClick={() => setActionSheetItem(null)}
+                className="w-full py-4 rounded-2xl text-[15px] font-semibold text-text-primary active:opacity-60 transition-opacity"
+                style={{ background: 'rgba(255,255,255,0.08)' }}
+              >
+                Cancel
+              </button>
+            </div>
           </BottomSheet>
         )
       })()}
