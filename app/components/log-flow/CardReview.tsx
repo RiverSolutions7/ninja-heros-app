@@ -741,22 +741,21 @@ export default function CardReview({
                       </div>
                     )}
 
-                    {/* Numbered badge */}
+                    {/* Step badge — orange pill */}
                     <div
                       style={{
-                        width: 30,
-                        height: 30,
-                        borderRadius: '50%',
+                        width: 20,
+                        height: 22,
+                        borderRadius: 6,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         fontFamily: LF.display,
-                        fontSize: 13,
+                        fontSize: 12,
                         fontWeight: 900,
                         flexShrink: 0,
-                        background: isThisEditing ? ACCENT : 'rgba(255,90,31,0.15)',
-                        border: isThisEditing ? 'none' : `1.5px solid rgba(255,90,31,0.35)`,
-                        color: isThisEditing ? LF.bg : ACCENT,
+                        background: isThisEditing ? ACCENT : 'rgba(255,90,31,0.90)',
+                        color: '#fff',
                       }}
                     >
                       {index + 1}
