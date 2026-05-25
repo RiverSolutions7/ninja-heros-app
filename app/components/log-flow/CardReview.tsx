@@ -90,6 +90,35 @@ function PinIcon({ color }: { color: string }) {
   )
 }
 
+// ─── Back chevron icon ────────────────────────────────────────────────────────
+function BackChevronIcon() {
+  return (
+    <svg width="9" height="16" viewBox="0 0 9 16" fill="none" aria-hidden="true">
+      <path
+        d="M7.5 1.5L1.5 8L7.5 14.5"
+        stroke="rgba(255,255,255,0.65)"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+// ─── Close × icon ─────────────────────────────────────────────────────────────
+function CloseXIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path
+        d="M1 1L13 13M13 1L1 13"
+        stroke="rgba(255,255,255,0.65)"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
 // ─── Grip icon ────────────────────────────────────────────────────────────────
 function GripIcon() {
   return (
@@ -512,12 +541,9 @@ export default function CardReview({
             left: 18,
             width: 44,
             height: 44,
-            borderRadius: '50%',
-            background: 'rgba(255,255,255,0.07)',
-            border: '1px solid rgba(255,255,255,0.09)',
-            color: 'rgba(255,255,255,0.55)',
-            fontSize: 20,
-            lineHeight: 1,
+            borderRadius: 10,
+            background: 'rgba(255,255,255,0.08)',
+            border: 'none',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -525,7 +551,7 @@ export default function CardReview({
             zIndex: 9,
           }}
         >
-          ‹
+          <BackChevronIcon />
         </button>
       )}
 
@@ -541,12 +567,9 @@ export default function CardReview({
             right: 18,
             width: 44,
             height: 44,
-            borderRadius: '50%',
-            background: 'rgba(255,255,255,0.07)',
-            border: '1px solid rgba(255,255,255,0.09)',
-            color: 'rgba(255,255,255,0.55)',
-            fontSize: 18,
-            lineHeight: 1,
+            borderRadius: 10,
+            background: 'rgba(255,255,255,0.08)',
+            border: 'none',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -554,7 +577,7 @@ export default function CardReview({
             zIndex: 9,
           }}
         >
-          ×
+          <CloseXIcon />
         </button>
       )}
 
