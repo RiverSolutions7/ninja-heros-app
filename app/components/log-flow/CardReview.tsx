@@ -74,18 +74,17 @@ function MicIcon() {
   )
 }
 
-// ─── Pin icon ─────────────────────────────────────────────────────────────────
-function PinIcon({ color }: { color: string }) {
+// ─── Lightbulb icon ───────────────────────────────────────────────────────────
+function LightbulbIcon({ color }: { color: string }) {
   return (
-    <svg width="14" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg width="14" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path
-        d="M12 2a6 6 0 0 1 6 6c0 5-6 13-6 13S6 13 6 8a6 6 0 0 1 6-6z"
+        d="M9 17h6M10 20h4M12 3a6 6 0 0 1 6 6c0 2.5-1.4 4.7-3.5 5.9V16H9.5v-1.1C7.4 13.7 6 11.5 6 9a6 6 0 0 1 6-6z"
         stroke={color}
-        strokeWidth="2"
+        strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <circle cx="12" cy="8" r="2" stroke={color} strokeWidth="2" fill="none" />
     </svg>
   )
 }
@@ -982,7 +981,7 @@ export default function CardReview({
                         flexShrink: 0,
                       }}
                     >
-                      <PinIcon color={ACCENT} />
+                      <LightbulbIcon color={ACCENT} />
                     </div>
 
                     {/* Text / textarea */}
