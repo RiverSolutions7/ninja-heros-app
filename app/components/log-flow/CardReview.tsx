@@ -1,6 +1,21 @@
 'use client'
 
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import {
+  DndContext,
+  type DragEndEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { ACCENT, LF } from './atoms'
 import BottomSheet from '@/app/components/ui/BottomSheet'
 import MenuList, { type MenuItem } from '@/app/components/ui/MenuList'
@@ -148,6 +163,22 @@ function InlineSpinner() {
   )
 }
 
+// ─── Sortable item wrapper ────────────────────────────────────────────────────
+type UseSortableReturn = ReturnType<typeof useSortable>
+
+function SortableItem({
+  id,
+  children,
+}: {
+  id: string
+  children: (
+    props: Pick<UseSortableReturn, 'setNodeRef' | 'listeners' | 'transform' | 'transition' | 'isDragging'>,
+  ) => React.ReactNode
+}) {
+  const sortable = useSortable({ id })
+  return <>{children(sortable)}</>
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 type EditSection = 'steps' | 'tips'
 
@@ -204,8 +235,6 @@ export default function CardReview({
 
   // ── Drag mode ────────────────────────────────────────────────────────────
   const [dragMode, setDragMode] = useState<DragMode | null>(null)
-  const [dragTarget, setDragTarget] = useState<number | null>(null)
-  const [isDragging, setIsDragging] = useState(false)
 
   // ── AI split ─────────────────────────────────────────────────────────────
   const [splittingIndex, setSplittingIndex] = useState<number | null>(null)
@@ -218,8 +247,11 @@ export default function CardReview({
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pointerDownPos = useRef({ x: 0, y: 0 })
   const pointerMoved = useRef(false)
-  const stepRowRefs = useRef<(HTMLDivElement | null)[]>([])
-  const tipRowRefs = useRef<(HTMLDivElement | null)[]>([])
+
+  // ── dnd-kit sensors ──────────────────────────────────────────────────────
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  )
 
   // ── Effects ──────────────────────────────────────────────────────────────
 
@@ -346,7 +378,6 @@ export default function CardReview({
     if (dragMode !== null) {
       if (dragMode.section === section && dragMode.index === index) {
         setDragMode(null)
-        setDragTarget(null)
       }
       return
     }
@@ -364,61 +395,24 @@ export default function CardReview({
 
   // ── Drag helpers ──────────────────────────────────────────────────────────
 
-  const computeTarget = (clientY: number, section: EditSection): number => {
-    const refs = section === 'steps' ? stepRowRefs.current : tipRowRefs.current
-    for (let i = 0; i < refs.length; i++) {
-      const rect = refs[i]?.getBoundingClientRect()
-      if (!rect) continue
-      const midY = rect.top + rect.height / 2
-      if (clientY < midY) return i
-    }
-    return refs.length
-  }
-
   const enterDragMode = (section: EditSection, index: number) => {
     setActionSheetItem(null)
     setDragMode({ section, index })
-    setDragTarget(index)
-  }
-
-  const onGripPointerDown = (e: React.PointerEvent<HTMLDivElement>, _index: number) => {
-    e.preventDefault()
-    e.stopPropagation()
-    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-    setIsDragging(true)
-  }
-
-  const onGripPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragMode || !isDragging) return
-    const target = computeTarget(e.clientY, dragMode.section)
-    setDragTarget(target)
-  }
-
-  const onGripPointerUp = (_e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragMode) {
-      setIsDragging(false)
-      return
-    }
-    const fromIndex = dragMode.index
-    const toIndex = dragTarget ?? fromIndex
-    if (fromIndex !== toIndex) {
-      const setter = dragMode.section === 'steps' ? setSteps : setTips
-      setter((prev) => {
-        const a = [...prev]
-        const [removed] = a.splice(fromIndex, 1)
-        a.splice(toIndex, 0, removed)
-        return a
-      })
-    }
-    setIsDragging(false)
-    setDragMode(null)
-    setDragTarget(null)
   }
 
   const exitDragMode = () => {
     setDragMode(null)
-    setDragTarget(null)
-    setIsDragging(false)
+  }
+
+  const handleDragEnd = (section: EditSection) => ({ active, over }: DragEndEvent) => {
+    if (over && active.id !== over.id) {
+      const getIdx = (id: string) => parseInt(id.toString().split('-')[1])
+      const setter = section === 'steps' ? setSteps : setTips
+      setter((prev) =>
+        arrayMove(prev, getIdx(active.id.toString()), getIdx(over.id.toString())),
+      )
+    }
+    exitDragMode()
   }
 
   // ── Action sheet operations ───────────────────────────────────────────────
@@ -494,7 +488,7 @@ export default function CardReview({
 
   return (
     <div
-      onPointerCancel={() => { if (isDragMode || isDragging) exitDragMode() }}
+      onPointerCancel={() => { if (isDragMode) exitDragMode() }}
       style={{
         position: 'fixed',
         inset: 0,
@@ -507,143 +501,142 @@ export default function CardReview({
     >
       <style>{ANIM_CSS}</style>
 
-      {/* ── Progress bar ────────────────────────────────────────────────── */}
+      {/* ── Header block ────────────────────────────────────────────────── */}
       <div
         style={{
           position: 'absolute',
-          top: 62,
+          top: 0,
           left: 0,
           right: 0,
-          display: 'flex',
-          gap: 3,
-          padding: '0 18px',
+          zIndex: 9,
+          background: LF.bg,
         }}
       >
-        {Array.from({ length: totalCards }).map((_, i) => (
-          <div
-            key={i}
-            style={{
-              flex: 1,
-              height: 3,
-              borderRadius: 2,
-              background: i === cardIndex ? ACCENT : i < cardIndex ? 'rgba(255,255,255,0.50)' : 'rgba(255,255,255,0.14)',
-              transition: 'background 0.3s ease',
-            }}
-          />
-        ))}
-      </div>
-
-      {/* ── Back button ─────────────────────────────────────────────────── */}
-      {onBack && (
-        <button
-          onClick={() => onBack?.({ steps, tips })}
-          aria-label="Back"
-          className="active:opacity-60 transition-opacity"
-          style={{
-            position: 'absolute',
-            top: 70,
-            left: 18,
-            width: 44,
-            height: 44,
-            borderRadius: 10,
-            background: 'rgba(255,255,255,0.08)',
-            border: 'none',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9,
-          }}
-        >
-          <BackChevronIcon />
-        </button>
-      )}
-
-      {/* ── Close button ────────────────────────────────────────────────── */}
-      {onClose && (
-        <button
-          onClick={onClose}
-          aria-label="Close"
-          className="active:opacity-60 transition-opacity"
-          style={{
-            position: 'absolute',
-            top: 70,
-            right: 18,
-            width: 44,
-            height: 44,
-            borderRadius: 10,
-            background: 'rgba(255,255,255,0.08)',
-            border: 'none',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9,
-          }}
-        >
-          <CloseXIcon />
-        </button>
-      )}
-
-      {/* ── Fixed header ────────────────────────────────────────────────── */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 72,
-          left: 0,
-          right: 0,
-          padding: '0 20px',
-          paddingLeft: onBack ? 56 : 20,
-          paddingRight: onClose ? 56 : 20,
-        }}
-      >
+        {/* Progress bar */}
         <div
           style={{
-            fontFamily: LF.body,
-            fontSize: 22,
-            fontWeight: 500,
-            color: '#fff',
-            letterSpacing: '-0.01em',
-            lineHeight: 1.2,
+            display: 'flex',
+            gap: 3,
+            padding: '0 18px',
+            paddingTop: 60,
+            marginBottom: 6,
           }}
         >
-          {isDragMode ? 'Drag to reorder' : 'Review'}
+          {Array.from({ length: totalCards }).map((_, i) => (
+            <div
+              key={i}
+              style={{
+                flex: 1,
+                height: 3,
+                borderRadius: 2,
+                background: i === cardIndex ? ACCENT : i < cardIndex ? 'rgba(255,255,255,0.50)' : 'rgba(255,255,255,0.14)',
+                transition: 'background 0.3s ease',
+              }}
+            />
+          ))}
         </div>
+
+        {/* Nav row: back + close buttons */}
         <div
           style={{
-            fontFamily: LF.body,
-            fontSize: 13,
-            color: LF.muted,
-            marginTop: 3,
-            lineHeight: 1,
+            display: 'flex',
+            justifyContent: 'space-between',
+            padding: '4px 18px',
           }}
         >
-          {isDragMode
-            ? `${dragMode!.section === 'steps' ? 'Step' : 'Tip'} ${dragMode!.index + 1} — drag grip handle to move`
-            : subtitle || ' '}
+          {onBack ? (
+            <button
+              onClick={() => onBack?.({ steps, tips })}
+              aria-label="Back"
+              className="active:opacity-60 transition-opacity"
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 10,
+                background: 'rgba(255,255,255,0.08)',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <BackChevronIcon />
+            </button>
+          ) : <div style={{ width: 44, height: 44 }} />}
+
+          {onClose ? (
+            <button
+              onClick={onClose}
+              aria-label="Close"
+              className="active:opacity-60 transition-opacity"
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 10,
+                background: 'rgba(255,255,255,0.08)',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <CloseXIcon />
+            </button>
+          ) : <div style={{ width: 44, height: 44 }} />}
         </div>
-        {!isDragMode && (
+
+        {/* Title + subtitle */}
+        <div style={{ padding: '4px 20px 14px' }}>
           <div
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-              marginTop: 7,
+              fontFamily: LF.body,
+              fontSize: 22,
+              fontWeight: 500,
+              color: '#fff',
+              letterSpacing: '-0.01em',
+              lineHeight: 1.2,
             }}
           >
-            <MicIcon />
-            <span style={{ fontFamily: LF.body, fontSize: 12, color: LF.muted, lineHeight: 1 }}>
-              Parsed from voice note
-            </span>
+            {isDragMode ? 'Drag to reorder' : 'Review'}
           </div>
-        )}
+          <div
+            style={{
+              fontFamily: LF.body,
+              fontSize: 13,
+              color: LF.muted,
+              marginTop: 3,
+              lineHeight: 1,
+            }}
+          >
+            {isDragMode
+            ? `${dragMode!.section === 'steps' ? 'Step' : 'Tip'} ${dragMode!.index + 1} — drag grip handle to move`
+              : subtitle || ' '}
+          </div>
+          {!isDragMode && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                marginTop: 7,
+              }}
+            >
+              <MicIcon />
+              <span style={{ fontFamily: LF.body, fontSize: 12, color: LF.muted, lineHeight: 1 }}>
+                Parsed from voice note
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Scrollable content ──────────────────────────────────────────── */}
       <div
         style={{
           position: 'absolute',
-          top: 140,
+          top: 200,
           left: 0,
           right: 0,
           bottom: 90,
@@ -662,46 +655,192 @@ export default function CardReview({
           />
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {steps.map((step, index) => {
-              const isThisEditing = editingSection === 'steps' && editingIndex === index
-              const isThisDragSelected =
-                isDragMode && dragMode!.section === 'steps' && dragMode!.index === index
-              const showInsertAbove =
-                isDragging &&
-                dragTarget === index &&
-                dragMode?.section === 'steps' &&
-                dragTarget !== dragMode.index
-              const isDimmed =
-                (isEditing && editingSection === 'steps' && !isThisEditing) ||
-                (isEditing && editingSection === 'tips')
+            {isDragMode && dragMode!.section === 'steps' ? (
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd('steps')}
+              >
+                <SortableContext
+                  items={steps.map((_, i) => `step-${i}`)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {steps.map((step, index) => {
+                    const isThisEditing = editingSection === 'steps' && editingIndex === index
+                    const isThisDragSelected = dragMode!.index === index
+                    const isDimmed =
+                      (isEditing && editingSection === 'steps' && !isThisEditing) ||
+                      (isEditing && editingSection === 'tips')
 
-              return (
-                <Fragment key={index}>
-                  {/* Insertion indicator line above this row */}
-                  {showInsertAbove && (
-                    <div style={{ height: 2, background: ACCENT, borderRadius: 1, margin: '0 12px' }} />
-                  )}
+                    return (
+                      <SortableItem key={`step-${index}`} id={`step-${index}`}>
+                        {({ setNodeRef, listeners: dndListeners, transform, transition: dndTransition, isDragging: isActiveDragging }) => {
+                          const dndTransformStr = CSS.Transform.toString(transform)
+                          const scaleStr = isActiveDragging
+                            ? 'scale(1.015)'
+                            : pressedItem?.section === 'steps' && pressedItem?.index === index
+                            ? 'scale(0.97)'
+                            : null
+                          const composedTransform = [dndTransformStr, scaleStr].filter(Boolean).join(' ') || undefined
+
+                          return (
+                            <div
+                              ref={setNodeRef}
+                              onPointerDown={isThisEditing ? undefined : (e) => onItemPointerDown(e, 'steps', index)}
+                              onPointerMove={isThisEditing ? undefined : onItemPointerMove}
+                              onPointerUp={isThisEditing ? undefined : (e) => onItemPointerUp(e, 'steps', index)}
+                              onContextMenu={(e) => e.preventDefault()}
+                              style={{
+                                ...LONG_PRESS_STYLE,
+                                background: isThisEditing
+                                  ? 'rgba(255,90,31,0.08)'
+                                  : isActiveDragging
+                                  ? 'rgba(255,90,31,0.14)'
+                                  : isThisDragSelected
+                                  ? 'rgba(255,90,31,0.06)'
+                                  : 'rgba(255,255,255,0.04)',
+                                borderRadius: 14,
+                                padding: '15px 16px',
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                gap: 10,
+                                border: isThisEditing ? `1px solid ${ACCENT}` : '1px solid transparent',
+                                opacity: isDimmed ? 0.45 : 1,
+                                transform: composedTransform,
+                                boxShadow: isActiveDragging ? '0 4px 20px rgba(0,0,0,0.5)' : 'none',
+                                position: 'relative',
+                                zIndex: isActiveDragging ? 100 : 'auto',
+                                transition: dndTransition
+                                  ? `${dndTransition}, opacity 180ms, border-color 180ms, background 180ms`
+                                  : 'opacity 180ms, border-color 180ms, background 180ms, transform 150ms ease-out',
+                                cursor: isThisEditing ? 'text' : 'default',
+                              }}
+                            >
+                              {/* Grip handle */}
+                              <div
+                                {...dndListeners}
+                                aria-label="Drag to reorder"
+                                style={{
+                                  width: 28,
+                                  height: 30,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  cursor: isActiveDragging ? 'grabbing' : 'grab',
+                                  flexShrink: 0,
+                                  touchAction: 'none',
+                                  opacity: isThisDragSelected ? 1 : 0.45,
+                                }}
+                              >
+                                <GripIcon />
+                              </div>
+
+                              {/* Step badge — orange pill */}
+                              <div
+                                style={{
+                                  width: 20,
+                                  height: 22,
+                                  borderRadius: 6,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontFamily: LF.display,
+                                  fontSize: 12,
+                                  fontWeight: 900,
+                                  flexShrink: 0,
+                                  background: isThisEditing ? ACCENT : 'rgba(255,90,31,0.90)',
+                                  color: '#fff',
+                                }}
+                              >
+                                {index + 1}
+                              </div>
+
+                              {/* Text / spinner / textarea */}
+                              {splittingIndex === index ? (
+                                <div
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 8,
+                                    flex: 1,
+                                    paddingTop: 5,
+                                    fontFamily: LF.body,
+                                    fontSize: 14,
+                                    color: LF.muted,
+                                    fontStyle: 'italic',
+                                  }}
+                                >
+                                  <InlineSpinner />
+                                  Splitting…
+                                </div>
+                              ) : isThisEditing ? (
+                                <textarea
+                                  ref={inputRef}
+                                  value={editingText}
+                                  onChange={(e) => setEditingText(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') { e.preventDefault(); commitEdit() }
+                                    if (e.key === 'Escape') cancelEdit()
+                                  }}
+                                  placeholder="Describe this step…"
+                                  rows={1}
+                                  style={{
+                                    fontFamily: LF.body,
+                                    fontSize: 15,
+                                    fontWeight: 500,
+                                    color: '#fff',
+                                    background: 'transparent',
+                                    border: 'none',
+                                    outline: 'none',
+                                    flex: 1,
+                                    paddingTop: 3,
+                                    lineHeight: 1.45,
+                                    resize: 'none',
+                                    overflow: 'hidden',
+                                    minHeight: 24,
+                                  }}
+                                />
+                              ) : (
+                                <span
+                                  style={{
+                                    fontFamily: LF.body,
+                                    fontSize: 15,
+                                    fontWeight: 500,
+                                    color: step.trim() ? 'rgba(255,255,255,0.92)' : LF.muted,
+                                    fontStyle: step.trim() ? 'normal' : 'italic',
+                                    flex: 1,
+                                    paddingTop: 3,
+                                    lineHeight: 1.45,
+                                  }}
+                                >
+                                  {step || 'Empty step'}
+                                </span>
+                              )}
+                            </div>
+                          )
+                        }}
+                      </SortableItem>
+                    )
+                  })}
+                </SortableContext>
+              </DndContext>
+            ) : (
+              steps.map((step, index) => {
+                const isThisEditing = editingSection === 'steps' && editingIndex === index
+                const isDimmed =
+                  (isEditing && editingSection === 'steps' && !isThisEditing) ||
+                  (isEditing && editingSection === 'tips')
+
+                return (
                   <div
-                    ref={(el) => {
-                      stepRowRefs.current[index] = el
-                    }}
-                    onPointerDown={
-                      isThisEditing ? undefined : (e) => onItemPointerDown(e, 'steps', index)
-                    }
+                    key={index}
+                    onPointerDown={isThisEditing ? undefined : (e) => onItemPointerDown(e, 'steps', index)}
                     onPointerMove={isThisEditing ? undefined : onItemPointerMove}
-                    onPointerUp={
-                      isThisEditing ? undefined : (e) => onItemPointerUp(e, 'steps', index)
-                    }
+                    onPointerUp={isThisEditing ? undefined : (e) => onItemPointerUp(e, 'steps', index)}
                     onContextMenu={(e) => e.preventDefault()}
                     style={{
                       ...LONG_PRESS_STYLE,
-                      background: isThisEditing
-                        ? 'rgba(255,90,31,0.08)'
-                        : isThisDragSelected && isDragging
-                        ? 'rgba(255,90,31,0.14)'
-                        : isThisDragSelected
-                        ? 'rgba(255,90,31,0.06)'
-                        : 'rgba(255,255,255,0.04)',
+                      background: isThisEditing ? 'rgba(255,90,31,0.08)' : 'rgba(255,255,255,0.04)',
                       borderRadius: 14,
                       padding: '15px 16px',
                       display: 'flex',
@@ -709,46 +848,15 @@ export default function CardReview({
                       gap: 10,
                       border: isThisEditing ? `1px solid ${ACCENT}` : '1px solid transparent',
                       opacity: isDimmed ? 0.45 : 1,
-                      transform: isThisDragSelected && isDragging
-                        ? 'scale(1.015)'
-                        : pressedItem?.section === 'steps' && pressedItem?.index === index
+                      transform: pressedItem?.section === 'steps' && pressedItem?.index === index
                         ? 'scale(0.97)'
                         : 'scale(1)',
-                      boxShadow: isThisDragSelected && isDragging ? '0 4px 20px rgba(0,0,0,0.5)' : 'none',
+                      boxShadow: 'none',
                       position: 'relative',
-                      zIndex: isThisDragSelected && isDragging ? 1 : 'auto',
                       transition: 'opacity 180ms, border-color 180ms, background 180ms, transform 150ms ease-out',
-                      cursor: isThisEditing
-                        ? 'text'
-                        : isDragMode && dragMode!.section === 'steps'
-                        ? 'default'
-                        : 'pointer',
+                      cursor: isThisEditing ? 'text' : 'pointer',
                     }}
                   >
-                    {/* Grip handle — only visible in drag mode for steps section */}
-                    {isDragMode && dragMode!.section === 'steps' && (
-                      <div
-                        onPointerDown={(e) => onGripPointerDown(e, index)}
-                        onPointerMove={onGripPointerMove}
-                        onPointerUp={onGripPointerUp}
-                        onPointerCancel={onGripPointerUp}
-                        aria-label="Drag to reorder"
-                        style={{
-                          width: 28,
-                          height: 30,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          cursor: 'grab',
-                          flexShrink: 0,
-                          touchAction: 'none',
-                          opacity: isThisDragSelected ? 1 : 0.45,
-                        }}
-                      >
-                        <GripIcon />
-                      </div>
-                    )}
-
                     {/* Step badge — orange pill */}
                     <div
                       style={{
@@ -831,12 +939,8 @@ export default function CardReview({
                       </span>
                     )}
                   </div>
-                </Fragment>
-              )
-            })}
-            {/* Insertion indicator at end of list */}
-            {isDragging && dragMode?.section === 'steps' && dragTarget === steps.length && (
-              <div style={{ height: 2, background: ACCENT, borderRadius: 1, margin: '0 12px' }} />
+                )
+              })
             )}
 
             {/* ADD STEP button — hidden during edit or drag */}
@@ -892,44 +996,174 @@ export default function CardReview({
           />
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {tips.map((tip, index) => {
-              const isThisEditing = editingSection === 'tips' && editingIndex === index
-              const isThisDragSelected =
-                isDragMode && dragMode!.section === 'tips' && dragMode!.index === index
-              const showInsertAbove =
-                isDragging &&
-                dragTarget === index &&
-                dragMode?.section === 'tips' &&
-                dragTarget !== dragMode.index
-              const isDimmed =
-                (isEditing && editingSection === 'tips' && !isThisEditing) ||
-                (isEditing && editingSection === 'steps')
+            {isDragMode && dragMode!.section === 'tips' ? (
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd('tips')}
+              >
+                <SortableContext
+                  items={tips.map((_, i) => `tip-${i}`)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {tips.map((tip, index) => {
+                    const isThisEditing = editingSection === 'tips' && editingIndex === index
+                    const isThisDragSelected = dragMode!.index === index
+                    const isDimmed =
+                      (isEditing && editingSection === 'tips' && !isThisEditing) ||
+                      (isEditing && editingSection === 'steps')
 
-              return (
-                <Fragment key={index}>
-                  {/* Insertion indicator line above this row */}
-                  {showInsertAbove && (
-                    <div style={{ height: 2, background: ACCENT, borderRadius: 1, margin: '0 12px' }} />
-                  )}
+                    return (
+                      <SortableItem key={`tip-${index}`} id={`tip-${index}`}>
+                        {({ setNodeRef, listeners: dndListeners, transform, transition: dndTransition, isDragging: isActiveDragging }) => {
+                          const dndTransformStr = CSS.Transform.toString(transform)
+                          const scaleStr = isActiveDragging
+                            ? 'scale(1.015)'
+                            : pressedItem?.section === 'tips' && pressedItem?.index === index
+                            ? 'scale(0.97)'
+                            : null
+                          const composedTransform = [dndTransformStr, scaleStr].filter(Boolean).join(' ') || undefined
+
+                          return (
+                            <div
+                              ref={setNodeRef}
+                              onPointerDown={isThisEditing ? undefined : (e) => onItemPointerDown(e, 'tips', index)}
+                              onPointerMove={isThisEditing ? undefined : onItemPointerMove}
+                              onPointerUp={isThisEditing ? undefined : (e) => onItemPointerUp(e, 'tips', index)}
+                              onContextMenu={(e) => e.preventDefault()}
+                              style={{
+                                ...LONG_PRESS_STYLE,
+                                background: isThisEditing
+                                  ? 'rgba(255,90,31,0.06)'
+                                  : isActiveDragging
+                                  ? 'rgba(255,90,31,0.14)'
+                                  : isThisDragSelected
+                                  ? 'rgba(255,90,31,0.06)'
+                                  : 'rgba(255,255,255,0.025)',
+                                borderRadius: 14,
+                                padding: 16,
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                gap: 10,
+                                border: isThisEditing ? `1px solid ${ACCENT}` : '1px solid transparent',
+                                opacity: isDimmed ? 0.45 : 1,
+                                transform: composedTransform,
+                                boxShadow: isActiveDragging ? '0 4px 20px rgba(0,0,0,0.5)' : 'none',
+                                position: 'relative',
+                                zIndex: isActiveDragging ? 100 : 'auto',
+                                transition: dndTransition
+                                  ? `${dndTransition}, opacity 180ms, border-color 180ms, background 180ms`
+                                  : 'opacity 180ms, border-color 180ms, background 180ms, transform 150ms ease-out',
+                                cursor: isThisEditing ? 'text' : 'default',
+                              }}
+                            >
+                              {/* Grip handle */}
+                              <div
+                                {...dndListeners}
+                                aria-label="Drag to reorder"
+                                style={{
+                                  width: 28,
+                                  height: 30,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  cursor: isActiveDragging ? 'grabbing' : 'grab',
+                                  flexShrink: 0,
+                                  touchAction: 'none',
+                                  opacity: isThisDragSelected ? 1 : 0.45,
+                                }}
+                              >
+                                <GripIcon />
+                              </div>
+
+                              {/* Pin icon container */}
+                              <div
+                                style={{
+                                  width: 30,
+                                  height: 30,
+                                  borderRadius: 8,
+                                  background: isThisEditing
+                                    ? 'rgba(255,90,31,0.20)'
+                                    : 'rgba(255,90,31,0.12)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  flexShrink: 0,
+                                }}
+                              >
+                                <LightbulbIcon color={ACCENT} />
+                              </div>
+
+                              {/* Text / textarea */}
+                              {isThisEditing ? (
+                                <textarea
+                                  ref={inputRef}
+                                  value={editingText}
+                                  onChange={(e) => setEditingText(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') { e.preventDefault(); commitEdit() }
+                                    if (e.key === 'Escape') cancelEdit()
+                                  }}
+                                  placeholder="Coach tip…"
+                                  rows={1}
+                                  style={{
+                                    fontFamily: LF.body,
+                                    fontSize: 15,
+                                    fontWeight: 400,
+                                    fontStyle: 'italic',
+                                    color: '#fff',
+                                    background: 'transparent',
+                                    border: 'none',
+                                    outline: 'none',
+                                    flex: 1,
+                                    paddingTop: 3,
+                                    lineHeight: 1.45,
+                                    resize: 'none',
+                                    overflow: 'hidden',
+                                    minHeight: 24,
+                                  }}
+                                />
+                              ) : (
+                                <span
+                                  style={{
+                                    fontFamily: LF.body,
+                                    fontSize: 15,
+                                    fontWeight: 400,
+                                    fontStyle: 'italic',
+                                    color: tip.trim() ? '#d6dbe6' : LF.muted,
+                                    flex: 1,
+                                    paddingTop: 3,
+                                    lineHeight: 1.45,
+                                  }}
+                                >
+                                  {tip || 'Empty tip'}
+                                </span>
+                              )}
+                            </div>
+                          )
+                        }}
+                      </SortableItem>
+                    )
+                  })}
+                </SortableContext>
+              </DndContext>
+            ) : (
+              tips.map((tip, index) => {
+                const isThisEditing = editingSection === 'tips' && editingIndex === index
+                const isDimmed =
+                  (isEditing && editingSection === 'tips' && !isThisEditing) ||
+                  (isEditing && editingSection === 'steps')
+
+                return (
                   <div
-                    ref={(el) => {
-                      tipRowRefs.current[index] = el
-                    }}
-                    onPointerDown={
-                      isThisEditing ? undefined : (e) => onItemPointerDown(e, 'tips', index)
-                    }
+                    key={index}
+                    onPointerDown={isThisEditing ? undefined : (e) => onItemPointerDown(e, 'tips', index)}
                     onPointerMove={isThisEditing ? undefined : onItemPointerMove}
-                    onPointerUp={
-                      isThisEditing ? undefined : (e) => onItemPointerUp(e, 'tips', index)
-                    }
+                    onPointerUp={isThisEditing ? undefined : (e) => onItemPointerUp(e, 'tips', index)}
                     onContextMenu={(e) => e.preventDefault()}
                     style={{
                       ...LONG_PRESS_STYLE,
                       background: isThisEditing
-                        ? 'rgba(255,90,31,0.06)'
-                        : isThisDragSelected && isDragging
-                        ? 'rgba(255,90,31,0.14)'
-                        : isThisDragSelected
                         ? 'rgba(255,90,31,0.06)'
                         : 'rgba(255,255,255,0.025)',
                       borderRadius: 14,
@@ -939,46 +1173,15 @@ export default function CardReview({
                       gap: 10,
                       border: isThisEditing ? `1px solid ${ACCENT}` : '1px solid transparent',
                       opacity: isDimmed ? 0.45 : 1,
-                      transform: isThisDragSelected && isDragging
-                        ? 'scale(1.015)'
-                        : pressedItem?.section === 'tips' && pressedItem?.index === index
+                      transform: pressedItem?.section === 'tips' && pressedItem?.index === index
                         ? 'scale(0.97)'
                         : 'scale(1)',
-                      boxShadow: isThisDragSelected && isDragging ? '0 4px 20px rgba(0,0,0,0.5)' : 'none',
+                      boxShadow: 'none',
                       position: 'relative',
-                      zIndex: isThisDragSelected && isDragging ? 1 : 'auto',
                       transition: 'opacity 180ms, border-color 180ms, background 180ms, transform 150ms ease-out',
-                      cursor: isThisEditing
-                        ? 'text'
-                        : isDragMode && dragMode!.section === 'tips'
-                        ? 'default'
-                        : 'pointer',
+                      cursor: isThisEditing ? 'text' : 'pointer',
                     }}
                   >
-                    {/* Grip handle — only visible in drag mode for tips section */}
-                    {isDragMode && dragMode!.section === 'tips' && (
-                      <div
-                        onPointerDown={(e) => onGripPointerDown(e, index)}
-                        onPointerMove={onGripPointerMove}
-                        onPointerUp={onGripPointerUp}
-                        onPointerCancel={onGripPointerUp}
-                        aria-label="Drag to reorder"
-                        style={{
-                          width: 28,
-                          height: 30,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          cursor: 'grab',
-                          flexShrink: 0,
-                          touchAction: 'none',
-                          opacity: isThisDragSelected ? 1 : 0.45,
-                        }}
-                      >
-                        <GripIcon />
-                      </div>
-                    )}
-
                     {/* Pin icon container */}
                     <div
                       style={{
@@ -1043,12 +1246,8 @@ export default function CardReview({
                       </span>
                     )}
                   </div>
-                </Fragment>
-              )
-            })}
-            {/* Insertion indicator at end of list */}
-            {isDragging && dragMode?.section === 'tips' && dragTarget === tips.length && (
-              <div style={{ height: 2, background: ACCENT, borderRadius: 1, margin: '0 12px' }} />
+                )
+              })
             )}
 
             {/* ADD TIP button — hidden during edit or drag */}
