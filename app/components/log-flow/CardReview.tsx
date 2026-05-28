@@ -455,7 +455,6 @@ export default function CardReview({
   const validSteps = steps.filter((s) => s.trim())
   const validTips = tips.filter((t) => t.trim())
   const accentFaded = 'rgba(255,90,31,0.40)'
-  const subtitle = [curriculum, title].filter(Boolean).join(' · ')
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -541,7 +540,7 @@ export default function CardReview({
             </button>
           ) : <div style={{ width: 44, height: 44, flexShrink: 0 }} />}
 
-          {/* Title + subtitle */}
+          {/* Title */}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div
               style={{
@@ -554,22 +553,6 @@ export default function CardReview({
               }}
             >
               {isDragMode ? 'Drag to reorder' : 'Review'}
-            </div>
-            <div
-              style={{
-                fontFamily: LF.body,
-                fontSize: 13,
-                color: LF.muted,
-                marginTop: 3,
-                lineHeight: 1,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {isDragMode
-                ? `${dragMode!.section === 'steps' ? 'Step' : 'Tip'} ${dragMode!.index + 1}`
-                : subtitle || ' '}
             </div>
           </div>
 
