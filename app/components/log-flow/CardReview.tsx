@@ -289,15 +289,6 @@ export default function CardReview({
     setEditingText('')
   }
 
-  const deleteEditing = () => {
-    if (editingSection === null || editingIndex === null) return
-    const setter = editingSection === 'steps' ? setSteps : setTips
-    setter((prev) => prev.filter((_, i) => i !== editingIndex))
-    setEditingSection(null)
-    setEditingIndex(null)
-    setEditingText('')
-  }
-
   const addItem = (section: EditSection) => {
     const items = section === 'steps' ? steps : tips
     const newIndex = items.length
@@ -1275,55 +1266,38 @@ export default function CardReview({
             Done moving
           </button>
         ) : isEditing ? (
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button
               onClick={cancelEdit}
               style={{
-                flex: 1,
+                flexShrink: 0,
+                width: 90,
                 height: 54,
-                borderRadius: 12,
-                background: 'rgba(255,255,255,0.06)',
-                border: '1px solid rgba(255,255,255,0.10)',
+                background: 'none',
+                border: 'none',
                 fontFamily: LF.body,
-                fontSize: 15,
-                fontWeight: 600,
-                color: 'rgba(255,255,255,0.85)',
+                fontSize: 16,
+                fontWeight: 500,
+                color: 'rgba(255,255,255,0.55)',
                 cursor: 'pointer',
               }}
             >
               Cancel
             </button>
             <button
-              onClick={deleteEditing}
-              style={{
-                flex: 1,
-                height: 54,
-                borderRadius: 12,
-                background: 'rgba(240,64,64,0.15)',
-                border: '1px solid rgba(240,64,64,0.25)',
-                fontFamily: LF.body,
-                fontSize: 15,
-                fontWeight: 600,
-                color: '#f04040',
-                cursor: 'pointer',
-              }}
-            >
-              Delete
-            </button>
-            <button
               onClick={commitEdit}
               style={{
                 flex: 1,
                 height: 54,
-                borderRadius: 12,
+                borderRadius: 14,
                 background: ACCENT,
                 border: 'none',
-                fontFamily: LF.display,
-                fontSize: 15,
-                fontWeight: 900,
-                textTransform: 'uppercase',
-                letterSpacing: '0.10em',
-                color: LF.bg,
+                fontFamily: LF.body,
+                fontSize: 16,
+                fontWeight: 700,
+                letterSpacing: '0.02em',
+                color: '#fff',
+                boxShadow: '0 2px 12px rgba(255,90,31,0.35)',
                 cursor: 'pointer',
               }}
             >
