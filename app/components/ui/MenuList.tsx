@@ -33,8 +33,17 @@ export default function MenuList({ items, ariaLabel }: MenuListProps) {
     <ul role="menu" aria-label={ariaLabel} className="flex flex-col">
       {items.map((item, idx) => (
         <li key={idx} role="none">
-          {item.dividerAbove && idx > 0 && (
-            <div className="h-px bg-bg-border mx-3" aria-hidden="true" />
+          {idx > 0 && (
+            <div
+              className="mx-4"
+              style={{
+                height: '0.5px',
+                background: item.dividerAbove
+                  ? 'rgba(255,255,255,0.18)'
+                  : 'rgba(255,255,255,0.08)',
+              }}
+              aria-hidden="true"
+            />
           )}
           <button
             type="button"
@@ -42,19 +51,14 @@ export default function MenuList({ items, ariaLabel }: MenuListProps) {
             onClick={item.onClick}
             disabled={item.disabled}
             className={[
-              'w-full flex items-center gap-2.5 px-4 py-3.5 text-sm text-left transition-colors disabled:opacity-40',
+              'w-full flex items-center gap-3 px-4 py-4 text-[15px] text-left transition-colors disabled:opacity-40',
               item.destructive
                 ? 'text-accent-fire hover:bg-accent-fire/10 active:bg-accent-fire/15'
                 : 'text-text-primary hover:bg-white/5 active:bg-white/10',
             ].join(' ')}
           >
             {item.icon && (
-              <span
-                className={[
-                  'w-4 h-4 flex-shrink-0',
-                  item.destructive ? 'text-accent-fire' : 'text-text-dim',
-                ].join(' ')}
-              >
+              <span className="w-5 h-5 flex-shrink-0 text-accent-fire">
                 {item.icon}
               </span>
             )}

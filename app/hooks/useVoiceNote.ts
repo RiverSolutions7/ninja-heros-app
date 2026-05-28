@@ -209,13 +209,13 @@ export function useVoiceNote() {
     availableSkills?: string[],
     existing?: { title?: string; description?: string; skills?: string[]; durationMinutes?: number | null },
     textOverride?: string
-  ): Promise<{ title: string; description: string; skills: string[]; durationMinutes: number | null }> {
+  ): Promise<{ title: string; description: string; sequenceSteps: string[]; coachTips: string[]; skills: string[]; durationMinutes: number | null }> {
     const text = (textOverride ?? transcriptRef.current).trim()
     if (!text) {
       devLog('parse-component-skip', { reason: 'empty' })
       setVoiceState('error')
       setErrorMessage('No speech detected. Try again.')
-      return { title: '', description: '', skills: [], durationMinutes: null }
+      return { title: '', description: '', sequenceSteps: [], coachTips: [], skills: [], durationMinutes: null }
     }
     devLog('parse-component', { chars: text.length, type: componentType, refine: !!existing, typed: !!textOverride })
     setVoiceState('processing')
@@ -224,12 +224,19 @@ export function useVoiceNote() {
       const result = await parseComponentTranscript(text, componentType, availableSkills, existing)
       devLog('parse-component-done', { skills: result.skills.length, duration: result.durationMinutes ?? 0 })
       setVoiceState('done')
-      return result
+      return {
+        title: result.title,
+        description: result.description,
+        sequenceSteps: result.sequenceSteps ?? [],
+        coachTips: result.coachTips ?? [],
+        skills: result.skills,
+        durationMinutes: result.durationMinutes,
+      }
     } catch {
       devLog('parse-component-fail')
       setVoiceState('error')
       setErrorMessage('AI parse failed — transcript saved to description.')
-      return { title: '', description: `[Voice — please review]\n${text}`, skills: [], durationMinutes: null }
+      return { title: '', description: `[Voice — please review]\n${text}`, sequenceSteps: [], coachTips: [], skills: [], durationMinutes: null }
     }
   }
 

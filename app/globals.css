@@ -106,10 +106,10 @@
            border-2 transition-all duration-150 active:scale-95;
   }
   .skill-chip-off {
-    @apply border-accent-green/30 text-accent-green/60 bg-transparent;
+    @apply border-accent-fire/30 text-accent-fire/60 bg-transparent;
   }
   .skill-chip-on {
-    @apply border-accent-green bg-accent-green text-bg-primary;
+    @apply border-accent-fire bg-accent-fire text-bg-primary;
   }
 
   /* Section header inside a block card */
@@ -146,7 +146,7 @@
     @apply badge bg-white/10 text-text-muted border border-white/10;
   }
   .badge-skill {
-    @apply badge bg-accent-green/20 text-accent-green border border-accent-green/30;
+    @apply badge bg-accent-fire/20 text-accent-fire border border-accent-fire/30;
   }
   .badge-equipment {
     @apply badge bg-accent-blue/20 text-accent-blue border border-accent-blue/30;

@@ -42,22 +42,20 @@ export async function POST(request: NextRequest) {
 
   const skillsSection =
     availableSkills && availableSkills.length > 0
-      ? `3. Skills practiced — choose ONLY from this exact list: ${availableSkills.map((s) => `"${s}"`).join(', ')}. Return an empty array if none clearly match.`
+      ? `4. Skills practiced — choose ONLY from this exact list: ${availableSkills.map((s) => `"${s}"`).join(', ')}. Return an empty array if none clearly match.`
       : ''
 
   const jsonExample =
     availableSkills && availableSkills.length > 0
-      ? '{"title": "Activity Name", "description": "• Cue one\\n• Cue two\\n• Cue three", "skills": ["Skill A"], "duration_minutes": 10}'
-      : '{"title": "Activity Name", "description": "• Cue one\\n• Cue two\\n• Cue three", "skills": [], "duration_minutes": null}'
+      ? '{"title": "Activity Name", "sequenceSteps": ["Set up cones in a circle", "Players take turns", "Add a challenge"], "coachTips": ["Watch for bent knees", "Encourage quick resets"], "skills": ["Skill A"], "duration_minutes": 10}'
+      : '{"title": "Activity Name", "sequenceSteps": ["Set up cones in a circle", "Players take turns"], "coachTips": ["Watch for bent knees"], "skills": [], "duration_minutes": null}'
 
   // ── Prompt: refine mode (existing content provided) ──────────────────────────
-  // The coach already has a filled form and is adding / correcting something.
-  // Claude merges new voice input with existing content rather than replacing it.
   const refinePrompt = existing ? `A ninja gym coach is refining a ${typeLabel} they already described. They have existing content and want to add or change something.
 
 Existing content:
 - Name: "${existing.title ?? ''}"
-- Coaching cues: "${existing.description ?? ''}"
+- Coaching info: "${existing.description ?? ''}"
 - Skills: ${existing.skills && existing.skills.length > 0 ? existing.skills.map((s) => `"${s}"`).join(', ') : 'none'}
 - Duration: ${existing.durationMinutes ? `${existing.durationMinutes} minutes` : 'not set'}
 
@@ -65,9 +63,11 @@ Coach's new voice input: "${transcript.trim()}"
 
 Update the content based on what the coach just said:
 1. Keep the existing name UNLESS the coach is clearly renaming it.
-2. Update or expand the coaching cues to incorporate what the coach added. Keep existing cues that are still valid.
+2. Update or expand the sequence steps to incorporate what the coach added. Keep valid existing steps.
+3. Update or expand the coach tips similarly.
+   IMPORTANT: Tips must NOT repeat or restate any sequence step. Tips are observational; steps are procedural.
 ${skillsSection}
-${skillsSection ? '4.' : '3.'} Update the duration ONLY if the coach explicitly mentions a new time. Otherwise keep the existing value (${existing.durationMinutes ?? 'null'}).
+${skillsSection ? '5.' : '4.'} Update the duration ONLY if the coach explicitly mentions a new time. Otherwise keep the existing value (${existing.durationMinutes ?? 'null'}).
 
 Return ONLY valid JSON — no explanation, no markdown:
 ${jsonExample}` : null
@@ -76,9 +76,11 @@ ${jsonExample}` : null
   const freshPrompt = `A ninja gym coach just described a ${typeLabel} out loud. Extract:
 
 1. A short, clear name for this ${typeLabel} (2–5 words). Infer the most natural title from what they described — the coach does not need to say the name explicitly.
-2. 2–3 concise coaching cues a substitute coach could follow. Each starts with "•". Action-oriented. No invented details.
+2. 2–4 clear sequence steps (setup → how to run it → any key variation). Each step is one action-oriented sentence a substitute coach can follow. No bullet prefix needed.
+3. 1–3 coach tips: things to watch for, common mistakes, or encouragement cues. Short sentences.
+   IMPORTANT: Tips must NOT repeat or restate any sequence step. Steps are procedural ("what to do"); tips are observational ("what to watch for, warn about, or encourage"). If information belongs in a step, omit it from tips entirely.
 ${skillsSection}
-${skillsSection ? '4.' : '3.'} Duration in minutes as an integer if the coach explicitly mentions a time (e.g. "15 minutes", "half an hour", "five minute"). Otherwise null.
+${skillsSection ? '5.' : '4.'} Duration in minutes as an integer if the coach explicitly mentions a time (e.g. "15 minutes", "half an hour", "five minute"). Otherwise null.
 
 Return ONLY valid JSON — no explanation, no markdown:
 ${jsonExample}
@@ -91,7 +93,7 @@ Coach said: "${transcript.trim()}"`
     const client = new Anthropic({ apiKey })
     const message = await client.messages.create({
       model: 'claude-haiku-4-5',
-      max_tokens: 300,
+      max_tokens: 400,
       messages: [{ role: 'user', content: prompt }],
     })
 
@@ -100,7 +102,13 @@ Coach said: "${transcript.trim()}"`
     // Extract JSON from response (handle any surrounding text)
     const jsonMatch = raw.match(/\{[\s\S]*\}/)
     if (!jsonMatch) throw new Error('No JSON in response')
-    const parsed = JSON.parse(jsonMatch[0]) as { title?: string; description?: string; skills?: string[]; duration_minutes?: number | null }
+    const parsed = JSON.parse(jsonMatch[0]) as {
+      title?: string
+      sequenceSteps?: string[]
+      coachTips?: string[]
+      skills?: string[]
+      duration_minutes?: number | null
+    }
 
     // Only return skills that actually exist in the available list
     const allowedSet = new Set(availableSkills ?? [])
@@ -109,7 +117,6 @@ Coach said: "${transcript.trim()}"`
     )
 
     // In refine mode with no available skills list, pass skills through as-is
-    // (they were already validated when first added)
     const finalSkills =
       availableSkills && availableSkills.length > 0
         ? matchedSkills
@@ -120,9 +127,20 @@ Coach said: "${transcript.trim()}"`
         ? parsed.duration_minutes
         : null
 
+    const sequenceSteps = (parsed.sequenceSteps ?? []).filter((s) => typeof s === 'string' && s.trim())
+    const coachTips = (parsed.coachTips ?? []).filter((s) => typeof s === 'string' && s.trim())
+
+    // Synthesise backward-compat description from steps + tips
+    const description = [
+      ...sequenceSteps.map((s) => `• ${s}`),
+      ...coachTips.map((t) => `• ${t}`),
+    ].join('\n')
+
     return NextResponse.json({
       title: parsed.title?.trim() ?? '',
-      description: parsed.description?.trim() ?? '',
+      description,
+      sequenceSteps,
+      coachTips,
       skills: finalSkills,
       duration_minutes: durationMinutes,
     })

@@ -17,9 +17,11 @@ import S3Photo from '@/app/components/log-flow/S3Photo'
 import VoiceScreen from '@/app/components/log-flow/VoiceScreen'
 import RevealScreen, { type RevealDraft } from '@/app/components/log-flow/RevealScreen'
 import Satisfaction from '@/app/components/log-flow/Satisfaction'
+import Card1Skills from '@/app/components/log-flow/Card1Skills'
+import CardReview from '@/app/components/log-flow/CardReview'
 import '@/app/components/log-flow/log-flow.css'
 
-type LogStep = 'type' | 'curriculum' | 'photo' | 'voice' | 'reveal' | 'satisfaction'
+type LogStep = 'type' | 'curriculum' | 'photo' | 'voice' | 'card-skills' | 'card-review' | 'reveal' | 'satisfaction'
 
 interface LogDraft {
   type: ComponentType | null
@@ -27,6 +29,8 @@ interface LogDraft {
   photoFiles: File[]
   photoPreviewUrls: string[]
   title: string
+  sequenceSteps: string[]
+  coachTips: string[]
   description: string
   skills: string[]
   durationMinutes: number | null
@@ -38,6 +42,8 @@ const EMPTY_DRAFT: LogDraft = {
   photoFiles: [],
   photoPreviewUrls: [],
   title: '',
+  sequenceSteps: [],
+  coachTips: [],
   description: '',
   skills: [],
   durationMinutes: null,
@@ -114,6 +120,8 @@ export default function LogComponentPage() {
       draft.photoFiles.length > 0 ||
       draft.title.trim() !== '' ||
       draft.description.trim() !== '' ||
+      draft.sequenceSteps.length > 0 ||
+      draft.coachTips.length > 0 ||
       draft.skills.length > 0 ||
       draft.durationMinutes !== null
     )
@@ -157,18 +165,20 @@ export default function LogComponentPage() {
     setIsStopped(false)
     try {
       const result = await voice.parseComponent(draft.type, availableSkills)
-      if (!result.title && !result.description && result.skills.length === 0 && result.durationMinutes == null) {
+      if (!result.title && result.sequenceSteps.length === 0 && result.skills.length === 0 && result.durationMinutes == null) {
         return
       }
       setDraft((d) => ({
         ...d,
         title: result.title || d.title,
+        sequenceSteps: result.sequenceSteps.length > 0 ? result.sequenceSteps : d.sequenceSteps,
+        coachTips: result.coachTips.length > 0 ? result.coachTips : d.coachTips,
         description: result.description || d.description,
         skills: result.skills.length > 0 ? result.skills : d.skills,
         durationMinutes: result.durationMinutes ?? d.durationMinutes,
       }))
       voice.reset()
-      setStep('reveal')
+      setStep('card-skills')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Voice parse failed')
     }
@@ -180,18 +190,20 @@ export default function LogComponentPage() {
     setIsTyping(false)
     try {
       const result = await voice.parseComponent(draft.type, availableSkills, undefined, text)
-      if (!result.title && !result.description && result.skills.length === 0 && result.durationMinutes == null) {
+      if (!result.title && result.sequenceSteps.length === 0 && result.skills.length === 0 && result.durationMinutes == null) {
         return
       }
       setDraft((d) => ({
         ...d,
         title: result.title || d.title,
+        sequenceSteps: result.sequenceSteps.length > 0 ? result.sequenceSteps : d.sequenceSteps,
+        coachTips: result.coachTips.length > 0 ? result.coachTips : d.coachTips,
         description: result.description || d.description,
         skills: result.skills.length > 0 ? result.skills : d.skills,
         durationMinutes: result.durationMinutes ?? d.durationMinutes,
       }))
       voice.reset()
-      setStep('reveal')
+      setStep('card-skills')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Voice parse failed')
     }
@@ -360,6 +372,44 @@ export default function LogComponentPage() {
         />
       )}
 
+      {step === 'card-skills' && (
+        <Card1Skills
+          availableSkills={availableSkills}
+          initialSelected={draft.skills}
+          onApprove={(approvedSkills) => {
+            setDraft((d) => ({ ...d, skills: approvedSkills }))
+            setStep('card-review')
+          }}
+          onClose={handleClose}
+          cardIndex={4}
+          totalCards={7}
+        />
+      )}
+
+      {step === 'card-review' && draft.type && (
+        <CardReview
+          initialSteps={draft.sequenceSteps}
+          initialTips={draft.coachTips}
+          title={draft.title}
+          curriculum={draft.curriculums[0] ?? ''}
+          onBack={({ steps, tips }) => {
+            setDraft((d) => ({ ...d, sequenceSteps: steps, coachTips: tips }))
+            setStep('card-skills')
+          }}
+          onApprove={({ steps, tips }) => {
+            const description = [
+              ...steps.map((s) => `• ${s}`),
+              ...tips.map((t) => `• ${t}`),
+            ].join('\n')
+            setDraft((d) => ({ ...d, sequenceSteps: steps, coachTips: tips, description }))
+            setStep('reveal')
+          }}
+          onClose={handleClose}
+          cardIndex={5}
+          totalCards={7}
+        />
+      )}
+
       {step === 'reveal' && draft.type && (
         <RevealScreen
           type={draft.type}
@@ -381,8 +431,7 @@ export default function LogComponentPage() {
               skills: savedDraft.skills.length > 0 ? savedDraft.skills : d.skills,
               durationMinutes: savedDraft.durationMinutes ?? d.durationMinutes,
             }))
-            voice.reset()
-            setStep('voice')
+            setStep('card-review')
           }}
           onClose={handleClose}
           saving={saving}
