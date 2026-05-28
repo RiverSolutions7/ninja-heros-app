@@ -1253,17 +1253,17 @@ export default function CardReview({
             style={{
               width: '100%',
               height: 54,
-              borderRadius: 12,
-              background: 'rgba(255,255,255,0.06)',
-              border: '1px solid rgba(255,255,255,0.10)',
+              borderRadius: 14,
+              background: 'transparent',
+              border: '1.5px solid rgba(255,90,31,0.60)',
               fontFamily: LF.body,
-              fontSize: 15,
+              fontSize: 16,
               fontWeight: 600,
-              color: 'rgba(255,255,255,0.85)',
+              color: ACCENT,
               cursor: 'pointer',
             }}
           >
-            Done moving
+            Done
           </button>
         ) : isEditing ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
