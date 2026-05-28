@@ -347,12 +347,12 @@ export default function Card1Skills({
                   flex: 1,
                   height: 50,
                   borderRadius: 14,
-                  background: 'rgba(255,255,255,0.06)',
-                  border: '1px solid rgba(255,255,255,0.10)',
+                  background: 'transparent',
+                  border: '1px solid rgba(255,255,255,0.15)',
                   fontFamily: LF.body,
                   fontSize: 15,
                   fontWeight: 600,
-                  color: 'rgba(255,255,255,0.85)',
+                  color: 'rgba(255,255,255,0.60)',
                   cursor: 'pointer',
                 }}
               >

@@ -431,8 +431,7 @@ export default function LogComponentPage() {
               skills: savedDraft.skills.length > 0 ? savedDraft.skills : d.skills,
               durationMinutes: savedDraft.durationMinutes ?? d.durationMinutes,
             }))
-            voice.reset()
-            setStep('voice')
+            setStep('card-review')
           }}
           onClose={handleClose}
           saving={saving}

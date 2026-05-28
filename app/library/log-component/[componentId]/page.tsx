@@ -70,7 +70,7 @@ export default function EditComponentPage() {
 
   // Form state
   const [title, setTitle] = useState('')
-  const [curriculum, setCurriculum] = useState('')
+  const [selectedCurriculums, setSelectedCurriculums] = useState<string[]>([])
   const [description, setDescription] = useState('')
   const [durationMinutes, setDurationMinutes] = useState<number | null>(null)
   const [skills, setSkills] = useState<string[]>([])
@@ -85,6 +85,7 @@ export default function EditComponentPage() {
     description !== (component.description ?? '') ||
     durationMinutes !== (component.duration_minutes ?? null) ||
     JSON.stringify([...skills].sort()) !== JSON.stringify([...(component.skills ?? [])].sort()) ||
+    JSON.stringify([...selectedCurriculums].sort()) !== JSON.stringify([...(component.curriculums ?? (component.curriculum ? [component.curriculum] : []))].sort()) ||
     media.some(m => m.kind !== 'link' && !!m.file)
   )
   const [guardDest, setGuardDest] = useState<string | null>(null)
@@ -201,7 +202,7 @@ export default function EditComponentPage() {
         const c = data as ComponentRow
         setComponent(c)
         setTitle(c.title)
-        setCurriculum(c.curriculum ?? '')
+        setSelectedCurriculums(c.curriculums ?? (c.curriculum ? [c.curriculum] : []))
         setDescription(c.description ?? '')
         setDurationMinutes(c.duration_minutes ?? null)
         setSkills(c.skills ?? [])
@@ -231,16 +232,16 @@ export default function EditComponentPage() {
       .then(({ data }) => setCurriculums((data as CurriculumRow[]) ?? []))
   }, [])
 
-  // Load skills when curriculum changes
+  // Load skills when selected curricula change
   useEffect(() => {
-    if (!curriculum) return
+    if (selectedCurriculums.length === 0) { setAvailableSkills([]); return }
     supabase
       .from('skills')
       .select('name')
-      .eq('age_group', curriculum)
+      .in('age_group', selectedCurriculums)
       .order('name')
-      .then(({ data }) => setAvailableSkills(data?.map((r) => r.name) ?? []))
-  }, [curriculum])
+      .then(({ data }) => setAvailableSkills(Array.from(new Set((data ?? []).map((r) => r.name)))))
+  }, [selectedCurriculums])
 
   function toggleSkill(skill: string) {
     setSkills((prev) => prev.includes(skill) ? prev.filter((s) => s !== skill) : [...prev, skill])
@@ -251,7 +252,7 @@ export default function EditComponentPage() {
     if (!trimmed) return
     setAddSkillSaving(true)
     setAddSkillError(null)
-    const { error: err } = await supabase.from('skills').insert({ name: trimmed, age_group: curriculum })
+    const { error: err } = await supabase.from('skills').insert({ name: trimmed, age_group: selectedCurriculums[0] ?? '' })
     if (err && err.code !== '23505') {
       setAddSkillError(err.message)
       setAddSkillSaving(false)
@@ -325,8 +326,8 @@ export default function EditComponentPage() {
 
       const { error: updateErr } = await supabase.from('components').update({
         title: title.trim(),
-        curriculum: curriculum || null,
-        curriculums: curriculum ? [curriculum] : [],
+        curriculum: selectedCurriculums[0] ?? null,
+        curriculums: selectedCurriculums,
         description: description.trim() || null,
         skills: skills.length > 0 ? skills : null,
         photos: photoUrls,
@@ -464,9 +465,13 @@ export default function EditComponentPage() {
               <button
                 key={c.id}
                 type="button"
-                onClick={() => { setCurriculum(c.age_group); setSkills([]) }}
+                onClick={() => setSelectedCurriculums((prev) =>
+                  prev.includes(c.age_group)
+                    ? prev.filter((a) => a !== c.age_group)
+                    : [...prev, c.age_group]
+                )}
                 className={`flex-1 py-2 rounded-full text-xs font-heading transition-all border ${
-                  curriculum === c.age_group
+                  selectedCurriculums.includes(c.age_group)
                     ? 'bg-accent-fire/10 border-accent-fire/40 text-accent-fire'
                     : 'bg-bg-card border-bg-border text-text-dim hover:border-accent-fire/30 hover:text-text-muted'
                 }`}
