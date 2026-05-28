@@ -32,19 +32,14 @@ const ANIM_CSS = `
 // ─── Section header ───────────────────────────────────────────────────────────
 function SectionHeader({
   label,
-  count,
   dimmed,
 }: {
   label: string
-  count: number
   dimmed: boolean
 }) {
   return (
     <div
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
         padding: '0 2px',
         marginBottom: 8,
         opacity: dimmed ? 0.45 : 1,
@@ -59,33 +54,11 @@ function SectionHeader({
           textTransform: 'uppercase',
           letterSpacing: '0.12em',
           color: ACCENT,
-          flexShrink: 0,
         }}
       >
         {label}
       </span>
-      <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
-      <span style={{ fontFamily: LF.body, fontSize: 11, color: LF.muted, flexShrink: 0 }}>
-        {count}
-      </span>
     </div>
-  )
-}
-
-// ─── Mic icon ─────────────────────────────────────────────────────────────────
-function MicIcon() {
-  return (
-    <svg width="10" height="13" viewBox="0 0 10 14" fill="none" aria-hidden="true">
-      <rect x="3" y="0" width="4" height="7" rx="2" fill={ACCENT} opacity="0.85" />
-      <path
-        d="M1 6.5a4 4 0 0 0 8 0"
-        stroke={ACCENT}
-        strokeWidth="1.4"
-        strokeLinecap="round"
-        fill="none"
-      />
-      <line x1="5" y1="10.5" x2="5" y2="13" stroke={ACCENT} strokeWidth="1.4" strokeLinecap="round" />
-    </svg>
   )
 }
 
@@ -536,14 +509,16 @@ export default function CardReview({
           ))}
         </div>
 
-        {/* Nav row: back + close buttons */}
+        {/* Nav row + title inline */}
         <div
           style={{
             display: 'flex',
-            justifyContent: 'space-between',
-            padding: '4px 18px',
+            alignItems: 'center',
+            padding: '8px 18px 16px',
+            gap: 12,
           }}
         >
+          {/* Back button */}
           {onBack ? (
             <button
               onClick={() => onBack?.({ steps, tips })}
@@ -559,12 +534,46 @@ export default function CardReview({
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                flexShrink: 0,
               }}
             >
               <BackChevronIcon />
             </button>
-          ) : <div style={{ width: 44, height: 44 }} />}
+          ) : <div style={{ width: 44, height: 44, flexShrink: 0 }} />}
 
+          {/* Title + subtitle */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div
+              style={{
+                fontFamily: LF.body,
+                fontSize: 22,
+                fontWeight: 500,
+                color: '#fff',
+                letterSpacing: '-0.01em',
+                lineHeight: 1.2,
+              }}
+            >
+              {isDragMode ? 'Drag to reorder' : 'Review'}
+            </div>
+            <div
+              style={{
+                fontFamily: LF.body,
+                fontSize: 13,
+                color: LF.muted,
+                marginTop: 3,
+                lineHeight: 1,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {isDragMode
+                ? `${dragMode!.section === 'steps' ? 'Step' : 'Tip'} ${dragMode!.index + 1}`
+                : subtitle || ' '}
+            </div>
+          </div>
+
+          {/* Close button */}
           {onClose ? (
             <button
               onClick={onClose}
@@ -580,55 +589,12 @@ export default function CardReview({
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                flexShrink: 0,
               }}
             >
               <CloseXIcon />
             </button>
-          ) : <div style={{ width: 44, height: 44 }} />}
-        </div>
-
-        {/* Title + subtitle */}
-        <div style={{ padding: '4px 20px 14px' }}>
-          <div
-            style={{
-              fontFamily: LF.body,
-              fontSize: 22,
-              fontWeight: 500,
-              color: '#fff',
-              letterSpacing: '-0.01em',
-              lineHeight: 1.2,
-            }}
-          >
-            {isDragMode ? 'Drag to reorder' : 'Review'}
-          </div>
-          <div
-            style={{
-              fontFamily: LF.body,
-              fontSize: 13,
-              color: LF.muted,
-              marginTop: 3,
-              lineHeight: 1,
-            }}
-          >
-            {isDragMode
-            ? `${dragMode!.section === 'steps' ? 'Step' : 'Tip'} ${dragMode!.index + 1} — drag grip handle to move`
-              : subtitle || ' '}
-          </div>
-          {!isDragMode && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 5,
-                marginTop: 7,
-              }}
-            >
-              <MicIcon />
-              <span style={{ fontFamily: LF.body, fontSize: 12, color: LF.muted, lineHeight: 1 }}>
-                Parsed from voice note
-              </span>
-            </div>
-          )}
+          ) : <div style={{ width: 44, height: 44, flexShrink: 0 }} />}
         </div>
       </div>
 
@@ -636,7 +602,7 @@ export default function CardReview({
       <div
         style={{
           position: 'absolute',
-          top: 200,
+          top: 140,
           left: 0,
           right: 0,
           bottom: 90,
@@ -650,7 +616,6 @@ export default function CardReview({
         <div style={{ marginBottom: 20 }}>
           <SectionHeader
             label="Sequence"
-            count={validSteps.length}
             dimmed={isEditing && editingSection === 'tips'}
           />
 
@@ -991,7 +956,6 @@ export default function CardReview({
         <div style={{ marginBottom: 12 }}>
           <SectionHeader
             label="Coach Tips"
-            count={validTips.length}
             dimmed={isEditing && editingSection === 'steps'}
           />
 
