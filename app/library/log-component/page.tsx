@@ -11,8 +11,7 @@ import { useUnsavedGuard } from '@/app/hooks/useUnsavedGuard'
 import ConfirmSheet from '@/app/components/ui/ConfirmSheet'
 import Toast from '@/app/components/ui/Toast'
 
-import S1Type from '@/app/components/log-flow/S1Type'
-import S2Curriculum from '@/app/components/log-flow/S2Curriculum'
+import S1Setup from '@/app/components/log-flow/S1Setup'
 import S3Photo from '@/app/components/log-flow/S3Photo'
 import VoiceScreen from '@/app/components/log-flow/VoiceScreen'
 import RevealScreen, { type RevealDraft } from '@/app/components/log-flow/RevealScreen'
@@ -21,7 +20,7 @@ import Card1Skills from '@/app/components/log-flow/Card1Skills'
 import CardReview from '@/app/components/log-flow/CardReview'
 import '@/app/components/log-flow/log-flow.css'
 
-type LogStep = 'type' | 'curriculum' | 'photo' | 'voice' | 'card-skills' | 'card-review' | 'reveal' | 'satisfaction'
+type LogStep = 'setup' | 'photo' | 'voice' | 'card-skills' | 'card-review' | 'reveal' | 'satisfaction'
 
 interface LogDraft {
   type: ComponentType | null
@@ -52,7 +51,7 @@ const EMPTY_DRAFT: LogDraft = {
 export default function LogComponentPage() {
   const router = useRouter()
 
-  const [step, setStep] = useState<LogStep>('type')
+  const [step, setStep] = useState<LogStep>('setup')
   const [draft, setDraft] = useState<LogDraft>(EMPTY_DRAFT)
   const [curriculumRows, setCurriculumRows] = useState<CurriculumRow[]>([])
   const [availableSkills, setAvailableSkills] = useState<string[]>([])
@@ -301,7 +300,7 @@ export default function LogComponentPage() {
     setIsTyping(false)
     setError(null)
     setDraft(EMPTY_DRAFT)
-    setStep('type')
+    setStep('setup')
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -318,22 +317,14 @@ export default function LogComponentPage() {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#0a1232', overflow: 'hidden' }}>
-      {step === 'type' && (
-        <S1Type
-          value={draft.type}
-          onSelect={(t) => setDraft((d) => ({ ...d, type: t }))}
-          onNext={() => setStep('curriculum')}
-          onClose={handleClose}
-        />
-      )}
-
-      {step === 'curriculum' && (
-        <S2Curriculum
-          value={draft.curriculums}
+      {step === 'setup' && (
+        <S1Setup
+          type={draft.type}
           curriculums={curriculumRows}
-          onToggle={handleToggleCurriculum}
+          selectedCurricula={draft.curriculums}
+          onSelectType={(t) => setDraft((d) => ({ ...d, type: t }))}
+          onToggleCurriculum={handleToggleCurriculum}
           onNext={() => setStep('photo')}
-          onBack={() => setStep('type')}
           onClose={handleClose}
         />
       )}
@@ -344,7 +335,7 @@ export default function LogComponentPage() {
           onCapture={handleCapturePhoto}
           onRemove={handleRemovePhoto}
           onNext={() => setStep('voice')}
-          onBack={() => setStep('curriculum')}
+          onBack={() => setStep('setup')}
           onClose={handleClose}
           type={draft.type!}
         />

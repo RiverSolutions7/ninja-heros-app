@@ -121,7 +121,7 @@ export default function S3Photo({
 
   return (
     <div style={{ position: 'absolute', inset: 0, background: LF.bg, color: '#fff', display: 'flex', flexDirection: 'column' }}>
-      <Chrome step={2} total={5} accent={accent} onBack={onBack} onClose={onClose ?? onBack} />
+      <Chrome step={1} total={4} accent={accent} onBack={onBack} onClose={onClose ?? onBack} />
 
       <div
         aria-hidden
