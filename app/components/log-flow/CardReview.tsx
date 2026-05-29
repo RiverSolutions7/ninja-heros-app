@@ -211,8 +211,7 @@ export default function CardReview({
 
   // ── AI split ─────────────────────────────────────────────────────────────
   const [splittingIndex, setSplittingIndex] = useState<number | null>(null)
-  const [splitUndo, setSplitUndo] = useState<{ original: string; part1: string; part2: string } | null>(null)
-  const splitUndoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const splitDataRef = useRef<{ original: string; part1: string; part2: string } | null>(null)
   const toast = useToast()
 
   // ── Refs ─────────────────────────────────────────────────────────────────
@@ -243,13 +242,6 @@ export default function CardReview({
     el.style.height = 'auto'
     el.style.height = `${el.scrollHeight}px`
   }, [editingText])
-
-  // Cleanup split undo timer on unmount
-  useEffect(() => {
-    return () => {
-      if (splitUndoTimer.current) clearTimeout(splitUndoTimer.current)
-    }
-  }, [])
 
   // ── Edit helpers ─────────────────────────────────────────────────────────
 
@@ -398,29 +390,28 @@ export default function CardReview({
         a.splice(index, 1, part1, part2)
         return a
       })
-      if (splitUndoTimer.current) clearTimeout(splitUndoTimer.current)
-      setSplitUndo({ original, part1, part2 })
-      splitUndoTimer.current = setTimeout(() => setSplitUndo(null), 5000)
+      splitDataRef.current = { original, part1, part2 }
+      toast.show('Split! Review the two steps.', 'info', 3000, {
+        label: 'Undo',
+        onClick: () => {
+          const data = splitDataRef.current
+          if (!data) return
+          setSteps((prev) => {
+            const a = [...prev]
+            const idx = a.indexOf(data.part1)
+            if (idx !== -1 && a[idx + 1] === data.part2) {
+              a.splice(idx, 2, data.original)
+            }
+            return a
+          })
+          splitDataRef.current = null
+        },
+      })
     } catch {
       toast.error('AI split failed — edit the step manually', 3500)
     } finally {
       setSplittingIndex(null)
     }
-  }
-
-  const undoSplit = () => {
-    if (!splitUndo) return
-    setSteps((prev) => {
-      const a = [...prev]
-      // Find part1 by value — immune to array shifts from concurrent moves/deletes
-      const idx = a.indexOf(splitUndo.part1)
-      if (idx !== -1 && a[idx + 1] === splitUndo.part2) {
-        a.splice(idx, 2, splitUndo.original)
-      }
-      return a
-    })
-    if (splitUndoTimer.current) clearTimeout(splitUndoTimer.current)
-    setSplitUndo(null)
   }
 
   const doMerge = (index: number) => {
@@ -1381,21 +1372,6 @@ export default function CardReview({
           </button>
         )}
       </div>
-
-      {/* ── Split undo toast (interactive — can't use useToast which is pointer-events-none) */}
-      {splitUndo && (
-        <div className="fixed bottom-24 left-4 right-4 z-[200] animate-slide-up">
-          <div className="flex items-center justify-between gap-3 bg-bg-card border border-bg-border rounded-xl px-4 py-3 shadow-card">
-            <span className="text-sm text-text-primary leading-snug">Split! Review the two steps.</span>
-            <button
-              onClick={undoSplit}
-              className="text-sm font-bold text-accent-fire flex-shrink-0 active:opacity-70 transition-opacity min-h-[44px] px-2 flex items-center"
-            >
-              Undo
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* ── Action sheet ─────────────────────────────────────────────────── */}
       {actionSheetItem !== null && (() => {

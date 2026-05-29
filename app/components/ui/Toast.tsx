@@ -16,17 +16,24 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import Button from './Button'
 
 export type ToastTone = 'success' | 'error' | 'info'
+
+export interface ToastAction {
+  label: string
+  onClick: () => void
+}
 
 interface ToastState {
   id: number
   message: string
   tone: ToastTone
+  action?: ToastAction
 }
 
 interface ToastContextValue {
-  show: (message: string, tone?: ToastTone, duration?: number) => void
+  show: (message: string, tone?: ToastTone, duration?: number, action?: ToastAction) => void
   success: (message: string, duration?: number) => void
   error: (message: string, duration?: number) => void
   info: (message: string, duration?: number) => void
@@ -59,9 +66,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const show = useCallback((message: string, tone: ToastTone = 'info', duration = 2400) => {
+  const show = useCallback((message: string, tone: ToastTone = 'info', duration = 2400, action?: ToastAction) => {
     const id = nextId.current++
-    setToast({ id, message, tone })
+    setToast({ id, message, tone, action })
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
       setToast((prev) => (prev?.id === id ? null : prev))
@@ -79,7 +86,19 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={value}>
       {children}
       {mounted && toast && createPortal(
-        <ToastOutlet key={toast.id} message={toast.message} tone={toast.tone} />,
+        <ToastOutlet
+          key={toast.id}
+          message={toast.message}
+          tone={toast.tone}
+          action={toast.action && {
+            label: toast.action.label,
+            onClick: () => {
+              toast.action!.onClick()
+              setToast(null)
+              if (timerRef.current) clearTimeout(timerRef.current)
+            },
+          }}
+        />,
         document.body
       )}
     </ToastContext.Provider>
@@ -88,7 +107,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
 // ── Outlet — editorial floating card, matches the app's voice ──────────────
 
-function ToastOutlet({ message, tone }: { message: string; tone: ToastTone }) {
+function ToastOutlet({ message, tone, action }: { message: string; tone: ToastTone; action?: ToastAction }) {
   const iconColor =
     tone === 'success' ? 'text-accent-green' :
     tone === 'error'   ? 'text-red-400'      :
@@ -100,7 +119,7 @@ function ToastOutlet({ message, tone }: { message: string; tone: ToastTone }) {
                          'border-bg-border'
 
   return (
-    <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[300] animate-slide-up pointer-events-none">
+    <div className={['fixed bottom-24 left-1/2 -translate-x-1/2 z-[300] animate-slide-up', action ? 'pointer-events-auto' : 'pointer-events-none'].join(' ')}>
       <div
         className={[
           'flex items-center gap-2.5 bg-bg-card shadow-card rounded-xl px-4 py-2.5 border',
@@ -115,6 +134,16 @@ function ToastOutlet({ message, tone }: { message: string; tone: ToastTone }) {
           )}
         </svg>
         <span className="text-sm text-text-primary">{message}</span>
+        {action && (
+          <Button
+            variant="ghost"
+            size="md"
+            onClick={action.onClick}
+            className="!text-accent-fire font-bold flex-shrink-0 ml-1"
+          >
+            {action.label}
+          </Button>
+        )}
       </div>
     </div>
   )
