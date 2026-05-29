@@ -513,7 +513,7 @@ export default function CardReview({
             <button
               onClick={() => onBack?.({ steps, tips })}
               aria-label="Back"
-              className="active:opacity-60 transition-opacity"
+              className="active:opacity-70 transition-opacity"
               style={{
                 width: 44,
                 height: 44,
@@ -552,7 +552,7 @@ export default function CardReview({
             <button
               onClick={onClose}
               aria-label="Close"
-              className="active:opacity-60 transition-opacity"
+              className="active:opacity-70 transition-opacity"
               style={{
                 width: 44,
                 height: 44,
@@ -760,7 +760,7 @@ export default function CardReview({
                                   aria-label="Step actions"
                                   onPointerDown={(e) => e.stopPropagation()}
                                   onClick={(e) => { e.stopPropagation(); setActionSheetItem({ section: 'steps', index }) }}
-                                  className="absolute top-0 right-0 w-11 h-11 rounded-lg flex items-center justify-center bg-accent-fire/15 text-accent-fire text-base leading-none border-0 cursor-pointer active:opacity-60 transition-opacity"
+                                  className="absolute top-0 right-0 w-11 h-11 rounded-lg flex items-center justify-center bg-accent-fire/15 text-accent-fire text-base leading-none border-0 cursor-pointer active:opacity-70 transition-opacity"
                                 >
                                   ⋯
                                 </button>
@@ -892,7 +892,7 @@ export default function CardReview({
                         aria-label="Step actions"
                         onPointerDown={(e) => e.stopPropagation()}
                         onClick={(e) => { e.stopPropagation(); setActionSheetItem({ section: 'steps', index }) }}
-                        className="absolute top-0 right-0 w-11 h-11 rounded-lg flex items-center justify-center bg-accent-fire/15 text-accent-fire text-base leading-none border-0 cursor-pointer active:opacity-60 transition-opacity"
+                        className="absolute top-0 right-0 w-11 h-11 rounded-lg flex items-center justify-center bg-accent-fire/15 text-accent-fire text-base leading-none border-0 cursor-pointer active:opacity-70 transition-opacity"
                       >
                         ⋯
                       </button>
@@ -1102,7 +1102,7 @@ export default function CardReview({
                                   aria-label="Tip actions"
                                   onPointerDown={(e) => e.stopPropagation()}
                                   onClick={(e) => { e.stopPropagation(); setActionSheetItem({ section: 'tips', index }) }}
-                                  className="absolute top-0 right-0 w-11 h-11 rounded-lg flex items-center justify-center bg-accent-fire/15 text-accent-fire text-base leading-none border-0 cursor-pointer active:opacity-60 transition-opacity"
+                                  className="absolute top-0 right-0 w-11 h-11 rounded-lg flex items-center justify-center bg-accent-fire/15 text-accent-fire text-base leading-none border-0 cursor-pointer active:opacity-70 transition-opacity"
                                 >
                                   ⋯
                                 </button>
@@ -1218,7 +1218,7 @@ export default function CardReview({
                         aria-label="Tip actions"
                         onPointerDown={(e) => e.stopPropagation()}
                         onClick={(e) => { e.stopPropagation(); setActionSheetItem({ section: 'tips', index }) }}
-                        className="absolute top-0 right-0 w-11 h-11 rounded-lg flex items-center justify-center bg-accent-fire/15 text-accent-fire text-base leading-none border-0 cursor-pointer active:opacity-60 transition-opacity"
+                        className="absolute top-0 right-0 w-11 h-11 rounded-lg flex items-center justify-center bg-accent-fire/15 text-accent-fire text-base leading-none border-0 cursor-pointer active:opacity-70 transition-opacity"
                       >
                         ⋯
                       </button>
@@ -1389,7 +1389,7 @@ export default function CardReview({
             <span className="text-sm text-text-primary leading-snug">Split! Review the two steps.</span>
             <button
               onClick={undoSplit}
-              className="text-sm font-bold text-accent-fire flex-shrink-0 active:opacity-60 transition-opacity"
+              className="text-sm font-bold text-accent-fire flex-shrink-0 active:opacity-70 transition-opacity"
             >
               Undo
             </button>
@@ -1463,7 +1463,7 @@ export default function CardReview({
               <button
                 type="button"
                 onClick={() => setActionSheetItem(null)}
-                className="w-full py-4 rounded-2xl text-[15px] font-semibold text-text-primary active:opacity-60 transition-opacity"
+                className="w-full py-4 rounded-2xl text-[15px] font-semibold text-text-primary active:opacity-70 transition-opacity"
                 style={{ background: 'rgba(255,255,255,0.08)' }}
               >
                 Cancel
