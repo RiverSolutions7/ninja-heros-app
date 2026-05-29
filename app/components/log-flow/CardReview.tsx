@@ -390,17 +390,16 @@ export default function CardReview({
         a.splice(index, 1, part1, part2)
         return a
       })
-      splitDataRef.current = { original, part1, part2 }
+      const splitData = { original, part1, part2 }
+      splitDataRef.current = splitData
       toast.show('Split! Review the two steps.', 'info', 3000, {
         label: 'Undo',
         onClick: () => {
-          const data = splitDataRef.current
-          if (!data) return
           setSteps((prev) => {
             const a = [...prev]
-            const idx = a.indexOf(data.part1)
-            if (idx !== -1 && a[idx + 1] === data.part2) {
-              a.splice(idx, 2, data.original)
+            const idx = a.indexOf(splitData.part1)
+            if (idx !== -1 && a[idx + 1] === splitData.part2) {
+              a.splice(idx, 2, splitData.original)
             }
             return a
           })

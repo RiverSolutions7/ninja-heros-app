@@ -119,7 +119,12 @@ function ToastOutlet({ message, tone, action }: { message: string; tone: ToastTo
                          'border-bg-border'
 
   return (
-    <div className={['fixed bottom-24 left-1/2 -translate-x-1/2 z-[300] animate-slide-up', action ? 'pointer-events-auto' : 'pointer-events-none'].join(' ')}>
+    <div
+      role="status"
+      aria-live={tone === 'error' ? 'assertive' : 'polite'}
+      aria-atomic="true"
+      className={['fixed bottom-24 left-1/2 -translate-x-1/2 z-[300] animate-slide-up', action ? 'pointer-events-auto' : 'pointer-events-none'].join(' ')}
+    >
       <div
         className={[
           'flex items-center gap-2.5 bg-bg-card shadow-card rounded-xl px-4 py-2.5 border',
