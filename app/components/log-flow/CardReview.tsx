@@ -760,7 +760,7 @@ export default function CardReview({
                                   aria-label="Step actions"
                                   onPointerDown={(e) => e.stopPropagation()}
                                   onClick={(e) => { e.stopPropagation(); setActionSheetItem({ section: 'steps', index }) }}
-                                  className="absolute top-0 right-0 w-11 h-11 rounded-lg flex items-center justify-center bg-accent-fire/15 text-accent-fire text-base leading-none border-0 cursor-pointer active:opacity-70 transition-opacity"
+                                  className="absolute top-0 right-0 w-11 h-11 flex items-center justify-center bg-transparent text-accent-fire text-base leading-none border-0 cursor-pointer active:opacity-70 transition-opacity"
                                 >
                                   ⋯
                                 </button>
@@ -892,7 +892,7 @@ export default function CardReview({
                         aria-label="Step actions"
                         onPointerDown={(e) => e.stopPropagation()}
                         onClick={(e) => { e.stopPropagation(); setActionSheetItem({ section: 'steps', index }) }}
-                        className="absolute top-0 right-0 w-11 h-11 rounded-lg flex items-center justify-center bg-accent-fire/15 text-accent-fire text-base leading-none border-0 cursor-pointer active:opacity-70 transition-opacity"
+                        className="absolute top-0 right-0 w-11 h-11 flex items-center justify-center bg-transparent text-accent-fire text-base leading-none border-0 cursor-pointer active:opacity-70 transition-opacity"
                       >
                         ⋯
                       </button>
@@ -1102,7 +1102,7 @@ export default function CardReview({
                                   aria-label="Tip actions"
                                   onPointerDown={(e) => e.stopPropagation()}
                                   onClick={(e) => { e.stopPropagation(); setActionSheetItem({ section: 'tips', index }) }}
-                                  className="absolute top-0 right-0 w-11 h-11 rounded-lg flex items-center justify-center bg-accent-fire/15 text-accent-fire text-base leading-none border-0 cursor-pointer active:opacity-70 transition-opacity"
+                                  className="absolute top-0 right-0 w-11 h-11 flex items-center justify-center bg-transparent text-accent-fire text-base leading-none border-0 cursor-pointer active:opacity-70 transition-opacity"
                                 >
                                   ⋯
                                 </button>
@@ -1218,7 +1218,7 @@ export default function CardReview({
                         aria-label="Tip actions"
                         onPointerDown={(e) => e.stopPropagation()}
                         onClick={(e) => { e.stopPropagation(); setActionSheetItem({ section: 'tips', index }) }}
-                        className="absolute top-0 right-0 w-11 h-11 rounded-lg flex items-center justify-center bg-accent-fire/15 text-accent-fire text-base leading-none border-0 cursor-pointer active:opacity-70 transition-opacity"
+                        className="absolute top-0 right-0 w-11 h-11 flex items-center justify-center bg-transparent text-accent-fire text-base leading-none border-0 cursor-pointer active:opacity-70 transition-opacity"
                       >
                         ⋯
                       </button>
