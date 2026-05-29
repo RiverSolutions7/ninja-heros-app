@@ -1389,7 +1389,7 @@ export default function CardReview({
             <span className="text-sm text-text-primary leading-snug">Split! Review the two steps.</span>
             <button
               onClick={undoSplit}
-              className="text-sm font-bold text-accent-fire flex-shrink-0 active:opacity-70 transition-opacity"
+              className="text-sm font-bold text-accent-fire flex-shrink-0 active:opacity-70 transition-opacity min-h-[44px] px-2 flex items-center"
             >
               Undo
             </button>
