@@ -5,6 +5,7 @@ import type { ComponentType, CurriculumRow } from '@/app/lib/database.types'
 import { curriculumDotColor } from '@/app/lib/curriculumColors'
 import { ACCENT, Chrome, LF, Press, PrimaryBtn } from './atoms'
 import BottomSheet from '@/app/components/ui/BottomSheet'
+import Chip from '@/app/components/ui/Chip'
 
 const TYPE_OPTIONS: Array<{ id: ComponentType; label: string; sub: string; rippleColor: string }> = [
   { id: 'station', label: 'Station', sub: 'Drill / skill / obstacle', rippleColor: `${LF.stationBlue}22` },
@@ -23,7 +24,7 @@ const TYPE_OPTIONS: Array<{ id: ComponentType; label: string; sub: string; rippl
  *   • Continue enables only when a Type AND ≥1 age group are selected.
  *
  * Top chrome is the shared `Chrome` atom (same back / X / progress bar as every
- * other flow screen), at step 0 of the merged 4-step flow.
+ * other flow screen), at step 0 of the shared 3-step bar (setup → photo → reveal).
  */
 export default function S1Setup({
   type,
@@ -59,7 +60,7 @@ export default function S1Setup({
 
   return (
     <div style={{ position: 'absolute', inset: 0, background: LF.bg, color: '#fff', display: 'flex', flexDirection: 'column' }}>
-      <Chrome step={0} total={4} accent={accent} onClose={onClose} />
+      <Chrome step={0} total={3} accent={accent} onClose={onClose} />
 
       <div style={{ padding: 'calc(env(safe-area-inset-top, 0px) + 76px) 24px 0', flex: 1, display: 'flex', flexDirection: 'column' }}>
         <div style={{ animation: 'lf-rise-in 600ms both' }}>
@@ -93,7 +94,7 @@ export default function S1Setup({
         </div>
 
         {/* Type pills — single-select; tapping one also opens the age sheet */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 32 }}>
+        <div role="radiogroup" aria-label="Component type" style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 32 }}>
           {TYPE_OPTIONS.map((t, i) => {
             const active = type === t.id
             return (
@@ -101,7 +102,9 @@ export default function S1Setup({
                 key={t.id}
                 onClick={() => selectType(t.id)}
                 rippleColor={t.rippleColor}
-                ariaLabel={`${t.label}: ${t.sub}${active ? ' (selected)' : ''}`}
+                role="radio"
+                aria-checked={active}
+                ariaLabel={`${t.label}: ${t.sub}`}
                 style={{
                   padding: '20px 22px',
                   border: `1.5px solid ${active ? accent : LF.hairlineStrong}`,
@@ -182,25 +185,15 @@ export default function S1Setup({
               {chosenRows.map((c) => {
                 const dot = curriculumDotColor(c.age_group)
                 return (
-                  <span
+                  <Chip
                     key={c.id}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 7,
-                      background: `${accent}0a`,
-                      border: `1px solid ${accent}`,
-                      color: '#fff',
-                      borderRadius: 999,
-                      padding: '7px 13px',
-                      fontFamily: LF.body,
-                      fontSize: 13,
-                      fontWeight: 700,
-                    }}
+                    variant="fire"
+                    size="sm"
+                    filled
+                    icon={<span style={{ width: 8, height: 8, borderRadius: '50%', background: dot, display: 'block' }} />}
                   >
-                    <span style={{ width: 12, height: 12, borderRadius: '50%', background: dot, flexShrink: 0 }} />
                     {c.label}
-                  </span>
+                  </Chip>
                 )
               })}
             </div>
@@ -217,7 +210,7 @@ export default function S1Setup({
       {/* Age-group bottom sheet — multi-select, built on the shared BottomSheet */}
       <BottomSheet visible={sheetOpen} onClose={() => setSheetOpen(false)} title="Who's it for?">
         <div style={{ padding: '4px 24px 8px' }}>
-          <p style={{ fontFamily: LF.body, fontSize: 13.5, color: LF.muted, margin: '0 0 18px', textAlign: 'center' }}>
+          <p style={{ fontFamily: LF.body, fontSize: 14, color: LF.muted, margin: '0 0 18px', textAlign: 'center' }}>
             Tap every age group this works with.
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
@@ -229,8 +222,9 @@ export default function S1Setup({
                   key={c.id}
                   onClick={() => onToggleCurriculum(c.age_group)}
                   rippleColor={sel ? 'rgba(0,0,0,0.18)' : `${dot}22`}
-                  ariaLabel={`${c.label}${sel ? ' (selected)' : ''}`}
+                  ariaLabel={c.label}
                   role="checkbox"
+                  aria-checked={sel}
                   style={{
                     display: 'flex',
                     alignItems: 'center',

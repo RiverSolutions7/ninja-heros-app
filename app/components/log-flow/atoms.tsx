@@ -70,6 +70,7 @@ export function Press({
   rippleColor = 'rgba(255,255,255,0.12)',
   ariaLabel,
   role,
+  ...aria
 }: {
   children: ReactNode
   onClick?: (e: React.MouseEvent<HTMLDivElement>) => void
@@ -78,15 +79,26 @@ export function Press({
   rippleColor?: string
   ariaLabel?: string
   role?: string
-}) {
+  /**
+   * Machine-readable selection / state, forwarded verbatim to the underlying
+   * element. Additive: omit them and Press behaves exactly as before.
+   */
+  'aria-pressed'?: React.AriaAttributes['aria-pressed']
+  'aria-checked'?: React.AriaAttributes['aria-checked']
+  'aria-disabled'?: React.AriaAttributes['aria-disabled']
+} & React.AriaAttributes) {
   const { launch, render } = useRipple()
   const [pressed, setPressed] = useState(false)
   const interactive = !!onClick
+  // An element marked aria-disabled is a real (disabled) control: keep its button
+  // role so it stays exposed to assistive tech, but drop it from the tab order.
+  const ariaDisabled = aria['aria-disabled'] === true || aria['aria-disabled'] === 'true'
   return (
     <div
-      role={role ?? (interactive ? 'button' : undefined)}
+      {...aria}
+      role={role ?? (interactive || ariaDisabled ? 'button' : undefined)}
       aria-label={ariaLabel}
-      tabIndex={interactive ? 0 : undefined}
+      tabIndex={interactive && !ariaDisabled ? 0 : undefined}
       onClick={(e) => {
         if (ripple) launch(e)
         onClick?.(e)
@@ -136,6 +148,10 @@ export function PrimaryBtn({
     <Press
       onClick={disabled ? undefined : onClick}
       rippleColor="rgba(0,0,0,0.2)"
+      // Keep the button role + disabled state exposed to assistive tech even when
+      // disabled (onClick is dropped above, so it stays non-interactive).
+      role="button"
+      aria-disabled={disabled || undefined}
       style={{
         width: '100%',
         height: 56,

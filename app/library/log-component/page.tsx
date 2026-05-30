@@ -11,6 +11,7 @@ import { useUnsavedGuard } from '@/app/hooks/useUnsavedGuard'
 import ConfirmSheet from '@/app/components/ui/ConfirmSheet'
 import Toast from '@/app/components/ui/Toast'
 
+import { LF } from '@/app/components/log-flow/atoms'
 import S1Setup from '@/app/components/log-flow/S1Setup'
 import S3Photo from '@/app/components/log-flow/S3Photo'
 import VoiceScreen from '@/app/components/log-flow/VoiceScreen'
@@ -316,7 +317,7 @@ export default function LogComponentPage() {
     : 'idle'
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#0a1232', overflow: 'hidden' }}>
+    <div style={{ position: 'fixed', inset: 0, background: LF.bg, overflow: 'hidden' }}>
       {step === 'setup' && (
         <S1Setup
           type={draft.type}
