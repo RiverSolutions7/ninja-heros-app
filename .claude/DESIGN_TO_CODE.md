@@ -46,9 +46,29 @@ If the ZIP download isn't available for a single screen:
 
 ---
 
+## Match the export — never substitute a primitive
+
+Getting the exact HTML is step one. Step two: **build it to match, exactly.** Reuse a shared component ONLY where it already matches the design. The moment the design diverges from a primitive, **match the design** (screen-local code) — do NOT round it off to an existing component "for consistency." The only thing that overrides the export is an explicitly-agreed structural anchor (currently just the shared `Chrome` top bar). Full rule set: **"The Fidelity Law"** in the vault `clean/stack.md`.
+
+## Lock it — the `@design-locked` marker
+
+When you implement a screen from a Claude Design export, add a marker comment near the top of the component so the polish-audit treats it as visually locked (and won't later "correct" it back toward a primitive):
+
+```ts
+/**
+ * @design-locked source="Claude Design export: <file>.html"
+ * Built verbatim from the export — the export is the visual source of truth (see The Fidelity Law in stack.md).
+ * polish-audit: do not flag divergence from shared primitives as drift; flag only a11y / tap-targets / state / bugs.
+ */
+```
+
+---
+
 ## Anti-Patterns — Never Do These
 
 - ❌ Sharing a screenshot and saying "implement this"
+- ❌ Substituting an app primitive for the design's exact element "for consistency"
+- ❌ Letting a polish pass collapse a design-locked screen back toward primitives
 - ❌ Claude Code guessing CSS values from visual inspection
 - ❌ Implementing before the design is approved
 - ❌ Treating the screenshot phase and the code phase as the same step

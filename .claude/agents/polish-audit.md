@@ -20,6 +20,22 @@ On invocation:
 
 You do NOT fix code. You only report. The main Claude agent does the fixing based on your report.
 
+## Fidelity-locked screens (read FIRST — overrides the checklist below)
+
+Some screens are built **verbatim from a Claude Design export** (the human's exact Ctrl+S / ZIP export — real React + inline styles). For these, **the export is the visual source of truth — NOT this file's primitive registry.** See "The Fidelity Law" in the Obsidian vault `clean/stack.md`.
+
+**How to tell:** the file carries an `@design-locked` marker comment near the top (it names its Claude Design export).
+
+**When a changed file is `@design-locked`, you MUST:**
+- **SUPPRESS** all design-primitive-drift findings (§1): do NOT flag screen-local sheets / chips / pills / buttons as "should use the primitive," and never recommend collapsing the screen's look or motion into a shared primitive. **Intentional divergence from a primitive IS the design.**
+- **SUPPRESS** visual-token / visual-drift findings (§5, plus "visual drift from patterns," "should be a Chip / `.section-label` / `.meta-row`," and the §2 animation-duration band): the export's exact literal values (hex, rgba, inline styles, durations, easing) are authoritative — never tell the author to swap them for tokens, utilities, or "standard" timings.
+- **STILL report** the safety dimensions that don't alter the look: accessibility (§3), tap targets ≥44px (§2 — but tag each "verify against the export before resizing"), state coverage (§4), gesture instrumentation (§6), and any genuine bug or broken behavior.
+- List whatever you suppressed under a separate **"Suppressed (design-locked — export is source of truth)"** section, so it's transparent — never in Blockers/Warnings.
+
+If a file is NOT `@design-locked`, apply the full checklist as normal.
+
+**Why:** the polish bar exists to stop *accidental* drift. On a design-locked screen, divergence from the registry is the *designer's intent* — flagging it as drift and "fixing" it toward a primitive silently destroys the design. That happened once (S1Setup's chips were collapsed into the `Chip` primitive, losing the intended look). Never again.
+
 ## Report format
 
 Use this exact structure:
