@@ -2,29 +2,50 @@
 
 import { useState } from 'react'
 import type { ComponentType, CurriculumRow } from '@/app/lib/database.types'
-import { curriculumDotColor } from '@/app/lib/curriculumColors'
-import { ACCENT, Chrome, LF, Press, PrimaryBtn } from './atoms'
-import BottomSheet from '@/app/components/ui/BottomSheet'
-import Chip from '@/app/components/ui/Chip'
+import { ACCENT, Chrome, LF } from './atoms'
+import S1AgeSheet from './S1AgeSheet'
 
-const TYPE_OPTIONS: Array<{ id: ComponentType; label: string; sub: string; rippleColor: string }> = [
-  { id: 'station', label: 'Station', sub: 'Drill / skill / obstacle', rippleColor: `${LF.stationBlue}22` },
-  { id: 'game', label: 'Game', sub: 'Game or activity', rippleColor: `${LF.gameGreen}22` },
+// ─── Exact values lifted from Daniel's iterated Claude Design export ──────────
+// (Downloads/Choose a curriculum_files/_bootstrap.html, Ctrl+S 5/30). The export
+// is the source of truth for this screen and WINS over the older handoff .md.
+// Notably the export's orange is #f97316 (not the app's #ff5a1f ACCENT), the type
+// pills are stacked rows + radio (Daniel's newer iteration), and there are NO age
+// chips / "tap to edit" row on the main screen in this iteration.
+const DESIGN = {
+  orange: '#f97316',
+  textPrimary: '#f1f5f9',
+  textMuted: '#94a3b8',
+  textDim: '#475569',
+  glowOrange: '0 0 28px rgba(249,115,22,0.40), 0 6px 18px rgba(249,115,22,0.22)',
+} as const
+
+const TYPE_OPTIONS: Array<{ id: ComponentType; label: string; sub: string }> = [
+  { id: 'station', label: 'Station', sub: 'Drill / skill / obstacle' },
+  { id: 'game', label: 'Game', sub: 'Game or activity' },
 ]
 
 /**
- * S1Setup — merged first screen of the log-component flow ("Pills + sheet").
- * Combines the old Type (S1) + Curriculum (S2) screens into one:
- *   • Two Type pills (single-select). Tapping one selects it AND auto-opens the
- *     age-group bottom sheet.
- *   • Bottom sheet (built on the shared BottomSheet primitive) multi-selects age
- *     groups, sourced from the live `curriculums` table (never hardcoded).
- *   • Chosen ages return as chips under "Age groups · tap to edit"; tapping
- *     "tap to edit" reopens the sheet.
+ * S1Setup — merged first screen of the log-component flow ("Pills + sheet"),
+ * rebuilt to EXACTLY match Daniel's iterated Claude Design export.
+ *
+ *   • Title "WHAT ARE YOU LOGGING?" + subtitle "Pick a type. Then choose who it's for."
+ *   • Two Type pills, stacked full-width rows (label + sublabel on the left, a radio
+ *     indicator on the right). Single-select. Tapping one selects it AND auto-opens
+ *     the age-group sheet.
+ *   • Bottom sheet (screen-local S1AgeSheet — the export's exact surface + motion)
+ *     multi-selects age groups, sourced from the live `curriculums` table.
  *   • Continue enables only when a Type AND ≥1 age group are selected.
  *
- * Top chrome is the shared `Chrome` atom (same back / X / progress bar as every
- * other flow screen), at step 0 of the shared 3-step bar (setup → photo → reveal).
+ * Divergences from the OLD shipped version, all driven by the export:
+ *   • No on-screen age chips / "Age groups · tap to edit" row — this iteration drops
+ *     them. Re-opening the sheet is done by re-tapping a Type pill.
+ *   • Orange is #f97316 (export) rather than #ff5a1f. The `accent` prop is kept for
+ *     contract stability but the screen paints itself in the export's orange.
+ *
+ * Preserved from the shipped version: the shared `Chrome` top bar (back / X /
+ * progress), a11y (radiogroup/radio + aria-checked on type pills; checkbox +
+ * aria-checked on age rows; role=button + aria-disabled on disabled Continue/Done),
+ * and the data-driven `curriculums` prop contract (page.tsx needs no change).
  */
 export default function S1Setup({
   type,
@@ -34,7 +55,9 @@ export default function S1Setup({
   onToggleCurriculum,
   onNext,
   onClose,
-  accent = ACCENT,
+  // Accepted for prop-contract stability (page.tsx may pass it); the screen itself
+  // renders in the export's orange (#f97316), so this is intentionally unused.
+  accent: _accent = ACCENT,
 }: {
   type: ComponentType | null
   curriculums: CurriculumRow[]
@@ -55,203 +78,184 @@ export default function S1Setup({
     setSheetOpen(true) // tapping a Type pill opens the age-group sheet
   }
 
-  // Chips render in the curriculum table's own order
-  const chosenRows = curriculums.filter((c) => selectedCurricula.includes(c.age_group))
-
   return (
-    <div style={{ position: 'absolute', inset: 0, background: LF.bg, color: '#fff', display: 'flex', flexDirection: 'column' }}>
-      <Chrome step={0} total={3} accent={accent} onClose={onClose} />
+    <div style={{ position: 'absolute', inset: 0, background: LF.bg, color: DESIGN.textPrimary, display: 'flex', flexDirection: 'column' }}>
+      {/* Soft fire bleed at the top — matches the export's .screen::before */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          inset: '0 0 auto 0',
+          height: 280,
+          background: 'linear-gradient(to bottom, rgba(249,115,22,0.08), transparent)',
+          pointerEvents: 'none',
+          zIndex: 0,
+        }}
+      />
 
-      <div style={{ padding: 'calc(env(safe-area-inset-top, 0px) + 76px) 24px 0', flex: 1, display: 'flex', flexDirection: 'column' }}>
+      {/* Shared Chrome — back / X / progress. step 0 of 3 (setup → photo → reveal),
+          painted in the export's orange so the progress bar matches the design. */}
+      <Chrome step={0} total={3} accent={DESIGN.orange} onClose={onClose} />
+
+      <div
+        style={{
+          position: 'relative',
+          zIndex: 1,
+          padding: 'calc(env(safe-area-inset-top, 0px) + 76px) 20px 0',
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
         <div style={{ animation: 'lf-rise-in 600ms both' }}>
           <h1
             style={{
               fontFamily: LF.display,
-              fontSize: 36,
-              lineHeight: 0.95,
-              letterSpacing: '-0.02em',
+              fontSize: 26,
+              lineHeight: 1.08,
               textTransform: 'uppercase',
               margin: 0,
               fontWeight: 400,
+              color: DESIGN.textPrimary,
             }}
           >
-            What are
+            What are you
             <br />
-            you logging?
+            logging?
           </h1>
           <p
             style={{
               fontFamily: LF.body,
-              fontSize: 14,
-              color: LF.muted,
-              marginTop: 14,
-              maxWidth: 300,
+              fontSize: 15,
               lineHeight: 1.5,
+              color: DESIGN.textMuted,
+              margin: '12px 0 0',
+              maxWidth: '30ch',
             }}
           >
             Pick a type. Then choose who it&apos;s for.
           </p>
         </div>
 
-        {/* Type pills — single-select; tapping one also opens the age sheet */}
-        <div role="radiogroup" aria-label="Component type" style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 32 }}>
-          {TYPE_OPTIONS.map((t, i) => {
+        {/* Type pills — single-select stacked rows; tapping one opens the age sheet */}
+        <div role="radiogroup" aria-label="Component type" style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 30 }}>
+          {TYPE_OPTIONS.map((t) => {
             const active = type === t.id
             return (
-              <Press
+              <button
                 key={t.id}
+                type="button"
                 onClick={() => selectType(t.id)}
-                rippleColor={t.rippleColor}
                 role="radio"
                 aria-checked={active}
-                ariaLabel={`${t.label}: ${t.sub}`}
+                aria-label={`${t.label}: ${t.sub}`}
                 style={{
-                  padding: '20px 22px',
-                  border: `1.5px solid ${active ? accent : LF.hairlineStrong}`,
-                  background: active ? `${accent}0a` : 'rgba(255,255,255,0.02)',
+                  position: 'relative',
                   display: 'flex',
+                  flexDirection: 'row',
                   alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 14,
-                  animation: `lf-rise-in 500ms ${100 + i * 80}ms both`,
-                  boxShadow: active ? `0 0 32px ${accent}33` : 'none',
-                  transition: 'border-color 240ms, background 240ms, box-shadow 360ms',
+                  textAlign: 'left',
+                  width: '100%',
+                  minHeight: 72,
+                  padding: '20px 18px',
+                  borderRadius: 16,
+                  cursor: 'pointer',
+                  background: active ? 'rgba(249,115,22,0.08)' : 'rgba(255,255,255,0.045)',
+                  border: `1px solid ${active ? 'rgba(249,115,22,0.45)' : 'rgba(255,255,255,0.10)'}`,
+                  color: DESIGN.textPrimary,
+                  transition: 'background 0.18s ease, border-color 0.18s ease',
                 }}
               >
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontFamily: LF.display, fontSize: 22, color: '#fff', textTransform: 'uppercase', letterSpacing: '-0.01em' }}>
+                <span style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  <span style={{ fontFamily: LF.display, fontSize: 17, letterSpacing: '0.01em', color: DESIGN.textPrimary }}>
                     {t.label}
-                  </div>
-                  <div style={{ fontFamily: LF.body, fontSize: 13, color: LF.muted, marginTop: 2 }}>{t.sub}</div>
-                </div>
-                {/* Radio indicator — filled orange when selected */}
-                <div
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: LF.body,
+                      fontSize: 13,
+                      lineHeight: 1.35,
+                      color: active ? DESIGN.textMuted : DESIGN.textDim,
+                      transition: 'color 0.18s ease',
+                    }}
+                  >
+                    {t.sub}
+                  </span>
+                </span>
+                {/* Radio indicator — fills orange when selected */}
+                <span
+                  aria-hidden="true"
                   style={{
                     width: 24,
                     height: 24,
-                    borderRadius: '50%',
-                    border: `2px solid ${active ? accent : LF.hairlineStrong}`,
-                    background: active ? accent : 'transparent',
+                    borderRadius: 99,
+                    flexShrink: 0,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    flexShrink: 0,
-                    transition: 'all 240ms',
+                    border: `2px solid ${active ? DESIGN.orange : 'rgba(255,255,255,0.20)'}`,
+                    background: active ? DESIGN.orange : 'transparent',
+                    transition: 'border-color 0.18s ease, background 0.18s ease',
                   }}
                 >
-                  {active && <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff' }} />}
-                </div>
-              </Press>
+                  <span
+                    style={{
+                      width: 9,
+                      height: 9,
+                      borderRadius: 99,
+                      background: '#fff',
+                      opacity: active ? 1 : 0,
+                      transform: active ? 'scale(1)' : 'scale(0.4)',
+                      transition: 'opacity 0.18s ease, transform 0.18s cubic-bezier(0.34,1.56,0.64,1)',
+                    }}
+                  />
+                </span>
+              </button>
             )
           })}
         </div>
-
-        {/* Chosen age groups */}
-        {anyAge && (
-          <div style={{ animation: 'lf-rise-in 360ms both' }}>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'baseline',
-                gap: 8,
-                fontFamily: LF.display,
-                fontSize: 13,
-                letterSpacing: '0.04em',
-                textTransform: 'uppercase',
-                color: LF.muted,
-                margin: '26px 0 12px',
-              }}
-            >
-              <span>Age groups ·</span>
-              <Press
-                onClick={() => setSheetOpen(true)}
-                ariaLabel="Edit age groups"
-                ripple={false}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  // Visible text stays inline; padding + negative margin extend the
-                  // hit area to ~44px tall without shifting the baseline row.
-                  padding: '14px 12px',
-                  margin: '-14px -12px',
-                }}
-              >
-                <span style={{ color: accent, textTransform: 'none', fontFamily: LF.body, fontWeight: 700, fontSize: 13 }}>
-                  tap to edit
-                </span>
-              </Press>
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {chosenRows.map((c) => {
-                const dot = curriculumDotColor(c.age_group)
-                return (
-                  <Chip
-                    key={c.id}
-                    variant="fire"
-                    size="sm"
-                    filled
-                    icon={<span style={{ width: 8, height: 8, borderRadius: '50%', background: dot, display: 'block' }} />}
-                  >
-                    {c.label}
-                  </Chip>
-                )
-              })}
-            </div>
-          </div>
-        )}
       </div>
 
-      <div style={{ padding: '0 24px 32px' }}>
-        <PrimaryBtn accent={accent} onClick={onNext} disabled={!canContinue}>
+      {/* Footer — single Continue button (export styling: Russo One, orange glow) */}
+      <div style={{ position: 'relative', zIndex: 5, padding: '16px 20px 30px' }}>
+        <button
+          type="button"
+          onClick={canContinue ? onNext : undefined}
+          disabled={!canContinue}
+          role="button"
+          aria-disabled={!canContinue || undefined}
+          style={{
+            width: '100%',
+            height: 56,
+            borderRadius: 16,
+            border: 'none',
+            fontFamily: LF.display,
+            fontSize: 16,
+            letterSpacing: '0.02em',
+            textTransform: 'uppercase',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: canContinue ? 'pointer' : 'not-allowed',
+            background: canContinue ? DESIGN.orange : 'rgba(255,255,255,0.06)',
+            color: canContinue ? '#fff' : DESIGN.textDim,
+            boxShadow: canContinue ? DESIGN.glowOrange : 'none',
+            transition: 'background 0.18s ease, box-shadow 0.18s ease, color 0.18s ease',
+          }}
+        >
           Continue
-        </PrimaryBtn>
+        </button>
       </div>
 
-      {/* Age-group bottom sheet — multi-select, built on the shared BottomSheet */}
-      <BottomSheet visible={sheetOpen} onClose={() => setSheetOpen(false)} title="Who's it for?">
-        <div style={{ padding: '4px 24px 8px' }}>
-          <p style={{ fontFamily: LF.body, fontSize: 14, color: LF.muted, margin: '0 0 18px', textAlign: 'center' }}>
-            Tap every age group this works with.
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
-            {curriculums.map((c) => {
-              const sel = selectedCurricula.includes(c.age_group)
-              const dot = curriculumDotColor(c.age_group)
-              return (
-                <Press
-                  key={c.id}
-                  onClick={() => onToggleCurriculum(c.age_group)}
-                  rippleColor={sel ? 'rgba(0,0,0,0.18)' : `${dot}22`}
-                  ariaLabel={c.label}
-                  role="checkbox"
-                  aria-checked={sel}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 10,
-                    borderRadius: 16,
-                    padding: 16,
-                    minHeight: 44,
-                    background: sel ? '#fff' : 'rgba(255,255,255,0.06)',
-                    color: sel ? '#0e1428' : '#fff',
-                    boxShadow: sel ? `0 0 28px ${accent}33` : 'none',
-                    transition: 'background 180ms ease, color 180ms ease, box-shadow 180ms ease',
-                  }}
-                >
-                  <span style={{ width: 14, height: 14, borderRadius: '50%', background: dot, flexShrink: 0 }} />
-                  <span style={{ fontFamily: LF.body, fontWeight: 700, fontSize: 15 }}>{c.label}</span>
-                </Press>
-              )
-            })}
-          </div>
-          <div style={{ marginTop: 18 }}>
-            <PrimaryBtn accent={accent} onClick={() => setSheetOpen(false)} disabled={!anyAge}>
-              Done
-            </PrimaryBtn>
-          </div>
-        </div>
-      </BottomSheet>
+      {/* Age-group bottom sheet — screen-local, export's exact surface + motion */}
+      <S1AgeSheet
+        open={sheetOpen}
+        curriculums={curriculums}
+        selectedCurricula={selectedCurricula}
+        onToggle={onToggleCurriculum}
+        onDone={() => setSheetOpen(false)}
+        onClose={() => setSheetOpen(false)}
+      />
     </div>
   )
 }
