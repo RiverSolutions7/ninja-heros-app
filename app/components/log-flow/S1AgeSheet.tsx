@@ -1,5 +1,11 @@
 'use client'
 
+/**
+ * @design-locked — built verbatim from the Claude Design export (Choose a curriculum.html).
+ * The export is the visual source of truth; see "The Fidelity Law" in stack.md.
+ * polish-audit: do NOT flag divergence from shared primitives as drift — flag only a11y / tap-targets / state / gesture / bugs.
+ */
+
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { CurriculumRow } from '@/app/lib/database.types'
