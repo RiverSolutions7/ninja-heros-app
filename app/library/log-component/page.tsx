@@ -13,15 +13,14 @@ import Toast from '@/app/components/ui/Toast'
 
 import { LF } from '@/app/components/log-flow/atoms'
 import S1Setup from '@/app/components/log-flow/S1Setup'
-import S3Photo from '@/app/components/log-flow/S3Photo'
-import VoiceScreen from '@/app/components/log-flow/VoiceScreen'
+import Capture from '@/app/components/log-flow/Capture'
 import RevealScreen, { type RevealDraft } from '@/app/components/log-flow/RevealScreen'
 import Satisfaction from '@/app/components/log-flow/Satisfaction'
 import Card1Skills from '@/app/components/log-flow/Card1Skills'
 import CardReview from '@/app/components/log-flow/CardReview'
 import '@/app/components/log-flow/log-flow.css'
 
-type LogStep = 'setup' | 'photo' | 'voice' | 'card-skills' | 'card-review' | 'reveal' | 'satisfaction'
+type LogStep = 'setup' | 'capture' | 'card-skills' | 'card-review' | 'reveal' | 'satisfaction'
 
 interface LogDraft {
   type: ComponentType | null
@@ -106,7 +105,7 @@ export default function LogComponentPage() {
 
   // On unsupported browsers, auto-open the typing state instead of voice
   useEffect(() => {
-    if (step !== 'voice') return
+    if (step !== 'capture') return
     if (voice.isSupported) return
     setIsTyping(true)
   }, [step, voice.isSupported])
@@ -231,6 +230,15 @@ export default function LogComponentPage() {
     })
   }
 
+  // Reorder the deck (reorder tray drag-end) — re-pair files + urls by index order; cover = index 0
+  const handleReorderPhotos = (order: number[]) => {
+    setDraft((d) => ({
+      ...d,
+      photoPreviewUrls: order.map((i) => d.photoPreviewUrls[i]),
+      photoFiles: order.map((i) => d.photoFiles[i]),
+    }))
+  }
+
   // ── Curriculum handlers ───────────────────────────────────────────────────
 
   const handleToggleCurriculum = (ageGroup: string) => {
@@ -325,28 +333,19 @@ export default function LogComponentPage() {
           selectedCurricula={draft.curriculums}
           onSelectType={(t) => setDraft((d) => ({ ...d, type: t }))}
           onToggleCurriculum={handleToggleCurriculum}
-          onNext={() => setStep('photo')}
+          onNext={() => setStep('capture')}
           onClose={handleClose}
         />
       )}
 
-      {step === 'photo' && (
-        <S3Photo
+      {step === 'capture' && draft.type && (
+        <Capture
+          type={draft.type}
           previewUrls={draft.photoPreviewUrls}
           onCapture={handleCapturePhoto}
           onRemove={handleRemovePhoto}
-          onNext={() => setStep('voice')}
-          onBack={() => setStep('setup')}
-          onClose={handleClose}
-          type={draft.type!}
-        />
-      )}
-
-      {step === 'voice' && draft.type && (
-        <VoiceScreen
+          onReorder={handleReorderPhotos}
           state={micState}
-          type={draft.type}
-          photoPreviewUrls={draft.photoPreviewUrls}
           getAmplitude={voice.getAmplitude}
           onStart={handleVoiceStart}
           onTypingStart={handleTypingStart}
@@ -358,7 +357,7 @@ export default function LogComponentPage() {
             voice.reset()
             setIsStopped(false)
             setIsTyping(false)
-            setStep('photo')
+            setStep('setup')
           }}
           onClose={handleClose}
         />
