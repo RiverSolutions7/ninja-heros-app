@@ -109,6 +109,14 @@ export default function PhotoDeck({ previewUrls, onRemove }: { previewUrls: stri
     })
   }
 
+  // promote layers only while a swipe is in flight; drop at rest (§8 — no permanent will-change)
+  function setWC(on: boolean) {
+    const v = on ? 'transform, opacity' : 'auto'
+    ;[centerRef.current, peekPrevRef.current, peekNextRef.current].forEach((el) => {
+      if (el) el.style.willChange = v
+    })
+  }
+
   function render(shift: number) {
     applyCard(centerRef.current, cBox.current.w, cBox.current.h, slotAt(shift, cBox.current.w))
     if (n >= 2) {
@@ -171,6 +179,7 @@ export default function PhotoDeck({ previewUrls, onRemove }: { previewUrls: stri
     requestAnimationFrame(() => render(dir > 0 ? 1 : -1))
     window.setTimeout(() => {
       setAnim(false)
+      setWC(false)
       // dragged right (dir>0) → previous to front; dragged left (dir<0) → next to front
       setActive((a) => (((a + (dir > 0 ? -1 : 1)) % n) + n) % n)
     }, 340)
@@ -180,6 +189,7 @@ export default function PhotoDeck({ previewUrls, onRemove }: { previewUrls: stri
     if ((e.target as HTMLElement).closest('[data-nodrag]')) return
     if (n < 2) return
     drag.current = { on: true, startX: e.clientX, shift: 0, pid: e.pointerId }
+    setWC(true)
     setAnim(false)
     try { deckRef.current?.setPointerCapture(e.pointerId) } catch { /* ignore */ }
   }
@@ -201,7 +211,7 @@ export default function PhotoDeck({ previewUrls, onRemove }: { previewUrls: stri
     else {
       setAnim(true)
       requestAnimationFrame(() => render(0))
-      window.setTimeout(() => setAnim(false), 340)
+      window.setTimeout(() => { setAnim(false); setWC(false) }, 340)
     }
   }
 
@@ -234,7 +244,7 @@ export default function PhotoDeck({ previewUrls, onRemove }: { previewUrls: stri
         ref={peekPrevRef}
         aria-hidden="true"
         hidden
-        style={{ position: 'absolute', left: 0, top: 0, zIndex: 1, transformOrigin: 'center center', borderRadius: 26, overflow: 'hidden', background: '#0c1322', boxShadow: '0 22px 46px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.05)', willChange: 'transform, opacity' }}
+        style={{ position: 'absolute', left: 0, top: 0, zIndex: 1, transformOrigin: 'center center', borderRadius: 26, overflow: 'hidden', background: '#0c1322', boxShadow: '0 22px 46px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.05)' }}
       >
         <div ref={prevImgRef} style={{ position: 'absolute', inset: 0, background: '#16203a center/cover no-repeat' }} />
         <div ref={prevShadeRef} style={{ position: 'absolute', inset: 0, background: '#05070f', opacity: 0 }} />
@@ -245,14 +255,14 @@ export default function PhotoDeck({ previewUrls, onRemove }: { previewUrls: stri
         ref={peekNextRef}
         aria-hidden="true"
         hidden
-        style={{ position: 'absolute', left: 0, top: 0, zIndex: 1, transformOrigin: 'center center', borderRadius: 26, overflow: 'hidden', background: '#0c1322', boxShadow: '0 22px 46px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.05)', willChange: 'transform, opacity' }}
+        style={{ position: 'absolute', left: 0, top: 0, zIndex: 1, transformOrigin: 'center center', borderRadius: 26, overflow: 'hidden', background: '#0c1322', boxShadow: '0 22px 46px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.05)' }}
       >
         <div ref={nextImgRef} style={{ position: 'absolute', inset: 0, background: '#16203a center/cover no-repeat' }} />
         <div ref={nextShadeRef} style={{ position: 'absolute', inset: 0, background: '#05070f', opacity: 0 }} />
       </div>
 
       {/* centred photo card */}
-      <div ref={centerRef} style={{ position: 'absolute', left: 0, top: 0, zIndex: 3, transformOrigin: 'center center', willChange: 'transform' }}>
+      <div ref={centerRef} style={{ position: 'absolute', left: 0, top: 0, zIndex: 3, transformOrigin: 'center center' }}>
         <div ref={wrapRef} style={{ position: 'relative', width: 300, height: 380 }}>
           <div
             style={{

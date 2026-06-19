@@ -40,21 +40,23 @@ function Chip({ label, onClick, children }: { label: string; onClick: () => void
       aria-label={label}
       onClick={onClick}
       className="transition-transform active:scale-[0.94]"
-      style={{
-        width: 38,
-        height: 38,
-        borderRadius: '50%',
-        border: 'none',
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: 'rgba(255,255,255,0.82)',
-        background: 'linear-gradient(180deg,#141c33,#0c1222)',
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.10), inset 0 -1px 2px rgba(0,0,0,0.5), 0 6px 14px rgba(0,0,0,0.45)',
-      }}
+      style={{ width: 44, height: 44, borderRadius: '50%', border: 'none', cursor: 'pointer', padding: 0, background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
     >
-      {children}
+      <span
+        style={{
+          width: 38,
+          height: 38,
+          borderRadius: '50%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'rgba(255,255,255,0.82)',
+          background: 'linear-gradient(180deg,#141c33,#0c1222)',
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.10), inset 0 -1px 2px rgba(0,0,0,0.5), 0 6px 14px rgba(0,0,0,0.45)',
+        }}
+      >
+        {children}
+      </span>
     </button>
   )
 }

@@ -20,7 +20,7 @@ interface ReorderTrayProps {
   onAdd: () => void
 }
 
-function Tile({ url, index, isCover, onRemove }: { url: string; index: number; isCover: boolean; onRemove: (i: number) => void }) {
+function Tile({ url, index, isCover, onRemove }: { url: string; index: number; isCover: boolean; onRemove: (url: string) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: url })
   return (
     <div
@@ -52,7 +52,7 @@ function Tile({ url, index, isCover, onRemove }: { url: string; index: number; i
         type="button"
         aria-label={`Remove photo ${index + 1}`}
         onPointerDown={(e) => e.stopPropagation()}
-        onClick={() => onRemove(index)}
+        onClick={() => onRemove(url)}
         style={{ position: 'absolute', top: 0, right: 0, padding: 8, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex' }}
       >
         <span style={{ width: 26, height: 26, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
@@ -84,7 +84,7 @@ export default function ReorderTray({ visible, previewUrls, onClose, onReorderIn
     <BottomSheet visible={visible} onClose={onClose} maxHeight="78vh" disableSwipeDismiss>
       <div style={{ padding: '0 18px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontFamily: 'var(--font-russo), sans-serif', fontSize: 15, letterSpacing: '0.4px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)' }}>Reorder</span>
-        <button type="button" onClick={onClose} style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'var(--font-nunito), sans-serif', fontSize: 15, fontWeight: 800, color: '#f97316' }}>
+        <button type="button" onClick={onClose} className="transition-opacity active:opacity-60" style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'var(--font-nunito), sans-serif', fontSize: 15, fontWeight: 800, color: '#f97316' }}>
           Done
         </button>
       </div>
@@ -94,7 +94,7 @@ export default function ReorderTray({ visible, previewUrls, onClose, onReorderIn
           <SortableContext items={previewUrls} strategy={rectSortingStrategy}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {previewUrls.map((url, i) => (
-                <Tile key={url} url={url} index={i} isCover={i === 0} onRemove={onRemove} />
+                <Tile key={url} url={url} index={i} isCover={i === 0} onRemove={(u) => onRemove(previewUrls.indexOf(u))} />
               ))}
 
               <button

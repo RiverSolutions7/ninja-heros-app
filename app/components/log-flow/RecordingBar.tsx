@@ -126,7 +126,8 @@ export default function RecordingBar({ state, getAmplitude, onStart, onTypingSta
           WebkitBackdropFilter: opaque ? 'none' : 'blur(20px) saturate(1.2)',
           boxShadow:
             'inset 0 0 0 1px rgba(255,255,255,0.14), inset 0 1.5px 0 rgba(255,255,255,0.52), 0 8px 22px rgba(0,0,0,0.40)',
-          transition: 'background .28s ease, backdrop-filter .28s ease',
+          // blur switches instantly (never animate backdrop-filter — §8); only the fill cross-fades
+          transition: 'background .28s ease',
         }}
       >
         {/* recording-only breathing hairline (gated to recording — never during review/parse) */}
@@ -145,7 +146,7 @@ export default function RecordingBar({ state, getAmplitude, onStart, onTypingSta
             aria-label="Cancel"
             onClick={onCancel}
             className="transition-transform active:scale-[0.9]"
-            style={{ position: 'absolute', left: 9, bottom: 9, zIndex: 4, width: 38, height: 38, borderRadius: '50%', border: 'none', cursor: 'pointer', background: 'transparent', color: 'rgba(255,255,255,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            style={{ position: 'absolute', left: 6, bottom: 6, zIndex: 4, width: 44, height: 44, borderRadius: '50%', border: 'none', cursor: 'pointer', background: 'transparent', color: 'rgba(255,255,255,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           >
             <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M1.5 1.5l10 10M11.5 1.5l-10 10" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" /></svg>
           </button>
@@ -166,7 +167,7 @@ export default function RecordingBar({ state, getAmplitude, onStart, onTypingSta
           <button
             type="button"
             onClick={onTypingStart}
-            style={{ position: 'absolute', left: 16, right: 90, top: 14, height: 22, overflow: 'hidden', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'text', padding: 0, fontFamily: 'var(--font-nunito), sans-serif', fontSize: 16.5, fontWeight: 600, color: 'rgba(255,255,255,0.40)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', zIndex: 2 }}
+            style={{ position: 'absolute', left: 16, right: 90, top: 6, height: 44, display: 'flex', alignItems: 'flex-start', paddingTop: 8, overflow: 'hidden', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'text', fontFamily: 'var(--font-nunito), sans-serif', fontSize: 16.5, fontWeight: 600, color: 'rgba(255,255,255,0.40)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', zIndex: 2 }}
           >
             {PLACEHOLDERS[phIdx]}
           </button>
