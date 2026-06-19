@@ -103,8 +103,10 @@ export default function PhotoActionMenu({
     if (!visible) return
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
-    const t = setTimeout(() => itemRefs.current[0]?.focus(), 60)
-    return () => { window.removeEventListener('keydown', onKey); clearTimeout(t) }
+    // Focus the first item after the panel paints (double-rAF self-synchronizes — no magic delay).
+    let raf2 = 0
+    const raf1 = requestAnimationFrame(() => { raf2 = requestAnimationFrame(() => itemRefs.current[0]?.focus()) })
+    return () => { window.removeEventListener('keydown', onKey); cancelAnimationFrame(raf1); cancelAnimationFrame(raf2) }
   }, [visible, onClose])
 
   if (!mounted || typeof window === 'undefined') return null
@@ -117,11 +119,11 @@ export default function PhotoActionMenu({
     const items = itemRefs.current.filter(Boolean) as HTMLButtonElement[]
     if (!items.length) return
     const idx = items.indexOf(document.activeElement as HTMLButtonElement)
-    if (e.key === 'ArrowDown') { e.preventDefault(); items[(idx + 1) % items.length].focus() }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); items[(idx - 1 + items.length) % items.length].focus() }
-    else if (e.key === 'Home') { e.preventDefault(); items[0].focus() }
-    else if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus() }
-    else if (e.key === 'Tab') { onClose() }
+    if (e.key === 'ArrowDown') { e.preventDefault(); e.stopPropagation(); items[(idx + 1) % items.length].focus() }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); items[(idx - 1 + items.length) % items.length].focus() }
+    else if (e.key === 'Home') { e.preventDefault(); e.stopPropagation(); items[0].focus() }
+    else if (e.key === 'End') { e.preventDefault(); e.stopPropagation(); items[items.length - 1].focus() }
+    else if (e.key === 'Tab') { e.preventDefault(); onClose() }
   }
 
   const rows = [
@@ -166,7 +168,6 @@ export default function PhotoActionMenu({
           borderRadius: 26,
           boxShadow: '0 18px 50px rgba(0,0,0,0.45)',
           padding: '10px 8px',
-          willChange: 'transform, opacity',
           ...style,
           transformOrigin: origin,
           transform: reduced ? 'none' : animateIn ? 'scale(1)' : 'scale(0.9)',
