@@ -23,7 +23,7 @@ if printf '%s' "$CMD" | grep -qiE '(^|[^[:alnum:]])git[[:space:]]+commit'; then
 {
   "hookSpecificOutput": {
     "hookEventName": "PostToolUse",
-    "additionalContext": "A git commit just completed. Per the workflow established in .claude/plans/starry-popping-aurora.md, invoke the polish-audit subagent now (Agent tool, subagent_type=\"polish-audit\") with a prompt to review the diff of the latest commit (git show HEAD). Surface the findings inline before continuing. If findings are all clean, acknowledge that briefly."
+    "additionalContext": "A git commit just completed. Per the project's standing post-commit polish workflow, invoke the polish-audit subagent now (Agent tool, subagent_type=\"polish-audit\") with a prompt to review the diff of the latest commit (git show HEAD). Surface the findings inline before continuing — and on any @design-locked file, only surface (never auto-apply) visual/motion findings. If findings are all clean, acknowledge that briefly."
   }
 }
 JSON

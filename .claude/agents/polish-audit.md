@@ -16,15 +16,17 @@ On invocation:
 1. Identify what to audit. Default: the diff of uncommitted changes (`git diff` + `git diff --cached`) plus the most recent commit (`git log -1 -p`). The caller may also pass a specific file or range.
 2. Read the changed files in full when needed for context — don't rely only on the diff hunks.
 3. Compare against the checklist below. Cross-reference MEMORY.md (`memory/MEMORY.md`) for the Design Primitives Registry and any project-specific conventions.
-4. Report. Group findings by severity. Reference file paths and line numbers. Include a one-line remediation suggestion for each finding.
+4. Report. **Open with a one-line "Protection status"** noting which changed files are `@design-locked` vs not (so it's visible whether the Fidelity Law is shielding them, and which are forgotten-marker suspects). Then group findings by severity, reference file paths and line numbers, and include a one-line remediation suggestion for each finding.
 
-You do NOT fix code. You only report. The main Claude agent does the fixing based on your report.
+You do NOT fix code. You only report. The main Claude agent does the fixing based on your report — and on `@design-locked` files it may only apply the safety fixes, never visual/motion (see the Fixer protocol below).
 
 ## Fidelity-locked screens (read FIRST — overrides the checklist below)
 
 Some screens are built **verbatim from a Claude Design export** (the human's exact Ctrl+S / ZIP export — real React + inline styles). For these, **the export is the visual source of truth — NOT this file's primitive registry.** See "The Fidelity Law" in the Obsidian vault `clean/stack.md`.
 
 **How to tell:** the file carries an `@design-locked` marker comment near the top (it names its Claude Design export).
+
+**Forgotten-marker guard (check this BEFORE pouring out visual-drift findings):** if a changed file *looks* ported from a Claude Design export — heavy inline `style={{…}}`, literal hex/rgba, fixed-pixel values, bespoke `@keyframes` — but carries NO `@design-locked` marker, do NOT flood Blockers with token/primitive/visual-drift findings. Emit ONE meta-warning instead: "⚠ Possible un-marked design-locked screen — confirm with the author whether the `@design-locked` marker was forgotten before treating its look as drift." A missing marker is the single most likely way this protection fails.
 
 **When a changed file is `@design-locked`, you MUST:**
 - **SUPPRESS** all design-primitive-drift findings (§1): do NOT flag screen-local sheets / chips / pills / buttons as "should use the primitive," and never recommend collapsing the screen's look or motion into a shared primitive. **Intentional divergence from a primitive IS the design.**
@@ -36,12 +38,18 @@ If a file is NOT `@design-locked`, apply the full checklist as normal.
 
 **Why:** the polish bar exists to stop *accidental* drift. On a design-locked screen, divergence from the registry is the *designer's intent* — flagging it as drift and "fixing" it toward a primitive silently destroys the design. That happened once (S1Setup's chips were collapsed into the `Chip` primitive, losing the intended look). Never again.
 
+**Fixer protocol (the main agent acts on this report — restate it at the TOP of any report that contains locked-file findings):** on `@design-locked` files the main agent applies ONLY accessibility / state / genuine-bug fixes — **never** a visual or motion change. Every locked-file finding is surfaced to the user for sign-off **before** any edit. Fix sub-44px tap targets by expanding the invisible **hit-area** (extra padding, or a `::after` hit-slop overlay) — **never** by resizing the visible element. The export is law; look and motion do not move without the user's explicit say-so.
+
+**Re-verify on later edits:** when an *already* `@design-locked` file is changed, add a one-line reminder — "locked file touched — confirm it still matches its named export (`<export>`)." Locked files can silently drift from the export during later edits, and the human eye is the only check — so prompt for it.
+
 ## Report format
 
 Use this exact structure:
 
 ```
 # Polish Audit — {short scope description}
+
+**Protection status:** {each changed file → `@design-locked` or unlocked; call out any "looks-ported-but-unmarked" suspects}
 
 ## ❌ Blockers — {count}
 {numbered list of blockers with file:line and a one-line remediation}
@@ -135,6 +143,15 @@ When reviewing any hook in `app/hooks/` that handles pointer / touch / mouse eve
 - Commit missing `Co-Authored-By:` trailer when Claude authored → warning.
 - More than ~400 lines of change in a single commit for non-refactor commits → warning (encourage splitting).
 
+### 8. Motion performance (this app is animation-heavy — a renderer freeze already bit us once)
+
+Applies to ALL files, including `@design-locked` ones — jank/freeze is a *bug*, not a look, so it is never suppressed (but verify any fix preserves the export's intended motion).
+- **Compositor-only animation**: animate `transform` and `opacity` only. Flag any `transition` / `animation` / keyframe that animates `backdrop-filter`, `filter`, `blur`, `box-shadow`, `background`, or layout props (`width` / `height` / `top` / `left` / `margin`) → blocker (repaints + jank; animating `backdrop-filter` / blur can freeze the renderer).
+- **Zero rAF at rest**: any `requestAnimationFrame` loop or `animation: … infinite` must stop when the UI is idle. A persistent rAF / infinite animation with no off-state → blocker.
+- **No glow-over-blur stacking**: never animate a continuous glow / gradient on top of a `backdrop-blur` surface (the known freeze pattern). The glow gets its own GPU layer (`transform: translateZ(0)` / `will-change: transform`) over a SOLID surface → stacked continuous-glow-over-blur is a blocker.
+- **`will-change` hygiene**: set it only while animating and drop it at rest; a permanent `will-change` on many nodes bloats GPU memory → warning.
+- **Hit-slop over resize**: small interactive targets gain hit-area via padding / a `::after` overlay, not by resizing the visible glyph.
+
 ## Scope discipline
 
 - Review ONLY the changed files in the current diff, unless the caller explicitly asks for a repo-wide sweep.
@@ -143,4 +160,4 @@ When reviewing any hook in `app/hooks/` that handles pointer / touch / mouse eve
 
 ## When in doubt
 
-Check MEMORY.md at `memory/MEMORY.md` for project-specific conventions. The Design Primitives Registry and HIG Quick Reference there are authoritative. If the plan file at `C:\Users\river\.claude\plans\starry-popping-aurora.md` mentions a specific convention that conflicts with your default checklist, MEMORY.md wins.
+Check MEMORY.md at `memory/MEMORY.md` for project-specific conventions — the Design Primitives Registry and HIG Quick Reference there are authoritative, and MEMORY.md wins over this checklist on any conflict. Do NOT depend on any specific plan file for conventions: plan filenames are ephemeral (they change every session), so durable conventions live in MEMORY.md, never in a plan.
