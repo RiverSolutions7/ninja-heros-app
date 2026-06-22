@@ -98,7 +98,7 @@ export default function Capture({
         color: '#fff',
         display: 'flex',
         flexDirection: 'column',
-        paddingTop: 'env(safe-area-inset-top, 0px)',
+        paddingTop: 'max(env(safe-area-inset-top, 0px), 50px)', // clear the status-bar / notch so the chips aren't jammed at the top
       }}
     >
       <div style={{ height: 52, padding: '0 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>

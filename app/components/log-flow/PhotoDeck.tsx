@@ -16,7 +16,7 @@ const S = 0.8 // neighbour scale (recessed)
 const DIM = 0.44 // neighbour shade opacity
 const TUCK = 10 // px the neighbour tucks behind the centre
 const SNAP = 58 // px drag past which a swipe commits
-const ANIM = 'transform .22s cubic-bezier(.2,1,.3,1), opacity .20s ease'
+const ANIM = 'transform .3s cubic-bezier(.25,.8,.3,1), opacity .24s ease' // smooth glide, no catch
 
 const clampAR = (w: number, h: number) => Math.max(AR_MIN, Math.min(AR_MAX, w / h))
 
@@ -34,7 +34,6 @@ function fitCenter(ar: number, dw: number, dh: number) {
 
 export default function PhotoDeck({ previewUrls, onRemove }: { previewUrls: string[]; onRemove: (index: number) => void }) {
   const deckRef = useRef<HTMLDivElement | null>(null)
-  const glowRef = useRef<HTMLDivElement | null>(null)
   const centerRef = useRef<HTMLDivElement | null>(null)
   const wrapRef = useRef<HTMLDivElement | null>(null)
   const peekPrevRef = useRef<HTMLDivElement | null>(null)
@@ -49,7 +48,7 @@ export default function PhotoDeck({ previewUrls, onRemove }: { previewUrls: stri
   const cBox = useRef({ w: 300, h: 380 })
   const pBox = useRef({ w: 0, h: 0 })
   const nBox = useRef({ w: 0, h: 0 })
-  const drag = useRef({ on: false, startX: 0, shift: 0, pid: -1 })
+  const drag = useRef({ on: false, startX: 0, shift: 0, pid: -1, moved: false, onPrev: false, onNext: false })
 
   const n = previewUrls.length
 
@@ -69,8 +68,10 @@ export default function PhotoDeck({ previewUrls, onRemove }: { previewUrls: stri
     })
   }, [previewUrls, dims])
 
-  const arOf = (i: number) => (n ? dims[previewUrls[((i % n) + n) % n]] ?? AR_DEFAULT : AR_DEFAULT)
-  const urlOf = (i: number) => previewUrls[((i % n) + n) % n]
+  // bounded (no wrap): out-of-range → undefined, so the cover has nothing on its left and the
+  // last photo nothing on its right — a clear start + a clear finish.
+  const arOf = (i: number) => (i >= 0 && i < n ? dims[previewUrls[i]] ?? AR_DEFAULT : AR_DEFAULT)
+  const urlOf = (i: number): string | undefined => (i >= 0 && i < n ? previewUrls[i] : undefined)
 
   // continuous slot map: e = signed distance from centre (0 = centred, ±1 = side slot)
   function slotAt(e: number, baseW: number) {
@@ -92,13 +93,18 @@ export default function PhotoDeck({ previewUrls, onRemove }: { previewUrls: stri
     return { cx, scale, dim, opacity }
   }
 
-  function applyCard(el: HTMLElement | null, baseW: number, baseH: number, st: ReturnType<typeof slotAt>, shadeEl?: HTMLElement | null) {
+  function applyCard(el: HTMLElement | null, baseW: number, baseH: number, e: number, shadeEl?: HTMLElement | null) {
     if (!el) return
+    const st = slotAt(e, baseW)
     const dh = deckRef.current?.clientHeight || 600
     const tx = st.cx - baseW / 2
     const ty = dh / 2 - baseH / 2
     el.style.transform = `translate(${tx.toFixed(2)}px,${ty.toFixed(2)}px) scale(${st.scale.toFixed(4)})`
     el.style.opacity = st.opacity.toFixed(3)
+    // z-index follows the slot: the photo nearest centre sits on top, so the incoming card
+    // slides OVER the outgoing one (kills the ugly mid-transition overlap, where the leaving
+    // photo — fixed z-index 3 — used to cover the arriving one).
+    el.style.zIndex = String(Math.round(50 - Math.abs(e) * 20))
     if (shadeEl) shadeEl.style.opacity = st.dim.toFixed(3)
   }
 
@@ -118,28 +124,25 @@ export default function PhotoDeck({ previewUrls, onRemove }: { previewUrls: stri
   }
 
   function render(shift: number) {
-    applyCard(centerRef.current, cBox.current.w, cBox.current.h, slotAt(shift, cBox.current.w))
+    applyCard(centerRef.current, cBox.current.w, cBox.current.h, shift)
     if (n >= 2) {
-      applyCard(peekNextRef.current, nBox.current.w, nBox.current.h, slotAt(1 + shift, nBox.current.w), nextShadeRef.current)
-      applyCard(peekPrevRef.current, pBox.current.w, pBox.current.h, slotAt(-1 + shift, pBox.current.w), prevShadeRef.current)
+      applyCard(peekNextRef.current, nBox.current.w, nBox.current.h, 1 + shift, nextShadeRef.current)
+      applyCard(peekPrevRef.current, pBox.current.w, pBox.current.h, -1 + shift, prevShadeRef.current)
     }
   }
 
   function layout() {
     const deck = deckRef.current
-    if (!deck || !wrapRef.current || !glowRef.current) return
+    if (!deck || !wrapRef.current) return
     const dw = deck.clientWidth || 393
     const dh = deck.clientHeight || 600
     const cf = fitCenter(arOf(active), dw, dh)
     cBox.current = cf
     wrapRef.current.style.width = `${cf.w.toFixed(2)}px`
     wrapRef.current.style.height = `${cf.h.toFixed(2)}px`
-    const gw = cf.w * 1.62
-    const gh = cf.h * 1.34
-    glowRef.current.style.width = `${gw.toFixed(1)}px`
-    glowRef.current.style.height = `${gh.toFixed(1)}px`
-    glowRef.current.style.transform = `translate(${(dw / 2 - gw / 2).toFixed(1)}px,${(dh / 2 - gh / 2).toFixed(1)}px)`
-    if (n >= 2) {
+    const hasPrev = active > 0
+    const hasNext = active < n - 1
+    if (hasPrev) {
       const pf = fitCenter(arOf(active - 1), dw, dh)
       pBox.current = pf
       if (peekPrevRef.current) {
@@ -148,6 +151,10 @@ export default function PhotoDeck({ previewUrls, onRemove }: { previewUrls: stri
         peekPrevRef.current.style.height = `${pf.h.toFixed(2)}px`
       }
       if (prevImgRef.current) prevImgRef.current.style.backgroundImage = `url("${urlOf(active - 1)}")`
+    } else if (peekPrevRef.current) {
+      peekPrevRef.current.hidden = true
+    }
+    if (hasNext) {
       const nf = fitCenter(arOf(active + 1), dw, dh)
       nBox.current = nf
       if (peekNextRef.current) {
@@ -156,9 +163,8 @@ export default function PhotoDeck({ previewUrls, onRemove }: { previewUrls: stri
         peekNextRef.current.style.height = `${nf.h.toFixed(2)}px`
       }
       if (nextImgRef.current) nextImgRef.current.style.backgroundImage = `url("${urlOf(active + 1)}")`
-    } else {
-      if (peekPrevRef.current) peekPrevRef.current.hidden = true
-      if (peekNextRef.current) peekNextRef.current.hidden = true
+    } else if (peekNextRef.current) {
+      peekNextRef.current.hidden = true
     }
     setAnim(false)
     render(0)
@@ -180,22 +186,36 @@ export default function PhotoDeck({ previewUrls, onRemove }: { previewUrls: stri
     window.setTimeout(() => {
       setAnim(false)
       setWC(false)
-      // dragged right (dir>0) → previous to front; dragged left (dir<0) → next to front
-      setActive((a) => (((a + (dir > 0 ? -1 : 1)) % n) + n) % n)
+      // dragged right (dir>0) → previous to front; dragged left (dir<0) → next to front. Clamped
+      // to [0, n-1] — no wrap, so you stop at the cover and at the last photo.
+      setActive((a) => Math.max(0, Math.min(n - 1, a + (dir > 0 ? -1 : 1))))
     }, 340)
   }
 
   function onPointerDown(e: React.PointerEvent) {
-    if ((e.target as HTMLElement).closest('[data-nodrag]')) return
+    const tgt = e.target as HTMLElement
+    if (tgt.closest('[data-nodrag]')) return
     if (n < 2) return
-    drag.current = { on: true, startX: e.clientX, shift: 0, pid: e.pointerId }
+    drag.current = {
+      on: true,
+      startX: e.clientX,
+      shift: 0,
+      pid: e.pointerId,
+      moved: false,
+      onPrev: !!peekPrevRef.current?.contains(tgt),
+      onNext: !!peekNextRef.current?.contains(tgt),
+    }
     setWC(true)
     setAnim(false)
     try { deckRef.current?.setPointerCapture(e.pointerId) } catch { /* ignore */ }
   }
   function onPointerMove(e: React.PointerEvent) {
     if (!drag.current.on) return
+    if (Math.abs(e.clientX - drag.current.startX) > 6) drag.current.moved = true
     let s = (e.clientX - drag.current.startX) / SNAP
+    // rubber-band at the ends — nothing before the cover / after the last photo
+    if (active === 0 && s > 0) s *= 0.2
+    if (active === n - 1 && s < 0) s *= 0.2
     if (s > 1) s = 1 + (s - 1) * 0.3
     if (s < -1) s = -1 + (s + 1) * 0.3
     drag.current.shift = s
@@ -203,11 +223,13 @@ export default function PhotoDeck({ previewUrls, onRemove }: { previewUrls: stri
   }
   function endDrag() {
     if (!drag.current.on) return
-    const s = drag.current.shift
+    const { shift: s, moved, onPrev, onNext } = drag.current
     drag.current.on = false
     try { deckRef.current?.releasePointerCapture(drag.current.pid) } catch { /* ignore */ }
-    if (s <= -0.5) commit(-1)
-    else if (s >= 0.5) commit(1)
+    if (s <= -0.5 && active < n - 1) commit(-1)
+    else if (s >= 0.5 && active > 0) commit(1)
+    else if (!moved && onNext && active < n - 1) commit(-1) // tap right peek → glides to front
+    else if (!moved && onPrev && active > 0) commit(1) // tap left peek → glides to front
     else {
       setAnim(true)
       requestAnimationFrame(() => render(0))
@@ -224,21 +246,6 @@ export default function PhotoDeck({ previewUrls, onRemove }: { previewUrls: stri
       onPointerCancel={endDrag}
       style={{ position: 'relative', flex: 1, minHeight: 0, alignSelf: 'stretch', touchAction: 'none' }}
     >
-      <div
-        ref={glowRef}
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          left: 0,
-          top: 0,
-          zIndex: 0,
-          pointerEvents: 'none',
-          borderRadius: '50%',
-          background:
-            'radial-gradient(closest-side, rgba(154,176,236,0.36), rgba(112,136,208,0.15) 54%, rgba(8,12,26,0) 79%), radial-gradient(closest-side, rgba(250,152,88,0.12), rgba(8,12,26,0) 72%)',
-        }}
-      />
-
       {/* previous peek */}
       <div
         ref={peekPrevRef}
@@ -282,8 +289,8 @@ export default function PhotoDeck({ previewUrls, onRemove }: { previewUrls: stri
                 draggable={false}
                 onLoad={(e) => {
                   const img = e.currentTarget
-                  if (img.naturalWidth && img.naturalHeight) {
-                    const url = urlOf(active)
+                  const url = urlOf(active)
+                  if (url && img.naturalWidth && img.naturalHeight) {
                     setDims((d) => (d[url] ? d : { ...d, [url]: clampAR(img.naturalWidth, img.naturalHeight) }))
                   }
                 }}

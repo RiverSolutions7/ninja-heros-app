@@ -1,10 +1,13 @@
-// @design-locked — built from the Capture.html export (the #dockRow morphing pill, STATE B).
-// Visual source of truth: the export + C:\Users\river\.claude\plans\capture-port-plan.md.
-// Drives off the MicState prop (one persistent pill). FREEZE-SAFE: the backdrop-blur is dropped
-// for every non-idle/non-typing phase (one `opaque` boolean), the live-wave rAF runs ONLY while
-// recording (0 at rest), and nothing animates over a backdrop-blur surface. Typing uses a REAL
-// <input> (real iOS keyboard) — the export's fake static keyboard is dropped. The dead .rec-row
-// secondary UI is dropped. The submit card-grow morph (pc-skel/pc-real) is Chunk 9 (optional).
+// @design-locked — built from the Capture.html export (Log flow add photo, baked defaults).
+// Two layouts, driven by MicState:
+//   • idle / typing   → the full-width frosted glass card (export .input-dock / .dock-row.glass)
+//   • recording / stopped / parsing → the compact FLOATING PILL (export .rec-pill): a translucent
+//     deep-navy glass pill (#1b2747 @ --rec-fill 0.23, blur 0 + saturate 1.4), scaled --rec-scale
+//     1.35, holding ✕ · bars→dots wave · a blue ↑ send that rides in dim and lights on voice.
+// FREEZE-SAFE: no animated backdrop-filter (the pill's saturate is static, blur is 0); the only
+// infinite keyframe is the 2-bar pulse (transform-only, gated to recording); voice polling is a
+// 110ms interval that runs ONLY while recording (0 timers at rest). Typing uses a REAL <input>
+// (real iOS keyboard). The retired #dockRow bloom + 16-bar "Listening…" wave are dropped.
 // polish-audit: flag only a11y / tap-targets / state / motion-perf / bugs.
 'use client'
 
@@ -17,43 +20,6 @@ const PLACEHOLDERS = [
   'e.g. kids rotate through 3 balance spots',
   'e.g. a tag game in the foam pit',
 ]
-
-const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
-
-// live amplitude waveform — 16 white bars; rAF runs only while `active` (freeze-safe at rest)
-function LiveWave({ getAmplitude, active }: { getAmplitude: () => number; active: boolean }) {
-  const bars = useRef<(HTMLDivElement | null)[]>([])
-  useEffect(() => {
-    if (!active) return
-    let raf = 0
-    const tick = () => {
-      const amp = getAmplitude()
-      const t = performance.now() / 200
-      bars.current.forEach((b, i) => {
-        if (!b) return
-        const env = 0.45 + 0.55 * Math.abs(Math.sin(i * 0.7 + t))
-        const sy = Math.max(0.12, Math.min(1, 0.16 + amp * env * 2.6))
-        b.style.transform = `scaleY(${sy.toFixed(3)})`
-      })
-      raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [active, getAmplitude])
-
-  return (
-    <div style={{ height: 26, display: 'flex', alignItems: 'center', gap: 3 }} aria-hidden="true">
-      {Array.from({ length: 16 }).map((_, i) => (
-        <div key={i} style={{ width: 3, height: '100%', transformOrigin: 'center' }}>
-          <div
-            ref={(el) => { bars.current[i] = el }}
-            style={{ width: '100%', height: '100%', borderRadius: 2, background: 'rgba(255,255,255,0.92)', transform: 'scaleY(0.12)', transformOrigin: 'center', transition: 'transform .09s linear' }}
-          />
-        </div>
-      ))}
-    </div>
-  )
-}
 
 export interface RecordingBarProps {
   state: MicState
@@ -70,15 +36,18 @@ export interface RecordingBarProps {
 export default function RecordingBar({ state, getAmplitude, onStart, onTypingStart, onTypeSubmit, onCancel, onStop, onDone, onPlusTap }: RecordingBarProps) {
   const [typed, setTyped] = useState('')
   const [phIdx, setPhIdx] = useState(0)
-  const [elapsed, setElapsed] = useState(0)
+  const [hasVoice, setHasVoice] = useState(false)
+  const [sending, setSending] = useState(false)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const prevPill = useRef(false)
+  const sendTimer = useRef<number | null>(null)
 
   const recording = state === 'recording'
   const reviewing = state === 'stopped'
   const parsing = state === 'parsing'
   const typing = state === 'typing'
   const idle = state === 'idle'
-  const opaque = recording || reviewing || parsing // blur-drop invariant
+  const pill = recording || reviewing || parsing // floating-pill states
 
   // cycle the idle placeholder
   useEffect(() => {
@@ -87,29 +56,126 @@ export default function RecordingBar({ state, getAmplitude, onStart, onTypingSta
     return () => window.clearInterval(t)
   }, [idle])
 
-  // recording timer
-  useEffect(() => {
-    if (!recording) return
-    setElapsed(0)
-    const t = window.setInterval(() => setElapsed((e) => e + 1), 1000)
-    return () => window.clearInterval(t)
-  }, [recording])
-
   // focus the real field when entering typing
   useEffect(() => {
     if (typing) inputRef.current?.focus()
     else setTyped('')
   }, [typing])
 
+  // voice detection → light the send. Interval (not rAF) and ONLY while recording (0 at rest).
+  useEffect(() => {
+    if (!recording) { setHasVoice(false); return }
+    let silence = 0
+    const t = window.setInterval(() => {
+      const amp = getAmplitude()
+      if (amp > 0.06) { silence = 0; setHasVoice(true) }
+      else if (++silence > 6) setHasVoice(false)
+    }, 110)
+    return () => window.clearInterval(t)
+  }, [recording, getAmplitude])
+
+  // clear the swipe-out only when the pill is entered fresh (from idle/typing), so the exit
+  // animation persists across recording→stopped→parsing but resets for the next take.
+  useEffect(() => {
+    if (pill && !prevPill.current) setSending(false)
+    prevPill.current = pill
+  }, [pill])
+
+  // cancel a pending swipe-out submit if we unmount mid-animation
+  useEffect(() => () => { if (sendTimer.current) window.clearTimeout(sendTimer.current) }, [])
+
   const hasText = typed.trim().length > 0
-  const sendVisible = recording || reviewing || (typing && hasText)
-  const sendIsCheck = recording // recording: ✓ = stop; review/typing: ↑ = send
-  const sendAction = () => {
-    if (recording) onStop()
-    else if (reviewing) onDone()
-    else if (typing) onTypeSubmit(typed.trim())
+  const sendLit = reviewing || parsing || (recording && hasVoice) // visually lit
+  const sendTappable = reviewing || (recording && hasVoice) // NOT during parsing (it's a no-op there)
+  const pillSend = () => {
+    if (sending) return
+    setSending(true) // swipe the pill up and off, then fire the action
+    sendTimer.current = window.setTimeout(() => { if (recording) onStop(); else if (reviewing) onDone() }, 400)
   }
 
+  // ───────────────────────── FLOATING PILL (recording / stopped / parsing) ─────────────────────────
+  if (pill) {
+    return (
+      <div style={{ position: 'relative', height: 90, margin: '0 24px 14px', flexShrink: 0 }}>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+          <div
+            className={sending ? 'cap-rp-sending' : 'cap-rec-pill'}
+            style={{
+              pointerEvents: 'auto',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 11,
+              height: 42,
+              padding: '0 8px 0 12px',
+              borderRadius: 21,
+              transform: 'scale(1.35)',
+              transformOrigin: 'center center',
+              // translucent deep-navy (#1b2747 @ --rec-fill 0.23) — you see the photo through it.
+              // No backdrop-filter: --rec-blur is 0, and a backdrop-filter here makes the raster
+              // compositor hang (idle's blur captures fine, but the pill state didn't) — the navy
+              // tint alone reads as glass over the photo, and it's freeze-safe on device.
+              background: 'rgba(27,39,71,0.23)',
+              boxShadow:
+                'inset 0 1px 0 rgba(255,255,255,0.22), inset 0 0 0 1px rgba(255,255,255,0.08), 0 10px 26px rgba(0,0,0,0.46), 0 2px 8px rgba(0,0,0,0.36)',
+            }}
+          >
+            {/* ✕ scrap — bare glyph, muted, no circle */}
+            <button
+              type="button"
+              aria-label="Scrap recording"
+              onClick={onCancel}
+              className="transition-transform active:scale-[0.88]"
+              style={{ flex: 'none', width: 30, height: 30, minHeight: 30, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#aeb6c8' }}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M1.5 1.5l11 11M12.5 1.5l-11 11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
+            </button>
+
+            {/* bars → dots — the only recording indicator (no "Listening…", no timer) */}
+            <div aria-hidden="true" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 24 }}>
+              <span className={recording && hasVoice ? 'cap-rp-bar' : undefined} style={{ width: 3, height: 14, borderRadius: 2, background: '#d4e4f7', transformOrigin: 'center' }} />
+              <span className={recording && hasVoice ? 'cap-rp-bar cap-rp-bar2' : undefined} style={{ width: 3, height: 22, borderRadius: 2, background: '#d4e4f7', transformOrigin: 'center' }} />
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#88aad6' }} />
+              <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#7596c2' }} />
+              <span style={{ width: 3.2, height: 3.2, borderRadius: '50%', background: '#5e7caa' }} />
+              <span style={{ width: 2.6, height: 2.6, borderRadius: '50%', background: '#4a6595' }} />
+            </div>
+
+            {/* ↑ send — cool-blue, rides in dim, lights up on voice */}
+            <button
+              type="button"
+              aria-label="Send recording"
+              onClick={pillSend}
+              className="transition-transform active:scale-[0.94]"
+              style={{
+                flex: 'none',
+                width: 32,
+                height: 32,
+                minHeight: 32, // override the global button{min-height:44px} a11y rule (kept it an oval)
+                padding: 0,
+                borderRadius: '50%',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: '#4a9eff',
+                color: '#fff',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.25)',
+                opacity: sendLit ? 1 : 0.26,
+                filter: sendLit ? 'none' : 'saturate(0.08) brightness(0.6)',
+                pointerEvents: sendTappable ? 'auto' : 'none',
+                transition: 'opacity .3s ease, filter .3s ease',
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 13V3.5M3.8 7.7 8 3.5l4.2 4.2" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ───────────────────────── GLASS CARD (idle / typing) ─────────────────────────
   return (
     <div style={{ position: 'relative', height: 90, margin: '0 24px 14px', flexShrink: 0 }}>
       <div
@@ -121,55 +187,34 @@ export default function RecordingBar({ state, getAmplitude, onStart, onTypingSta
           height: 90,
           borderRadius: 18,
           overflow: 'hidden',
-          background: opaque ? '#03050c' : 'rgba(255,255,255,0.12)',
-          backdropFilter: opaque ? 'none' : 'blur(20px) saturate(1.2)',
-          WebkitBackdropFilter: opaque ? 'none' : 'blur(20px) saturate(1.2)',
+          // frosted glass (--glass-fill 0.04 / --glass-top 0.16 / --glass-edge 0.04)
+          background: 'rgba(255,255,255,0.04)',
+          backdropFilter: 'blur(20px) saturate(1.2)',
+          WebkitBackdropFilter: 'blur(20px) saturate(1.2)',
           boxShadow:
-            'inset 0 0 0 1px rgba(255,255,255,0.14), inset 0 1.5px 0 rgba(255,255,255,0.52), 0 8px 22px rgba(0,0,0,0.40)',
-          // blur switches instantly (never animate backdrop-filter — §8); only the fill cross-fades
-          transition: 'background .28s ease',
+            'inset 0 0 0 1px rgba(255,255,255,0.04), inset 0 1.5px 0 rgba(255,255,255,0.16), 0 8px 22px rgba(0,0,0,0.40)',
         }}
       >
-        {/* recording-only breathing hairline (gated to recording — never during review/parse) */}
-        {recording && (
-          <div
-            aria-hidden="true"
-            className="cap-rec-edge"
-            style={{ position: 'absolute', inset: 0, borderRadius: 18, pointerEvents: 'none', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.16)' }}
-          />
-        )}
-
-        {/* left button: + (idle/typing) or ✕ (recording/review) */}
-        {opaque ? (
-          <button
-            type="button"
-            aria-label="Cancel"
-            onClick={onCancel}
-            className="transition-transform active:scale-[0.9]"
-            style={{ position: 'absolute', left: 6, bottom: 6, zIndex: 4, width: 44, height: 44, borderRadius: '50%', border: 'none', cursor: 'pointer', background: 'transparent', color: 'rgba(255,255,255,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          >
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"><path d="M1.5 1.5l10 10M11.5 1.5l-10 10" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" /></svg>
-          </button>
-        ) : (
-          <button
-            type="button"
-            aria-label="Add a photo"
-            onClick={onPlusTap}
-            className="transition-transform active:scale-[0.92]"
-            style={{ position: 'absolute', left: 6, bottom: 6, zIndex: 2, width: 44, height: 44, borderRadius: '50%', border: 'none', cursor: 'pointer', background: 'transparent', color: 'rgba(255,255,255,0.42)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          >
-            <svg width="16" height="16" viewBox="0 0 17 17" fill="none" aria-hidden="true"><path d="M8.5 1.5v14M1.5 8.5h14" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" /></svg>
-          </button>
-        )}
+        {/* left: + (add a photo) */}
+        <button
+          type="button"
+          aria-label="Add a photo"
+          onClick={onPlusTap}
+          className="transition-transform active:scale-[0.92]"
+          style={{ position: 'absolute', left: 6, bottom: 6, zIndex: 2, width: 44, height: 44, borderRadius: '50%', border: 'none', cursor: 'pointer', background: 'transparent', color: 'rgba(255,255,255,0.42)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <svg width="16" height="16" viewBox="0 0 17 17" fill="none" aria-hidden="true"><path d="M8.5 1.5v14M1.5 8.5h14" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" /></svg>
+        </button>
 
         {/* idle placeholder — tap to type */}
         {idle && (
           <button
             type="button"
-            onClick={onTypingStart}
+            aria-label="Type a description"
+            onClick={() => { inputRef.current?.focus(); onTypingStart() }}
             style={{ position: 'absolute', left: 16, right: 90, top: 6, height: 44, display: 'flex', alignItems: 'flex-start', paddingTop: 8, overflow: 'hidden', textAlign: 'left', border: 'none', background: 'transparent', cursor: 'text', fontFamily: 'var(--font-nunito), sans-serif', fontSize: 16.5, fontWeight: 600, color: 'rgba(255,255,255,0.40)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', zIndex: 2 }}
           >
-            {PLACEHOLDERS[phIdx]}
+            <span key={phIdx} className="cap-ph-cycle" style={{ display: 'inline-block' }}>{PLACEHOLDERS[phIdx]}</span>
           </button>
         )}
 
@@ -179,14 +224,14 @@ export default function RecordingBar({ state, getAmplitude, onStart, onTypingSta
             ref={inputRef}
             value={typed}
             onChange={(e) => setTyped(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && hasText) sendAction() }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && hasText) onTypeSubmit(typed.trim()) }}
             aria-label="Describe the setup"
             placeholder="Describe the setup…"
             style={{ width: '100%', border: 'none', outline: 'none', background: 'transparent', caretColor: '#f97316', fontFamily: 'var(--font-nunito), sans-serif', fontSize: 16.5, fontWeight: 600, color: '#fff' }}
           />
         </div>
 
-        {/* right button: equalizer mic (idle) */}
+        {/* right (idle): equalizer mic */}
         {idle && (
           <button
             type="button"
@@ -205,26 +250,11 @@ export default function RecordingBar({ state, getAmplitude, onStart, onTypingSta
           </button>
         )}
 
-        {/* recording / review centre — live or frozen waveform + Listening… */}
-        {(recording || reviewing) && (
-          <div style={{ position: 'absolute', left: reviewing ? 56 : 112, right: reviewing ? 102 : 58, top: '50%', transform: 'translateY(-50%)', zIndex: 4, display: 'flex', alignItems: 'center', justifyContent: reviewing ? 'flex-start' : 'center', gap: 11, transition: 'left .34s cubic-bezier(.3,.8,.3,1), right .34s cubic-bezier(.3,.8,.3,1)' }}>
-            <LiveWave getAmplitude={getAmplitude} active={recording} />
-            {recording && <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: '.2px', whiteSpace: 'nowrap', color: 'rgba(255,255,255,0.60)' }}>Listening…</span>}
-          </div>
-        )}
-
-        {/* review duration */}
-        {reviewing && (
-          <span style={{ position: 'absolute', right: 58, top: '50%', transform: 'translateY(-50%)', zIndex: 5, fontFamily: "ui-monospace,'SF Mono',Menlo,monospace", fontSize: 13, fontWeight: 600, letterSpacing: '.5px', color: 'rgba(255,255,255,0.46)' }}>
-            {fmt(elapsed)}
-          </span>
-        )}
-
-        {/* persistent orange action circle — stop (✓) / send (↑) */}
+        {/* right (typing): ↑ send — appears once there's text */}
         <button
           type="button"
-          aria-label={sendIsCheck ? 'Stop' : 'Send'}
-          onClick={sendAction}
+          aria-label="Send"
+          onClick={() => onTypeSubmit(typed.trim())}
           className="transition-transform active:scale-[0.92]"
           style={{
             position: 'absolute',
@@ -242,16 +272,12 @@ export default function RecordingBar({ state, getAmplitude, onStart, onTypingSta
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            opacity: sendVisible ? 1 : 0,
-            pointerEvents: sendVisible ? 'auto' : 'none',
-            transition: 'opacity .2s ease, background .2s ease',
+            opacity: typing && hasText ? 1 : 0,
+            pointerEvents: typing && hasText ? 'auto' : 'none',
+            transition: 'opacity .2s ease',
           }}
         >
-          {sendIsCheck ? (
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true"><path d="M3.6 9.4l3.6 3.6L14.4 5" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
-          ) : (
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true"><path d="M9 15.5V3M3.5 8.5 9 3l5.5 5.5" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
-          )}
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true"><path d="M9 15.5V3M3.5 8.5 9 3l5.5 5.5" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </button>
       </div>
     </div>

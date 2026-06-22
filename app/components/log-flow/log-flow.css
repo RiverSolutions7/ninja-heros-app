@@ -75,12 +75,44 @@
   to   { opacity: 1; }
 }
 
-/* ── Capture recording bar — breathing edge. Gated to recording-only (rendered only while
-   recording, over a SOLID surface — blur is dropped during a take), so it never composites
-   over a backdrop-blur. Reduced-motion silences it. ── */
-.cap-rec-edge { animation: recEdgeBreathe 2.1s ease-in-out infinite; }
-@keyframes recEdgeBreathe {
-  0%, 100% { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.10); }
-  50%      { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.26); }
+/* ── Capture recording — floating pill (export .rec-pill). Slide up + fade on enter
+   (transform/opacity only); the two wave bars breathe while recording (transform-only,
+   gated to recording). The pill's backdrop-filter is a STATIC saturate (blur 0), so nothing
+   animates over a backdrop-blur. Reduced-motion silences both. ── */
+.cap-rec-pill { animation: capRpSlideIn .3s cubic-bezier(.22,.72,.24,1) both; }
+@keyframes capRpSlideIn {
+  from { opacity: 0; transform: translateY(18px) scale(1.35); }
+  to   { opacity: 1; transform: translateY(0)    scale(1.35); }
 }
-@media (prefers-reduced-motion: reduce) { .cap-rec-edge { animation: none; } }
+.cap-rp-bar  { animation: capRpPulse 1.15s ease-in-out infinite; }
+.cap-rp-bar2 { animation-delay: .32s; }
+@keyframes capRpPulse {
+  0%, 100% { transform: scaleY(1); }
+  50%      { transform: scaleY(0.55); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cap-rec-pill { animation: none; }
+  .cap-rp-bar   { animation: none; }
+  .cap-rp-bar2  { animation: none; }
+}
+
+/* Submit: the pill swipes up and off, fading as it goes (export .rec-pill.is-sending). */
+.cap-rp-sending { animation: capRpSlideOut .4s cubic-bezier(.32,0,.18,1) both; pointer-events: none; }
+@keyframes capRpSlideOut {
+  from { opacity: 1; transform: translateY(0)     scale(1.35); }
+  to   { opacity: 0; transform: translateY(-96px) scale(1.35); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cap-rp-sending { animation: none; opacity: 0; }
+}
+
+/* ── Idle placeholder cycle — each example rises + fades in (ChatGPT-style), keyed per index
+   so it replays every swap. transform/opacity only. Reduced-motion shows a plain swap. ── */
+.cap-ph-cycle { animation: capPhCycle .42s cubic-bezier(.2,.7,.2,1) both; }
+@keyframes capPhCycle {
+  from { opacity: 0; transform: translateY(7px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cap-ph-cycle { animation: none; }
+}
