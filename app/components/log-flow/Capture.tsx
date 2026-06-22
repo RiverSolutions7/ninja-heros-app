@@ -3,7 +3,7 @@
 // @design-locked — the export is the visual source of truth.
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ComponentType } from '@/app/lib/database.types'
 import type { MicState } from './atoms'
 import CaptureEmpty from './CaptureEmpty'
@@ -80,7 +80,25 @@ export default function Capture({
   const empty = previewUrls.length === 0
   const [plusMenuOpen, setPlusMenuOpen] = useState(false)
   const [trayOpen, setTrayOpen] = useState(false)
+  const [kbInset, setKbInset] = useState(0)
   const fileRef = useRef<HTMLInputElement | null>(null)
+
+  // Lift the bottom bar above the on-screen keyboard (real iOS keyboard, typing state).
+  // The visual viewport shrinks when the keyboard opens; pad the screen by that amount so
+  // the input rides just above it and the photo shrinks to fit (no bar hidden behind keys).
+  useEffect(() => {
+    if (state !== 'typing') { setKbInset(0); return }
+    const vv = window.visualViewport
+    if (!vv) return
+    const onResize = () => setKbInset(Math.max(0, window.innerHeight - vv.height - vv.offsetTop))
+    onResize()
+    vv.addEventListener('resize', onResize)
+    vv.addEventListener('scroll', onResize)
+    return () => {
+      vv.removeEventListener('resize', onResize)
+      vv.removeEventListener('scroll', onResize)
+    }
+  }, [state])
 
   const pickMedia = () => fileRef.current?.click()
   const handleFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -98,7 +116,9 @@ export default function Capture({
         color: '#fff',
         display: 'flex',
         flexDirection: 'column',
+        boxSizing: 'border-box',
         paddingTop: 'max(env(safe-area-inset-top, 0px), 50px)', // clear the status-bar / notch so the chips aren't jammed at the top
+        paddingBottom: kbInset, // lifts the bar above the keyboard when typing
       }}
     >
       <div style={{ height: 52, padding: '0 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>

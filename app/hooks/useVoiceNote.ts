@@ -251,6 +251,13 @@ export function useVoiceNote() {
     transcriptRef.current = ''
   }
 
+  // Clear an error + return to idle (used when we gracefully fall back to typing
+  // after a voice failure, instead of leaving a blocking error toast up).
+  function clearError() {
+    setErrorMessage(null)
+    setVoiceState('idle')
+  }
+
   return {
     voiceState,
     transcript,
@@ -261,6 +268,7 @@ export function useVoiceNote() {
     parseNote,
     parseComponent,
     reset,
+    clearError,
     getAmplitude,
   }
 }

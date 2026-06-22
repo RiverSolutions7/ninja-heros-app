@@ -253,7 +253,7 @@ export default function PhotoDeck({ previewUrls, onRemove }: { previewUrls: stri
         hidden
         style={{ position: 'absolute', left: 0, top: 0, zIndex: 1, transformOrigin: 'center center', borderRadius: 26, overflow: 'hidden', background: '#0c1322', boxShadow: '0 22px 46px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.05)' }}
       >
-        <div ref={prevImgRef} style={{ position: 'absolute', inset: 0, background: '#16203a center/cover no-repeat' }} />
+        <div ref={prevImgRef} style={{ position: 'absolute', inset: 0, background: '#16203a center/cover no-repeat', transform: 'translateZ(0)' }} />
         <div ref={prevShadeRef} style={{ position: 'absolute', inset: 0, background: '#05070f', opacity: 0 }} />
       </div>
 
@@ -264,7 +264,7 @@ export default function PhotoDeck({ previewUrls, onRemove }: { previewUrls: stri
         hidden
         style={{ position: 'absolute', left: 0, top: 0, zIndex: 1, transformOrigin: 'center center', borderRadius: 26, overflow: 'hidden', background: '#0c1322', boxShadow: '0 22px 46px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.05)' }}
       >
-        <div ref={nextImgRef} style={{ position: 'absolute', inset: 0, background: '#16203a center/cover no-repeat' }} />
+        <div ref={nextImgRef} style={{ position: 'absolute', inset: 0, background: '#16203a center/cover no-repeat', transform: 'translateZ(0)' }} />
         <div ref={nextShadeRef} style={{ position: 'absolute', inset: 0, background: '#05070f', opacity: 0 }} />
       </div>
 
@@ -294,7 +294,7 @@ export default function PhotoDeck({ previewUrls, onRemove }: { previewUrls: stri
                     setDims((d) => (d[url] ? d : { ...d, [url]: clampAR(img.naturalWidth, img.naturalHeight) }))
                   }
                 }}
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', transform: 'translateZ(0)' }}
               />
             )}
           </div>

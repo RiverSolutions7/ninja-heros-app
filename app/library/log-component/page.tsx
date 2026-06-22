@@ -110,6 +110,16 @@ export default function LogComponentPage() {
     setIsTyping(true)
   }, [step, voice.isSupported])
 
+  // A voice failure (very common on iOS Safari) → fall back to typing instead of
+  // leaving a stuck error toast. No ugly box; the keyboard just opens.
+  useEffect(() => {
+    if (voice.voiceState === 'error') {
+      setIsTyping(true)
+      voice.clearError()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voice.voiceState])
+
   // Dirty detection — anything captured beyond the empty draft
   const isDirty = useMemo(() => {
     if (step === 'satisfaction') return false
@@ -131,10 +141,14 @@ export default function LogComponentPage() {
 
   // ── Voice handlers ─────────────────────────────────────────────────────────
 
+  // iOS Safari's webkitSpeechRecognition is unreliable — treat voice as type-only there.
+  const isIOS = typeof navigator !== 'undefined' &&
+    (/iP(hone|od|ad)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
+
   const handleVoiceStart = () => {
     if (!draft.type) return
-    if (!voice.isSupported) {
-      setError("Voice isn't supported on this browser. Tap to type instead.")
+    if (isIOS || !voice.isSupported) {
+      setIsTyping(true) // go straight to typing instead of a doomed voice attempt
       return
     }
     setIsStopped(false)
@@ -453,13 +467,11 @@ export default function LogComponentPage() {
         }}
       />
 
-      {(error || voice.errorMessage) && (
+      {error && (
         <Toast
-          message={error || voice.errorMessage || ''}
+          message={error}
           type="error"
-          onDismiss={() => {
-            setError(null)
-          }}
+          onDismiss={() => setError(null)}
         />
       )}
     </div>
