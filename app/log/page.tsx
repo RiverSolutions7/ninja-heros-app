@@ -291,7 +291,9 @@ function LogFlow() {
   const saveStation = useCallback(
     async (kind: 'structured' | 'photo', card: DevelopResult | null) => {
       const r = run
-      if (!r || r.done) return
+      // Reentrancy guard (mirrors the single flow's `if (saving) return`): a fast double-tap before the
+      // disabled prop re-renders must not fire two concurrent inserts → a duplicate library row.
+      if (!r || r.done || r.saving) return
       const station = r.stations[r.current]
       const stationPhotos = station.photoIds
         .map((id) => photoById.get(id))

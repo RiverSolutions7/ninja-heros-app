@@ -826,7 +826,10 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
   const handleBack = () => {
     // Run mode: backing out mid-run risks ONLY the current station's draft — earlier stations are
     // already saved library rows. Always confirm (the run-aware copy names that). Confirming exits the
-    // whole run (page.tsx resets it); earlier saves stay.
+    // whole run (page.tsx resets it); earlier saves stay. BUT ignore Back WHILE a station save is in
+    // flight: exitRun can't cancel the pending insert, so a "discarded" station could still land —
+    // block the tap until the awaited save resolves + advances (a beat later Back works again).
+    if (runMode && run.saving) return
     if (runMode) { setConfirmDiscard(true); return }
     // Post-develop OR mid-develop, backing out risks the draft — confirm the discard. Confirming
     // aborts any in-flight develop; canceling lets it continue (if it resolves behind the sheet,

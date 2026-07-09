@@ -26,7 +26,7 @@
 // polish-audit: flag a11y / tap-targets / state / bugs — not the design values.
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -38,6 +38,7 @@ import {
   useDroppable,
   useSensor,
   useSensors,
+  type Announcements,
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
@@ -101,7 +102,8 @@ function SourceTile({ photo, index, total, assigned }: { photo: Photo; index: nu
         boxShadow: 'rgba(255,255,255,0.1) 0px 0px 0px 1px inset',
         cursor: 'grab',
         touchAction: 'manipulation',
-        outline: 'none',
+        // keep the UA focus-visible ring — this div is a keyboard-draggable (dnd-kit tabIndex/role),
+        // so a keyboard user must see which tile is selected before Space picks it up (WCAG 2.4.7).
         // the original tile fades while its overlay is lifted; assigned tiles rest dimmer.
         opacity: isDragging ? 0.3 : assigned ? 0.4 : 1,
       }}
@@ -137,8 +139,40 @@ export default function SortBins({ photos, onConfirm, onBack }: SortBinsProps) {
     { label: 'Station 2', photoIds: [] },
   ])
   const [activeId, setActiveId] = useState<string | null>(null)
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const [announce, setAnnounce] = useState('')
+
+  // Move focus into the new screen + announce arrival (mirrors Celebrate's mount pattern) so a coach
+  // arriving from the PhotoSheet ⊟ row lands here, not on the now-hidden capture chrome behind it.
+  useEffect(() => {
+    rootRef.current?.focus()
+    const id = window.setTimeout(() => setAnnounce('Sort your photos into stations. Drag each photo into a station.'), 60)
+    return () => window.clearTimeout(id)
+  }, [])
 
   const photosById = useMemo(() => new Map(photos.map((p) => [p.id, p])), [photos])
+
+  // Custom dnd announcements — speak the STATION label, not the raw droppable id (bin-0/bin-1).
+  const binLabelFor = (overId: string | null | undefined) => {
+    const i = overId ? Number(String(overId).replace('bin-', '')) : NaN
+    return Number.isNaN(i) ? null : bins[i]?.label ?? null
+  }
+  const announcements: Announcements = useMemo(
+    () => ({
+      onDragStart: () => 'Picked up photo. Move it over a station.',
+      onDragOver: ({ over }) => {
+        const label = binLabelFor(over?.id != null ? String(over.id) : null)
+        return label ? `Over ${label}.` : 'Not over a station.'
+      },
+      onDragEnd: ({ over }) => {
+        const label = binLabelFor(over?.id != null ? String(over.id) : null)
+        return label ? `Added photo to ${label}.` : 'Photo not added.'
+      },
+      onDragCancel: () => 'Cancelled — photo not added.',
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [bins],
+  )
 
   // MouseSensor + TouchSensor(long-press) + KeyboardSensor — the same no-cross-input-race pattern the
   // PhotoSheet learned (a PointerSensor would hijack a scroll-intent touch before the long-press).
@@ -170,7 +204,12 @@ export default function SortBins({ photos, onConfirm, onBack }: SortBinsProps) {
   const activePhoto = activeId ? photosById.get(activeId) : null
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 150, background: 'rgb(8,12,26)', overflow: 'hidden', fontFamily: 'var(--font-inter), system-ui, sans-serif' }}>
+    <div ref={rootRef} tabIndex={-1} role="group" aria-label="Sort photos into stations" style={{ position: 'fixed', inset: 0, zIndex: 150, background: 'rgb(8,12,26)', overflow: 'hidden', outline: 'none', fontFamily: 'var(--font-inter), system-ui, sans-serif' }}>
+      {/* polite arrival announcement */}
+      <div role="status" aria-live="polite" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}>
+        {announce}
+      </div>
+
       {/* back ‹ — UNAUTHORED (8j has no header); needed to cancel out of sorting. Flagged for River. */}
       <div style={{ position: 'absolute', top: 46, left: 0, right: 0, height: 40, display: 'flex', alignItems: 'center', padding: '0 20px', zIndex: 2 }}>
         <button
@@ -189,7 +228,7 @@ export default function SortBins({ photos, onConfirm, onBack }: SortBinsProps) {
         <span style={{ fontFamily: INTER, fontWeight: 400, fontSize: 13.5, lineHeight: 1.5, color: 'rgb(159,176,200)' }}>Drag each photo into its station.</span>
       </div>
 
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setActiveId(null)}>
+      <DndContext sensors={sensors} accessibility={{ announcements }} collisionDetection={closestCenter} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setActiveId(null)}>
         {/* source palette (tpl526) — horizontal; scrolls if photos overflow the row (frame is a 5-tile
             snapshot). */}
         <div
