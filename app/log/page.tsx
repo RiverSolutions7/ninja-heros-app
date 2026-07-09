@@ -3,11 +3,12 @@
 // The visual truth lives in the Capture components; this file is state + wiring only.
 'use client'
 
-import { Suspense, useCallback, useEffect, useState } from 'react'
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Capture, { type Photo } from '@/app/components/log/Capture'
 import Celebrate from '@/app/components/log/Celebrate'
 import TypeAgeSheet from '@/app/components/log/TypeAgeSheet'
+import PhotoSheet from '@/app/components/log/PhotoSheet'
 import { formatEyebrow } from '@/app/lib/typeAge'
 import type { DevelopResult } from '@/app/components/log/DevelopedCard'
 
@@ -59,6 +60,9 @@ const MOCK_NOTES: DevelopResult = {
 let photoSeq = 0
 const nextId = () => `p${Date.now().toString(36)}${(photoSeq++).toString(36)}`
 
+// The W1 "Multiple setups? Sort →" whisper shows for ~4s the first time a capture reaches 3 photos.
+const WHISPER_MS = 4000
+
 function LogFlow() {
   const router = useRouter()
   const params = useSearchParams()
@@ -66,6 +70,21 @@ function LogFlow() {
 
   const [photos, setPhotos] = useState<Photo[]>([])
   const [note, setNote] = useState('')
+
+  // ── PhotoSheet (chunk 7) — the manage sheet + the W1 whisper trigger ──────────────────────────────
+  const [photoSheetOpen, setPhotoSheetOpen] = useState(false)
+  const [whisper, setWhisper] = useState(false)
+  const whisperFiredRef = useRef(false) // once-per-capture latch; reset on Continue
+  const whisperTimerRef = useRef<number | null>(null)
+  // Latest photos, read by the unmount-only revoke cleanup (so it never re-runs on every add).
+  const photosRef = useRef<Photo[]>([])
+  useEffect(() => { photosRef.current = photos }, [photos])
+  // Revoke any remaining owned (blob:) object URLs when the flow unmounts without a Continue — this
+  // closes the chunk-1 leak (Continue + per-photo removal revoke on their own paths below).
+  useEffect(() => () => {
+    photosRef.current.forEach((p) => { if (p.url.startsWith('blob:')) URL.revokeObjectURL(p.url) })
+    if (whisperTimerRef.current) window.clearTimeout(whisperTimerRef.current)
+  }, [])
 
   // Type + ages flow state (chunk 6). Seeded from last-used (localStorage) via lazy initializers —
   // /log is client-rendered (useSearchParams bails to CSR) so there's no SSR mismatch.
@@ -104,16 +123,17 @@ function LogFlow() {
   useEffect(() => {
     if (!devMockEnabled) return
     if (dev === 'photo' || dev === 'rec' || dev === 'developed' || dev === 'notes') setPhotos([{ url: MOCK_PHOTO, id: 'mock-0' }])
-    else if (dev === 'photos3') setPhotos([
-      { url: MOCK_PHOTO, id: 'mock-0' },
-      { url: MOCK_PHOTO, id: 'mock-1' },
-      { url: MOCK_PHOTO, id: 'mock-2' },
-    ])
+    else if (dev === 'photos3' || dev === 'photosheet') {
+      setPhotos([
+        { url: MOCK_PHOTO, id: 'mock-0' },
+        { url: MOCK_PHOTO, id: 'mock-1' },
+        { url: MOCK_PHOTO, id: 'mock-2' },
+      ])
+      if (dev === 'photosheet') setPhotoSheetOpen(true) // door: open the manage sheet with 3 mocks
+      if (dev === 'photos3') setWhisper(true) // door: preview the whisper persistently (no auto-fade)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dev])
-
-  // The whisper renders under the 3-photo mock (real trigger wiring lands in chunk 7).
-  const showWhisper = devMockEnabled && dev === 'photos3'
   // Recording motion door: fake-voice loop drives the full beatIn/recording/beatOut cycle.
   const devFakeRecording = devMockEnabled && dev === 'rec'
   // Develop doors: ?dev=rec flows into the opt-in path with a MOCKED /api/develop (no API-key burn);
@@ -132,10 +152,44 @@ function LogFlow() {
   // opts INTO a real insert (data-acceptance verification) — the mock photo is fetched + uploaded.
   const devMockSave = devMockEnabled && (dev === 'developed' || dev === 'notes' || dev === 'rec') && params.get('real') !== '1'
 
-  const addPhotos = (files: File[]) => {
+  const addPhotos = useCallback((files: File[]) => {
+    if (!files.length) return
     const added = files.map((f) => ({ url: URL.createObjectURL(f), id: nextId(), file: f }))
+    // Whisper fires once per capture the moment the count crosses to 3 by ADDING. `photos` is the
+    // committed state at call time, so the crossing test is accurate for a single add.
+    const crossed = photos.length < 3 && photos.length + added.length >= 3
     setPhotos((prev) => [...prev, ...added])
-  }
+    if (crossed && !whisperFiredRef.current) {
+      whisperFiredRef.current = true
+      setWhisper(true)
+      if (whisperTimerRef.current) window.clearTimeout(whisperTimerRef.current)
+      whisperTimerRef.current = window.setTimeout(() => setWhisper(false), WHISPER_MS)
+    }
+  }, [photos.length])
+
+  // ✕ in the PhotoSheet → drop the photo + revoke its owned (blob:) object URL now (leak-safe).
+  const removePhoto = useCallback((id: string) => {
+    setPhotos((prev) => {
+      const target = prev.find((p) => p.id === id)
+      if (target && target.url.startsWith('blob:')) URL.revokeObjectURL(target.url)
+      return prev.filter((p) => p.id !== id)
+    })
+  }, [])
+
+  // Drag reorder in the PhotoSheet → reindex photos[] to the new id order (index 0 = cover). Commits
+  // live so the Capture hero + dots reflect the new cover immediately.
+  const reorderPhotos = useCallback((orderedIds: string[]) => {
+    setPhotos((prev) => {
+      const byId = new Map(prev.map((p) => [p.id, p]))
+      const next = orderedIds.map((id) => byId.get(id)).filter((p): p is Photo => !!p)
+      return next.length === prev.length ? next : prev
+    })
+  }, [])
+
+  // Sort into separate stations (⊟ row / whisper) — CHUNK 8 (SortBins) fills this. INERT stub today.
+  const handleSortIntoStations = useCallback(() => {
+    // no-op until chunk 8 wires the multi-station sort-bins flow
+  }, [])
 
   // Continue on the celebrate screen → revoke the saved photos' object URLs (only blob: ones we own)
   // and reset to a fresh empty capture. Capture resets its own flow state.
@@ -145,6 +199,11 @@ function LogFlow() {
       return []
     })
     setNote('')
+    // New capture → reset the once-per-capture whisper latch + clear any pending fade timer.
+    whisperFiredRef.current = false
+    setWhisper(false)
+    if (whisperTimerRef.current) { window.clearTimeout(whisperTimerRef.current); whisperTimerRef.current = null }
+    setPhotoSheetOpen(false)
   }, [])
 
   // Dev door: jump straight to the settled celebrate screen (8f) with mock data — no morph, no write.
@@ -173,7 +232,7 @@ function LogFlow() {
         onNoteChange={setNote}
         onAddPhotos={addPhotos}
         onBack={() => router.back()}
-        showWhisper={showWhisper}
+        showWhisper={whisper}
         devFakeRecording={devFakeRecording}
         devMockDevelop={devMockDevelop}
         startDeveloped={startDeveloped}
@@ -184,8 +243,18 @@ function LogFlow() {
         onContinue={handleContinue}
         eyebrow={eyebrow}
         onEditTypeAge={() => setSheetOpen(true)}
+        onManagePhotos={() => setPhotoSheetOpen(true)}
       />
       <TypeAgeSheet open={sheetOpen} type={saveType} ages={saveCurriculums} onDone={handleTypeAgeDone} />
+      <PhotoSheet
+        open={photoSheetOpen}
+        photos={photos}
+        onClose={() => setPhotoSheetOpen(false)}
+        onReorder={reorderPhotos}
+        onRemove={removePhoto}
+        onAddPhotos={addPhotos}
+        onSortIntoStations={handleSortIntoStations}
+      />
     </>
   )
 }

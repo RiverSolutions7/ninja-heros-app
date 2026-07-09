@@ -60,6 +60,8 @@ export interface CaptureProps {
   eyebrow?: string
   /** Chip tap → open the TypeAgeSheet (owned by the /log route). */
   onEditTypeAge?: () => void
+  /** Photo stack-chip tap AND the whisper's "Sort →" → open the PhotoSheet (owned by the /log route). */
+  onManagePhotos?: () => void
 }
 
 // Fallback eyebrow — used only if the parent hasn't wired the live one. NEVER shows duration.
@@ -412,7 +414,7 @@ function Header({ empty, developed, eyebrow, onBack, onSave, onEditTypeAge }: { 
 
 type Phase = 'capture' | 'developing' | 'developed'
 
-export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBack, showWhisper = false, devFakeRecording = false, devMockDevelop = false, startDeveloped = null, startExpanded = false, saveType = 'station', saveCurriculums = [], devMockSave = false, onContinue, eyebrow = EYEBROW, onEditTypeAge }: CaptureProps) {
+export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBack, showWhisper = false, devFakeRecording = false, devMockDevelop = false, startDeveloped = null, startExpanded = false, saveType = 'station', saveCurriculums = [], devMockSave = false, onContinue, eyebrow = EYEBROW, onEditTypeAge, onManagePhotos }: CaptureProps) {
   const empty = photos.length === 0
   const [typing, setTyping] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -913,11 +915,15 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
             ))}
           </div>
 
-          {/* frosted stack-count chip (2+ photos) — static blur */}
+          {/* frosted stack-count chip (2+ photos) — static blur. ONE tap opens the PhotoSheet.
+              The visible chip keeps the frame's 28px height; an invisible ≥44px hit-slop wraps it. */}
           {photos.length >= 2 && (
-            <div
-              role="img"
-              aria-label={`${photos.length} photos`}
+            <button
+              type="button"
+              onClick={() => { if (!locked) onManagePhotos?.() }}
+              aria-label={`Manage ${photos.length} photos`}
+              aria-haspopup="dialog"
+              className="transition-transform active:scale-[0.96]"
               style={{
                 position: 'absolute',
                 left: 12,
@@ -928,22 +934,26 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
                 height: 28,
                 padding: '0px 11px',
                 borderRadius: 14,
+                border: 'none',
+                cursor: 'pointer',
                 background: 'rgba(12,19,34,0.55)',
                 backdropFilter: 'blur(20px)',
                 WebkitBackdropFilter: 'blur(20px)',
                 boxShadow: 'rgba(255,255,255,0.14) 0px 0px 0px 1px inset',
               }}
             >
+              {/* invisible hit-slop → ≥44px tap target without growing the compact chip */}
+              <span aria-hidden="true" style={{ position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', width: '100%', minWidth: 44, height: 44 }} />
               <StackCountGlyph />
               <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontWeight: 600, fontSize: 12, color: 'rgb(231,238,250)' }}>
                 {photos.length}
               </span>
-            </div>
+            </button>
           )}
         </div>
       ))}
 
-      {!showNotes && !empty && !isDeveloped && <WhisperLozenge visible={showWhisper} />}
+      {!showNotes && !empty && !isDeveloped && <WhisperLozenge visible={showWhisper} onSort={onManagePhotos} />}
 
       {!showNotes && (isDeveloped ? (
         <div ref={dockRef}>
