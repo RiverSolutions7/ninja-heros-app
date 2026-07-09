@@ -3,6 +3,7 @@
 // (vs the export's Google Fonts <link>) keeps the flow offline-safe and avoids a render-blocking
 // external fetch — the typeface is identical Inter.
 import { Inter } from 'next/font/google'
+import DevCritiqueGate from '../components/dev/DevCritiqueGate'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -12,5 +13,10 @@ const inter = Inter({
 })
 
 export default function LogLayout({ children }: { children: React.ReactNode }) {
-  return <div className={inter.variable}>{children}</div>
+  return (
+    <div className={inter.variable}>
+      {children}
+      <DevCritiqueGate />
+    </div>
+  )
 }
