@@ -57,6 +57,8 @@ export interface NotesDocProps {
   onTryAgain: () => void
   /** "Save to library" — launches the save morph (chunk 5 stub for now). */
   onSave: () => void
+  /** Header chip tap → open the TypeAgeSheet (chunk 6). */
+  onEditTypeAge?: () => void
 }
 
 interface StepItem {
@@ -478,7 +480,7 @@ function Dock({ onTryAgain, onSave }: { onTryAgain: () => void; onSave: () => vo
 let notesSeq = 0
 const nextStepId = () => `st${(notesSeq++).toString(36)}`
 
-export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, onTryAgain, onSave }: NotesDocProps) {
+export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, onTryAgain, onSave, onEditTypeAge }: NotesDocProps) {
   // NotesDoc owns step IDENTITY while mounted (dnd-kit needs stable ids across reorders). It re-inits
   // from flow state on mount (Capture unmounts it on collapse), and every mutation is pushed straight
   // up via emit() so flow state stays the single source of truth for chunk 5's save.
@@ -615,6 +617,8 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
         <div style={{ justifySelf: 'center', display: 'flex', alignItems: 'center' }}>
           <button
             type="button"
+            onClick={onEditTypeAge}
+            aria-haspopup="dialog"
             aria-label={`${eyebrow}. Change type and ages`}
             style={{ minHeight: 44, margin: '-12px -14px', padding: '12px 14px', border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer' }}
           >

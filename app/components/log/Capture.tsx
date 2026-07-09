@@ -54,9 +54,14 @@ export interface CaptureProps {
   devMockSave?: boolean
   /** Continue on the celebrate screen → reset to a fresh empty capture (parent revokes photo URLs). */
   onContinue?: () => void
+  /** Live type + ages eyebrow ("Station · Ages 5–7"), from the TypeAgeSheet flow state (chunk 6).
+   *  Rendered in the header chip + every card eyebrow (DevelopedCard / NotesDoc / Celebrate). */
+  eyebrow?: string
+  /** Chip tap → open the TypeAgeSheet (owned by the /log route). */
+  onEditTypeAge?: () => void
 }
 
-// Type + ages eyebrow. Static until the type/age sheet is wired (chunk 6). NEVER shows duration.
+// Fallback eyebrow — used only if the parent hasn't wired the live one. NEVER shows duration.
 const EYEBROW = 'Station · Ages 5–7'
 
 // Dev-loop mock — mirrors the frame 8d glimpse so the card + cascade verify without an API call.
@@ -347,9 +352,9 @@ function PhotoStackGlyph() {
   )
 }
 
-// Header — grid 1fr/auto/1fr. Back · type-age chip (static, wired ch.6) · Save (pre-develop only).
+// Header — grid 1fr/auto/1fr. Back · type-age chip (opens the TypeAgeSheet) · Save (pre-develop only).
 // Save handoff LAW: once `developed`, the header Save is gone — "Save to library" owns the finish.
-function Header({ empty, developed, onBack, onSave }: { empty: boolean; developed: boolean; onBack: () => void; onSave?: () => void }) {
+function Header({ empty, developed, eyebrow, onBack, onSave, onEditTypeAge }: { empty: boolean; developed: boolean; eyebrow: string; onBack: () => void; onSave?: () => void; onEditTypeAge?: () => void }) {
   // Invisible hit-slop → ≥44px tap targets without moving the visible glyph/text (negative margin
   // cancels the padding so the header grid doesn't shift). Not a design value — a safety dimension.
   const hit: React.CSSProperties = { minHeight: 0, padding: '14px 18px', margin: '-14px -18px' }
@@ -374,15 +379,15 @@ function Header({ empty, developed, onBack, onSave }: { empty: boolean; develope
         </button>
       </div>
       <div style={{ justifySelf: 'center', display: 'flex', alignItems: 'center' }}>
-        {/* aria-haspopup deliberately omitted until the type/age sheet is wired (chunk 6) so SR
-            users aren't told a popup exists that does nothing yet. */}
         <button
           type="button"
-          aria-label="Station · Ages 5–7. Change type and ages"
+          onClick={onEditTypeAge}
+          aria-haspopup="dialog"
+          aria-label={`${eyebrow}. Change type and ages`}
           style={{ ...hit, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer' }}
         >
           <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontWeight: 600, fontSize: 15, letterSpacing: '-0.1px', color: 'rgb(231,238,250)' }}>
-            Station · Ages 5–7
+            {eyebrow}
           </span>
           <TypeChevron />
         </button>
@@ -406,7 +411,7 @@ function Header({ empty, developed, onBack, onSave }: { empty: boolean; develope
 
 type Phase = 'capture' | 'developing' | 'developed'
 
-export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBack, showWhisper = false, devFakeRecording = false, devMockDevelop = false, startDeveloped = null, startExpanded = false, saveType = 'station', saveCurriculums = [], devMockSave = false, onContinue }: CaptureProps) {
+export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBack, showWhisper = false, devFakeRecording = false, devMockDevelop = false, startDeveloped = null, startExpanded = false, saveType = 'station', saveCurriculums = [], devMockSave = false, onContinue, eyebrow = EYEBROW, onEditTypeAge }: CaptureProps) {
   const empty = photos.length === 0
   const [typing, setTyping] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -722,7 +727,7 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
   const handleShare = () => {
     void shareCard({
       title: celebTitle,
-      eyebrow: EYEBROW,
+      eyebrow,
       photoUrl: photos[0]?.url ?? '',
       setupSteps: developed?.setup_steps ?? [],
       cues: developed?.cues ?? '',
@@ -775,12 +780,13 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
       {showNotes && (
         <NotesDoc
           photoUrl={cover?.url ?? ''}
-          eyebrow={EYEBROW}
+          eyebrow={eyebrow}
           data={developed ?? MOCK_DEVELOP}
           onChange={setDeveloped}
           onBack={() => setExpanded(false)}
           onTryAgain={() => { setExpanded(false); setPhase('capture'); setDeveloped(null); setDevelopError(false) }}
           onSave={() => beginSave('arrive', 'structured', developed)}
+          onEditTypeAge={onEditTypeAge}
         />
       )}
 
@@ -792,14 +798,14 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
       {/* Pre-develop header (with photo-only Save). Once developed, the header lives inside the
           chromeRef wrapper below so the save morph can fade it. */}
       {!showNotes && !isDeveloped && (
-        <Header empty={empty} developed={false} onBack={handleBack} onSave={() => beginSave('arrive', 'photo', null)} />
+        <Header empty={empty} developed={false} eyebrow={eyebrow} onEditTypeAge={onEditTypeAge} onBack={handleBack} onSave={() => beginSave('arrive', 'photo', null)} />
       )}
 
       {!showNotes && (isDeveloped ? (
         <>
           <DevelopedCard
             photoUrl={cover?.url ?? ''}
-            eyebrow={EYEBROW}
+            eyebrow={eyebrow}
             data={developed ?? MOCK_DEVELOP}
             refs={cascade}
             onExpand={() => setExpanded(true)}
@@ -809,7 +815,7 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
           />
           {/* developed-state chrome — faded together by the save morph (header · dots · dock). */}
           <div ref={chromeRef}>
-            <Header empty={empty} developed onBack={handleBack} />
+            <Header empty={empty} developed eyebrow={eyebrow} onEditTypeAge={onEditTypeAge} onBack={handleBack} />
           </div>
           {/* screen-level pill dots (tpl255) — the morph fades these out. */}
           {photos.length > 0 && (
@@ -999,7 +1005,7 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
           arrival shows the cover in the slot. */}
       {saving && (
         <Celebrate
-          eyebrow={EYEBROW}
+          eyebrow={eyebrow}
           title={celebTitle}
           photoUrl={cover?.url ?? ''}
           staged={savePhase === 'run'}

@@ -7,14 +7,33 @@ import { Suspense, useCallback, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Capture, { type Photo } from '@/app/components/log/Capture'
 import Celebrate from '@/app/components/log/Celebrate'
+import TypeAgeSheet from '@/app/components/log/TypeAgeSheet'
+import { formatEyebrow } from '@/app/lib/typeAge'
 import type { DevelopResult } from '@/app/components/log/DevelopedCard'
 
 const MOCK_PHOTO = '/design-export-assets/course-photo.svg'
 
-// Placeholder type + ages for the saved row until the type/age sheet (chunk 6) wires the real values.
-// The eyebrow copy ("Station · Ages 5–7") is design-locked in Capture; these map it to real DB values.
-const SAVE_TYPE = 'station'
-const SAVE_CURRICULUMS = ['Junior Ninjas (5-9)']
+// ── type + ages persistence (chunk 6) ─────────────────────────────────────────────────────────────
+// Last-used carries across app launches (localStorage); the once-per-launch auto-open checkpoint is a
+// per-launch flag (sessionStorage). First-ever launch with no last-used = type 'station' (the default
+// type, matches 8g's pre-selected Station pill), NO ages selected — the auto-open checkpoint exists
+// precisely to make the coach confirm the class, so an empty age default is the honest initial state
+// (chip reads "Station" until they pick). CHOICE flagged for River.
+const LS_TYPE = 'ninja-log-type'
+const LS_AGES = 'ninja-log-ages'
+const SS_CHECKPOINT = 'ninja-log-typeage-checkpoint'
+
+function readType(): string {
+  try { return localStorage.getItem(LS_TYPE) || 'station' } catch { return 'station' }
+}
+function readAges(): string[] {
+  try {
+    const raw = localStorage.getItem(LS_AGES)
+    if (!raw) return []
+    const v = JSON.parse(raw)
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+  } catch { return [] }
+}
 
 // Dev-only develop payload for ?dev=developed (jump straight into the developed card + cascade).
 const MOCK_DEVELOPED: DevelopResult = {
@@ -47,6 +66,37 @@ function LogFlow() {
 
   const [photos, setPhotos] = useState<Photo[]>([])
   const [note, setNote] = useState('')
+
+  // Type + ages flow state (chunk 6). Seeded from last-used (localStorage) via lazy initializers —
+  // /log is client-rendered (useSearchParams bails to CSR) so there's no SSR mismatch.
+  const [saveType, setSaveType] = useState<string>(() => readType())
+  const [saveCurriculums, setSaveCurriculums] = useState<string[]>(() => readAges())
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const eyebrow = formatEyebrow(saveType, saveCurriculums)
+
+  // Session checkpoint: the sheet auto-opens ONCE per app launch on the first real log (the
+  // confirm-or-change moment). ?dev=sheet force-opens it; the other dev doors skip the checkpoint.
+  useEffect(() => {
+    if (dev === 'sheet') { setSheetOpen(true); return }
+    if (dev) return
+    try {
+      if (!sessionStorage.getItem(SS_CHECKPOINT)) {
+        sessionStorage.setItem(SS_CHECKPOINT, '1')
+        setSheetOpen(true)
+      }
+    } catch { /* storage blocked — skip the checkpoint, chip still carries defaults */ }
+  }, [dev])
+
+  // Done / dismiss → commit the selection to flow state + persist last-used, then close.
+  const handleTypeAgeDone = useCallback((type: string, ages: string[]) => {
+    setSaveType(type)
+    setSaveCurriculums(ages)
+    try {
+      localStorage.setItem(LS_TYPE, type)
+      localStorage.setItem(LS_AGES, JSON.stringify(ages))
+    } catch { /* ignore persistence failure — the in-memory selection still holds this session */ }
+    setSheetOpen(false)
+  }, [])
 
   // Dev-mock door: preload mock photos so the rest states are reviewable without a camera.
   // Guarded to non-production so a guessable ?dev= param can't inject fake photos into a real flow.
@@ -102,7 +152,7 @@ function LogFlow() {
     return (
       <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgb(8,12,26)', overflow: 'hidden', fontFamily: 'var(--font-inter), system-ui, sans-serif' }}>
         <Celebrate
-          eyebrow="Station · Ages 5–7"
+          eyebrow={eyebrow}
           title="Balance Gauntlet"
           photoUrl={MOCK_PHOTO}
           staged={false}
@@ -116,22 +166,27 @@ function LogFlow() {
   }
 
   return (
-    <Capture
-      photos={photos}
-      note={note}
-      onNoteChange={setNote}
-      onAddPhotos={addPhotos}
-      onBack={() => router.back()}
-      showWhisper={showWhisper}
-      devFakeRecording={devFakeRecording}
-      devMockDevelop={devMockDevelop}
-      startDeveloped={startDeveloped}
-      startExpanded={startExpanded}
-      saveType={SAVE_TYPE}
-      saveCurriculums={SAVE_CURRICULUMS}
-      devMockSave={devMockSave}
-      onContinue={handleContinue}
-    />
+    <>
+      <Capture
+        photos={photos}
+        note={note}
+        onNoteChange={setNote}
+        onAddPhotos={addPhotos}
+        onBack={() => router.back()}
+        showWhisper={showWhisper}
+        devFakeRecording={devFakeRecording}
+        devMockDevelop={devMockDevelop}
+        startDeveloped={startDeveloped}
+        startExpanded={startExpanded}
+        saveType={saveType}
+        saveCurriculums={saveCurriculums}
+        devMockSave={devMockSave}
+        onContinue={handleContinue}
+        eyebrow={eyebrow}
+        onEditTypeAge={() => setSheetOpen(true)}
+      />
+      <TypeAgeSheet open={sheetOpen} type={saveType} ages={saveCurriculums} onDone={handleTypeAgeDone} />
+    </>
   )
 }
 
