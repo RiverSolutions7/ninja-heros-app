@@ -48,6 +48,12 @@ export interface DevelopedCardProps {
   onExpand: () => void
   /** Root ref for chunk 5's geometry morph (card → library thumb). */
   cardRef?: RefObject<HTMLDivElement>
+  /** Content-overlay ref (chunk 5): the save morph fades the text/scrim out as the card shrinks to a
+   *  clean photo thumb. Not a design value — a wiring handle. */
+  overlayRef?: RefObject<HTMLDivElement>
+  /** Root z-index. Default 30 (the frame). Chunk 5's morph elevates it to 60 so the shrinking card
+   *  rides above the celebrate backdrop as it lands in the thumb slot. */
+  zIndex?: number
 }
 
 const INTER = 'var(--font-inter), sans-serif'
@@ -66,7 +72,7 @@ function StepRow({ n, text, settleRef }: { n: number; text: string; settleRef: R
   )
 }
 
-export default function DevelopedCard({ photoUrl, eyebrow, data, refs, onExpand, cardRef }: DevelopedCardProps) {
+export default function DevelopedCard({ photoUrl, eyebrow, data, refs, onExpand, cardRef, overlayRef, zIndex = 30 }: DevelopedCardProps) {
   const steps = data.setup_steps.slice(0, 2)
   const skills = data.skills.slice(0, 3)
 
@@ -84,7 +90,7 @@ export default function DevelopedCard({ photoUrl, eyebrow, data, refs, onExpand,
         boxShadow: 'rgba(0,0,0,0.55) 0px 24px 60px',
         // base fill behind the photo — also covers the voice-only (no-photo) develop edge case.
         background: 'rgb(20,28,50)',
-        zIndex: 30,
+        zIndex,
       }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -96,7 +102,7 @@ export default function DevelopedCard({ photoUrl, eyebrow, data, refs, onExpand,
         />
       )}
 
-      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+      <div ref={overlayRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
         {/* static base scrim (tpl238) — always on */}
         <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 130, background: 'linear-gradient(rgba(8,12,26,0) 0%, rgba(8,12,26,0.62) 100%)' }} />
         {/* DEEP scrim (tpl239) — plain rgba gradient, NO backdrop-filter. Rig-managed opacity 0→1. */}

@@ -14,16 +14,22 @@
 // polish-audit: flag only a11y / tap-targets / state / motion-perf / bugs — not the design values.
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import PhotoActionMenu from '@/app/components/log-flow/PhotoActionMenu'
 import IdleDock from './IdleDock'
 import WhisperLozenge from './WhisperLozenge'
 import DevelopedCard, { type DevelopResult, type DevelopCascadeRefs } from './DevelopedCard'
 import NotesDoc from './NotesDoc'
+import Celebrate, { type CelebrateRefs } from './Celebrate'
+import { saveComponent, updateComponentTitle, type SaveCardInput } from '@/app/lib/saveComponent'
+import { fallbackTitle, titleFromPhoto, titleFromText } from '@/app/lib/titleForCard'
+import { shareCard } from '@/app/lib/shareCard'
 
 export interface Photo {
   url: string
   id: string
+  /** The captured File — carried so Save can upload it. Absent for dev-mock photos (svg asset). */
+  file?: File
 }
 
 export interface CaptureProps {
@@ -40,6 +46,14 @@ export interface CaptureProps {
   startDeveloped?: DevelopResult | null
   /** Dev door (?dev=notes): open straight into the expanded NotesDoc over startDeveloped. */
   startExpanded?: boolean
+  /** component_types.name for the saved row (wired to the type/age sheet in chunk 6). Default 'station'. */
+  saveType?: string
+  /** Age groups for the saved row (curriculums). Wired in chunk 6; a placeholder default until then. */
+  saveCurriculums?: string[]
+  /** Dev door: run the save morph/celebrate WITHOUT a DB write (exercise the motion, no test rows). */
+  devMockSave?: boolean
+  /** Continue on the celebrate screen → reset to a fresh empty capture (parent revokes photo URLs). */
+  onContinue?: () => void
 }
 
 // Type + ages eyebrow. Static until the type/age sheet is wired (chunk 6). NEVER shows duration.
@@ -240,6 +254,56 @@ function prefersReduced() {
   return !!(typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)
 }
 
+// ── save morph — ports motion-dc.js onSaveTap (the grow-morph of the DevelopedCard into the celebrate
+// thumb slot + the celebrate beats). Baked spring: 390ms, ζ=0.591, ωn=6.6, sampled to 33 WAAPI
+// keyframes; shadow 24px/60px/0.55 → 4px/10px/0. The real app is not transform-scaled (unlike the dev
+// harness), so geometry is in literal px (scale = 1). Nothing here animates over a backdrop-filter.
+interface Geom { left: number; top: number; w: number; h: number; r: number }
+const MS_START: Geom = { left: 8, top: 92, w: 374, h: 374, r: 20 }
+
+function msSpring(t: number): number {
+  if (t >= 1) return 1
+  const zeta = 0.591, wn = 6.6, wd = wn * Math.sqrt(1 - zeta * zeta)
+  return 1 - Math.exp(-zeta * wn * t) * (Math.cos(wd * t) + ((zeta * wn) / wd) * Math.sin(wd * t))
+}
+function msShadowStr(p: number): string {
+  const oy = 24 + (4 - 24) * p, bl = 60 + (10 - 60) * p, a = Math.max(0, 0.55 + (0 - 0.55) * p)
+  return `0 ${oy.toFixed(1)}px ${bl.toFixed(1)}px rgba(0,0,0,${a.toFixed(3)})`
+}
+function msApplyGeom(card: HTMLElement, g: Geom) {
+  card.style.left = g.left + 'px'
+  card.style.top = g.top + 'px'
+  card.style.width = g.w + 'px'
+  card.style.height = g.h + 'px'
+  card.style.borderRadius = g.r + 'px'
+  card.style.boxShadow = msShadowStr(1)
+}
+function msTargetGeom(slot: HTMLElement, screen: HTMLElement): Geom {
+  const sr = screen.getBoundingClientRect()
+  const r = slot.getBoundingClientRect()
+  return { left: r.left - sr.left, top: r.top - sr.top, w: r.width, h: r.height, r: 10 }
+}
+// The four chrome layers fade out together (header · dots · dock · card overlay) — 150ms each.
+function msFadeOut(els: Array<HTMLElement | null>) {
+  els.forEach((el) => {
+    if (!el) return
+    el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 150, easing: 'ease', fill: 'forwards' })
+  })
+}
+// The celebrate beats: bg 320@80 · celeb 260@120 · inner translateY 14→0 420@120 · check scale 420@200.
+function msRunCeleb(r: CelebrateRefs) {
+  const { bg, celeb, inner, check } = r
+  if (bg.current) { bg.current.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 320, delay: 80, easing: 'ease', fill: 'both' }) }
+  if (celeb.current) { celeb.current.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 260, delay: 120, easing: 'ease', fill: 'both' }) }
+  if (inner.current) { inner.current.animate([{ transform: 'translateY(14px)' }, { transform: 'translateY(0px)' }], { duration: 420, delay: 120, easing: 'cubic-bezier(0.22,0.61,0.36,1)', fill: 'both' }) }
+  if (check.current) { check.current.animate([{ transform: 'scale(0.5)', opacity: 0 }, { transform: 'scale(1.08)', opacity: 1, offset: 0.7 }, { transform: 'scale(1)', opacity: 1 }], { duration: 420, delay: 200, easing: 'cubic-bezier(0.34,1.4,0.64,1)', fill: 'both' }) }
+}
+// Reduced-motion celebrate: quick fades only (no geometry animation).
+function msRunCelebReduced(r: CelebrateRefs) {
+  if (r.bg.current) r.bg.current.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 220, delay: 120, fill: 'both' })
+  if (r.celeb.current) r.celeb.current.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 240, delay: 140, fill: 'both' })
+}
+
 // Clamp the natural aspect (w/h) of the cover photo to the band range [16:9 … 4:5].
 const AR_MIN = 4 / 5 // tallest allowed (0.8)
 const AR_MAX = 16 / 9 // widest allowed (1.778)
@@ -285,7 +349,7 @@ function PhotoStackGlyph() {
 
 // Header — grid 1fr/auto/1fr. Back · type-age chip (static, wired ch.6) · Save (pre-develop only).
 // Save handoff LAW: once `developed`, the header Save is gone — "Save to library" owns the finish.
-function Header({ empty, developed, onBack }: { empty: boolean; developed: boolean; onBack: () => void }) {
+function Header({ empty, developed, onBack, onSave }: { empty: boolean; developed: boolean; onBack: () => void; onSave?: () => void }) {
   // Invisible hit-slop → ≥44px tap targets without moving the visible glyph/text (negative margin
   // cancels the padding so the header grid doesn't shift). Not a design value — a safety dimension.
   const hit: React.CSSProperties = { minHeight: 0, padding: '14px 18px', margin: '-14px -18px' }
@@ -329,7 +393,8 @@ function Header({ empty, developed, onBack }: { empty: boolean; developed: boole
             type="button"
             aria-label="Save"
             aria-disabled={empty}
-            style={{ ...hit, border: 'none', background: 'transparent', fontFamily: 'var(--font-inter), sans-serif', fontWeight: 600, fontSize: 15, color: 'rgb(255,255,255)', opacity: empty ? 0.45 : 1, cursor: 'pointer' }}
+            onClick={() => { if (!empty) onSave?.() }}
+            style={{ ...hit, border: 'none', background: 'transparent', fontFamily: 'var(--font-inter), sans-serif', fontWeight: 600, fontSize: 15, color: 'rgb(255,255,255)', opacity: empty ? 0.45 : 1, cursor: empty ? 'default' : 'pointer' }}
           >
             Save
           </button>
@@ -341,7 +406,7 @@ function Header({ empty, developed, onBack }: { empty: boolean; developed: boole
 
 type Phase = 'capture' | 'developing' | 'developed'
 
-export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBack, showWhisper = false, devFakeRecording = false, devMockDevelop = false, startDeveloped = null, startExpanded = false }: CaptureProps) {
+export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBack, showWhisper = false, devFakeRecording = false, devMockDevelop = false, startDeveloped = null, startExpanded = false, saveType = 'station', saveCurriculums = [], devMockSave = false, onContinue }: CaptureProps) {
   const empty = photos.length === 0
   const [typing, setTyping] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -355,7 +420,16 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
   // Expanded editorial notes doc (chunk 4). Opened by "Review & edit ›"; back returns to the glimpse.
   const [expanded, setExpanded] = useState(false)
   const isDeveloped = phase === 'developed'
-  const showNotes = isDeveloped && expanded
+
+  // ── save + celebrate (chunk 5) ──────────────────────────────────────────────────────────────────
+  // savePhase: 'idle' before Save · 'run' during the morph/arrival · 'done' once settled (Celebrate
+  // live). saveMode: 'morph' grows the DevelopedCard into the thumb slot; 'arrive' fades Celebrate in
+  // (no source card — photo-only header Save, or Save from the notes doc).
+  const [savePhase, setSavePhase] = useState<'idle' | 'run' | 'done'>('idle')
+  const [saveMode, setSaveMode] = useState<'morph' | 'arrive'>('morph')
+  const [celebTitle, setCelebTitle] = useState('')
+  const saving = savePhase !== 'idle'
+  const showNotes = isDeveloped && expanded && !saving
 
   // Cascade refs — the develop rig drives these on the DevelopedCard (WAAPI over the doc timeline).
   const cardRef = useRef<HTMLDivElement | null>(null)
@@ -367,6 +441,27 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
   const dvMore = useRef<HTMLButtonElement | null>(null)
   const dvChips = useRef<HTMLDivElement | null>(null)
   const cascade: DevelopCascadeRefs = { scrim: dvScrim, label: dvLabel, title: dvTitle, step1: dvStep1, step2: dvStep2, more: dvMore, chips: dvChips }
+
+  // Save-morph refs. screenRef = the Capture root (coordinate origin for the slot measurement).
+  // overlayRef = the card's text/scrim overlay (fades out as it shrinks). chromeRef/dotsRef =
+  // header+dock / pill dots (fade out). The celebrate refs are handed to <Celebrate refs={…}/>.
+  const screenRef = useRef<HTMLDivElement | null>(null)
+  const overlayRef = useRef<HTMLDivElement | null>(null)
+  const chromeRef = useRef<HTMLDivElement | null>(null)
+  const dockRef = useRef<HTMLDivElement | null>(null)
+  const dotsRef = useRef<HTMLDivElement | null>(null)
+  const celebBg = useRef<HTMLDivElement | null>(null)
+  const celebWrap = useRef<HTMLDivElement | null>(null)
+  const celebInner = useRef<HTMLDivElement | null>(null)
+  const celebCheck = useRef<HTMLDivElement | null>(null)
+  const thumbSlot = useRef<HTMLDivElement | null>(null)
+  const celebRefs: CelebrateRefs = { bg: celebBg, celeb: celebWrap, inner: celebInner, check: celebCheck, thumbSlot }
+
+  // Persistence bookkeeping: the saved row id (for rename/title-swap), the user's manual rename (wins
+  // over the async AI title), and a rename queued before the id exists.
+  const savedIdRef = useRef<string | null>(null)
+  const userRenamedRef = useRef(false)
+  const pendingRenameRef = useRef<string | null>(null)
 
   const cover = photos[0]
   const bandAspect = coverAspect ? Math.min(AR_MAX, Math.max(AR_MIN, coverAspect)) : 1
@@ -466,6 +561,164 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
     }
   }, [phase, note, devMockDevelop, abortDevelop])
 
+  // ── Save pipeline ─────────────────────────────────────────────────────────────────────────────
+  // The data write runs in parallel with the morph — the title never blocks the celebration. kind:
+  // 'structured' (developed card → parse title, no /api/title call) · 'photo' (header Save → vision
+  // title on the cover). Uploads photos, inserts (pre-017-resilient), then swaps the AI title in.
+  const runSavePipeline = useCallback(
+    async (kind: 'structured' | 'photo', card: DevelopResult | null) => {
+      // Resolve the AI title (best-effort) — used for 'photo' (vision) or a missing structured title.
+      const resolveTitle = async (): Promise<string | null> => {
+        if (kind === 'photo') return titleFromPhoto(photos[0]?.url ?? '')
+        if (kind === 'structured' && card && !card.title.trim()) return titleFromText(note)
+        return null
+      }
+
+      if (devMockSave) {
+        // Dev door: no DB write. Still resolve a title for realism (falls back if the API is mocked
+        // to fail) so the swap-in is exercisable.
+        savedIdRef.current = null
+        const t = await resolveTitle()
+        if (t && !userRenamedRef.current) setCelebTitle(t)
+        return
+      }
+
+      const input: SaveCardInput = {
+        type: saveType,
+        title: (card?.title.trim() || celebTitle || fallbackTitle(saveType)),
+        curriculums: saveCurriculums,
+        setupSteps: kind === 'structured' && card ? card.setup_steps : [],
+        cues: kind === 'structured' && card ? card.cues : '',
+        skills: kind === 'structured' && card ? card.skills : [],
+        equipment: kind === 'structured' && card ? card.equipment : [],
+        durationMinutes: kind === 'structured' && card ? card.duration_minutes : null,
+        photos: photos.map((p) => ({ file: p.file, url: p.url })),
+      }
+
+      try {
+        const { id } = await saveComponent(input)
+        savedIdRef.current = id
+        // A rename that landed before the row existed applies now.
+        if (pendingRenameRef.current) {
+          updateComponentTitle(id, pendingRenameRef.current).catch((e) => console.warn('[save] rename failed', e))
+          pendingRenameRef.current = null
+          return
+        }
+        const t = await resolveTitle()
+        if (t && !userRenamedRef.current) {
+          setCelebTitle(t)
+          updateComponentTitle(id, t).catch((e) => console.warn('[save] title swap failed', e))
+        }
+      } catch (e) {
+        // The card is already on the celebrate screen with a valid title — surface the write failure
+        // quietly (the graceful-retry surface is chunk 9; never a dead end).
+        console.warn('[save] insert failed', e)
+      }
+    },
+    [devMockSave, saveType, saveCurriculums, photos, note, celebTitle],
+  )
+
+  // Kick off a save: seed the celebrate title, mount Celebrate (staged), start the data write. The
+  // morph itself runs in a layout effect once Celebrate has mounted (so the thumb slot is measurable).
+  const beginSave = useCallback(
+    (mode: 'morph' | 'arrive', kind: 'structured' | 'photo', card: DevelopResult | null) => {
+      if (saving) return
+      savedIdRef.current = null
+      userRenamedRef.current = false
+      pendingRenameRef.current = null
+      const seed = card?.title.trim() || fallbackTitle(saveType)
+      setCelebTitle(seed)
+      setSaveMode(mode)
+      setSavePhase('run')
+      void runSavePipeline(kind, card)
+    },
+    [saving, saveType, runSavePipeline],
+  )
+
+  // Run the morph/arrival once Celebrate mounts (savePhase 'run'). Layout effect so the slot rect is
+  // measured post-commit, pre-paint. Guarded to run once per entry via the ref latch.
+  const morphRan = useRef(false)
+  useLayoutEffect(() => {
+    if (savePhase !== 'run') { morphRan.current = false; return }
+    if (morphRan.current) return
+    morphRan.current = true
+
+    const reduced = prefersReduced()
+    const chromeEls = [chromeRef.current, dotsRef.current, dockRef.current, overlayRef.current]
+
+    if (saveMode === 'arrive') {
+      // No source card — fade the celebrate in over an opaque backdrop.
+      msFadeOut(chromeEls)
+      if (reduced) msRunCelebReduced(celebRefs)
+      else msRunCeleb(celebRefs)
+      const t = window.setTimeout(() => setSavePhase('done'), reduced ? 300 : 660)
+      return () => window.clearTimeout(t)
+    }
+
+    // Grow-morph: the DevelopedCard shrinks into the thumb slot.
+    const card = cardRef.current, screen = screenRef.current, slot = thumbSlot.current
+    if (!card || !screen || !slot) { setSavePhase('done'); return }
+    const end = msTargetGeom(slot, screen)
+
+    if (reduced) {
+      msFadeOut(chromeEls)
+      msApplyGeom(card, end)
+      msRunCelebReduced(celebRefs)
+      const t = window.setTimeout(() => setSavePhase('done'), 300)
+      return () => window.clearTimeout(t)
+    }
+
+    msFadeOut(chromeEls)
+    msRunCeleb(celebRefs)
+    const N = 32, kf: Keyframe[] = []
+    for (let i = 0; i <= N; i++) {
+      const p = msSpring(i / N)
+      kf.push({
+        left: MS_START.left + (end.left - MS_START.left) * p + 'px',
+        top: MS_START.top + (end.top - MS_START.top) * p + 'px',
+        width: MS_START.w + (end.w - MS_START.w) * p + 'px',
+        height: MS_START.h + (end.h - MS_START.h) * p + 'px',
+        borderRadius: MS_START.r + (end.r - MS_START.r) * p + 'px',
+        boxShadow: msShadowStr(Math.min(1, p)),
+      })
+    }
+    msApplyGeom(card, end) // land exactly on the slot; WAAPI fill:forwards holds it
+    const anim = card.animate(kf, { duration: 390, easing: 'linear', fill: 'forwards' })
+    anim.onfinish = () => setSavePhase('done')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savePhase, saveMode])
+
+  const handleRename = (next: string) => {
+    userRenamedRef.current = true
+    setCelebTitle(next)
+    if (savedIdRef.current) updateComponentTitle(savedIdRef.current, next).catch((e) => console.warn('[save] rename failed', e))
+    else pendingRenameRef.current = next // save still in flight — apply when the id lands
+  }
+
+  const handleShare = () => {
+    void shareCard({
+      title: celebTitle,
+      eyebrow: EYEBROW,
+      photoUrl: photos[0]?.url ?? '',
+      setupSteps: developed?.setup_steps ?? [],
+      cues: developed?.cues ?? '',
+    })
+  }
+
+  const handleContinue = () => {
+    // Reset to a fresh empty capture (frame 8b). Parent revokes the saved photos' object URLs.
+    setSavePhase('idle')
+    setSaveMode('morph')
+    setCelebTitle('')
+    setPhase('capture')
+    setDeveloped(null)
+    setDevelopError(false)
+    setExpanded(false)
+    setCoverAspect(null)
+    savedIdRef.current = null
+    onContinue?.()
+  }
+
   const handleBack = () => {
     // Post-develop OR mid-develop, backing out risks the draft — confirm the discard. Confirming
     // aborts any in-flight develop; canceling lets it continue (if it resolves behind the sheet,
@@ -482,6 +735,7 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
 
   return (
     <div
+      ref={screenRef}
       style={{
         position: 'fixed',
         inset: 0,
@@ -501,7 +755,7 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
           onChange={setDeveloped}
           onBack={() => setExpanded(false)}
           onTryAgain={() => { setExpanded(false); setPhase('capture'); setDeveloped(null); setDevelopError(false) }}
-          onSave={() => { /* save morph + persistence — chunk 5 */ }}
+          onSave={() => beginSave('arrive', 'structured', developed)}
         />
       )}
 
@@ -510,7 +764,11 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 320, background: 'linear-gradient(rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 100%)', pointerEvents: 'none' }} />
       )}
 
-      {!showNotes && <Header empty={empty} developed={isDeveloped} onBack={handleBack} />}
+      {/* Pre-develop header (with photo-only Save). Once developed, the header lives inside the
+          chromeRef wrapper below so the save morph can fade it. */}
+      {!showNotes && !isDeveloped && (
+        <Header empty={empty} developed={false} onBack={handleBack} onSave={() => beginSave('arrive', 'photo', null)} />
+      )}
 
       {!showNotes && (isDeveloped ? (
         <>
@@ -521,11 +779,16 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
             refs={cascade}
             onExpand={() => setExpanded(true)}
             cardRef={cardRef}
+            overlayRef={overlayRef}
+            zIndex={saving ? 60 : 30}
           />
-          {/* screen-level pill dots (tpl255) — sit behind the card now; chunk 5 fades them as the
-              card morphs away. Rendered for fidelity + chunk-5 readiness. */}
+          {/* developed-state chrome — faded together by the save morph (header · dots · dock). */}
+          <div ref={chromeRef}>
+            <Header empty={empty} developed onBack={handleBack} />
+          </div>
+          {/* screen-level pill dots (tpl255) — the morph fades these out. */}
           {photos.length > 0 && (
-            <div style={{ position: 'absolute', top: 430, left: 0, right: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 5 }}>
+            <div ref={dotsRef} style={{ position: 'absolute', top: 430, left: 0, right: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 5 }}>
               {photos.map((p, i) => (
                 <div key={p.id} style={{ width: i === 0 ? 14 : 5, height: 5, borderRadius: 3, background: i === 0 ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.35)' }} />
               ))}
@@ -653,10 +916,12 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
       {!showNotes && !empty && !isDeveloped && <WhisperLozenge visible={showWhisper} />}
 
       {!showNotes && (isDeveloped ? (
-        <DevelopDock
-          onTryAgain={() => { setPhase('capture'); setDeveloped(null); setDevelopError(false) }}
-          onSave={() => { /* save morph + persistence — chunk 5 */ }}
-        />
+        <div ref={dockRef}>
+          <DevelopDock
+            onTryAgain={() => { setPhase('capture'); setDeveloped(null); setDevelopError(false) }}
+            onSave={() => beginSave('morph', 'structured', developed)}
+          />
+        </div>
       ) : (
         <>
           {/* "Structure it ✨" — OPT-IN, ledger-only (authored in NO frame). Minimal lit-navy pill in
@@ -703,6 +968,23 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
           />
         </>
       ))}
+
+      {/* Save + celebrate (chunk 5). Mounted staged so the thumb slot is measurable before the morph;
+          goes live (staged=false) once settled. Morph shows an empty slot (the card lands there);
+          arrival shows the cover in the slot. */}
+      {saving && (
+        <Celebrate
+          eyebrow={EYEBROW}
+          title={celebTitle}
+          photoUrl={cover?.url ?? ''}
+          staged={savePhase === 'run'}
+          showThumbPhoto={saveMode === 'arrive'}
+          refs={celebRefs}
+          onShare={handleShare}
+          onContinue={handleContinue}
+          onRename={handleRename}
+        />
+      )}
 
       {confirmDiscard && (
         <DiscardConfirm

@@ -3,12 +3,18 @@
 // The visual truth lives in the Capture components; this file is state + wiring only.
 'use client'
 
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useCallback, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Capture, { type Photo } from '@/app/components/log/Capture'
+import Celebrate from '@/app/components/log/Celebrate'
 import type { DevelopResult } from '@/app/components/log/DevelopedCard'
 
 const MOCK_PHOTO = '/design-export-assets/course-photo.svg'
+
+// Placeholder type + ages for the saved row until the type/age sheet (chunk 6) wires the real values.
+// The eyebrow copy ("Station · Ages 5–7") is design-locked in Capture; these map it to real DB values.
+const SAVE_TYPE = 'station'
+const SAVE_CURRICULUMS = ['Junior Ninjas (5-9)']
 
 // Dev-only develop payload for ?dev=developed (jump straight into the developed card + cascade).
 const MOCK_DEVELOPED: DevelopResult = {
@@ -72,9 +78,41 @@ function LogFlow() {
     : null
   const startExpanded = devMockEnabled && dev === 'notes'
 
+  // Dev-mock save: exercise the morph/celebrate WITHOUT a DB write on the mock doors. `?dev=…&real=1`
+  // opts INTO a real insert (data-acceptance verification) — the mock photo is fetched + uploaded.
+  const devMockSave = devMockEnabled && (dev === 'developed' || dev === 'notes' || dev === 'rec') && params.get('real') !== '1'
+
   const addPhotos = (files: File[]) => {
-    const added = files.map((f) => ({ url: URL.createObjectURL(f), id: nextId() }))
+    const added = files.map((f) => ({ url: URL.createObjectURL(f), id: nextId(), file: f }))
     setPhotos((prev) => [...prev, ...added])
+  }
+
+  // Continue on the celebrate screen → revoke the saved photos' object URLs (only blob: ones we own)
+  // and reset to a fresh empty capture. Capture resets its own flow state.
+  const handleContinue = useCallback(() => {
+    setPhotos((prev) => {
+      prev.forEach((p) => { if (p.url.startsWith('blob:')) URL.revokeObjectURL(p.url) })
+      return []
+    })
+    setNote('')
+  }, [])
+
+  // Dev door: jump straight to the settled celebrate screen (8f) with mock data — no morph, no write.
+  if (devMockEnabled && dev === 'celebrate') {
+    return (
+      <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgb(8,12,26)', overflow: 'hidden', fontFamily: 'var(--font-inter), system-ui, sans-serif' }}>
+        <Celebrate
+          eyebrow="Station · Ages 5–7"
+          title="Balance Gauntlet"
+          photoUrl={MOCK_PHOTO}
+          staged={false}
+          showThumbPhoto
+          onShare={() => {}}
+          onContinue={() => router.push('/library')}
+          onRename={() => {}}
+        />
+      </div>
+    )
   }
 
   return (
@@ -89,6 +127,10 @@ function LogFlow() {
       devMockDevelop={devMockDevelop}
       startDeveloped={startDeveloped}
       startExpanded={startExpanded}
+      saveType={SAVE_TYPE}
+      saveCurriculums={SAVE_CURRICULUMS}
+      devMockSave={devMockSave}
+      onContinue={handleContinue}
     />
   )
 }
