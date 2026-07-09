@@ -50,8 +50,8 @@ export function compressAges(ages: string[]): string {
   if (nums.length) {
     const lo = Math.min(...nums)
     const hi = Math.max(...nums)
-    const fmt = (n: number) => (Number.isInteger(n) ? String(n) : String(n))
-    return lo === hi ? `Ages ${fmt(lo)}` : `Ages ${fmt(lo)}–${fmt(hi)}` // en-dash, matches the frame
+    // String() renders integers bare (5) and non-integers with the decimal (3.5), which is what we want.
+    return lo === hi ? `Ages ${lo}` : `Ages ${lo}–${hi}` // en-dash, matches the frame
   }
   return ages.join(' · ')
 }

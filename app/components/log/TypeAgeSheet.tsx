@@ -123,6 +123,7 @@ export default function TypeAgeSheet({ open, type, ages, onDone }: TypeAgeSheetP
   const typeInputRef = useRef<HTMLInputElement | null>(null)
   const ageInputRef = useRef<HTMLInputElement | null>(null)
   const swipeStart = useRef<number | null>(null)
+  const dragDy = useRef(0)
   const restoreFocus = useRef<HTMLElement | null>(null)
 
   // Fetch live options once (mount). Fallback stays if the read fails or returns empty — the flow
@@ -173,51 +174,64 @@ export default function TypeAgeSheet({ open, type, ages, onDone }: TypeAgeSheetP
     const panel = panelRef.current
     const scrim = scrimRef.current
     const reduced = prefersReduced()
+    // Cancel any in-flight open/exit animation so a fast close→reopen (or reopen mid-exit) doesn't
+    // compound — the stale exit's finish must NOT fire against a freshly reopened sheet.
+    panel?.getAnimations().forEach((a) => a.cancel())
+    scrim?.getAnimations().forEach((a) => a.cancel())
 
     if (open) {
       if (scrim) scrim.animate([{ opacity: 0 }, { opacity: 1 }], { duration: reduced ? 200 : D2.scrimInMs, easing: 'ease-out', fill: 'both' })
       if (panel) {
-        if (reduced) {
-          panel.style.transform = 'translateY(0%)'
-          panel.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'ease-out', fill: 'both' })
-        } else {
-          panel.style.transform = 'translateY(0%)'
-          panel.animate(slideKeyframes(), { duration: D2.inMs, easing: 'linear', fill: 'both' })
-        }
+        panel.style.transform = 'translateY(0%)'
+        if (reduced) panel.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'ease-out', fill: 'both' })
+        else panel.animate(slideKeyframes(), { duration: D2.inMs, easing: 'linear', fill: 'both' })
       }
+      dragDy.current = 0
       // Move focus into the dialog for VoiceOver / keyboard.
       dialogRef.current?.focus()
       return
     }
 
-    // exit
-    let done = false
-    const finish = () => { if (!done) { done = true; setMounted(false) } }
+    // exit — a natural finish unmounts + restores focus; a reopen mid-flight runs the cleanup below,
+    // which flags `cancelled` so the stale finish is a no-op (blocks the un-render race).
+    let cancelled = false
+    const finish = () => {
+      if (cancelled) return
+      restoreFocus.current?.focus?.()
+      setMounted(false)
+    }
     if (scrim) scrim.animate([{ opacity: 1 }, { opacity: 0 }], { duration: reduced ? 160 : D2.scrimOutMs, easing: 'ease-in', fill: 'both' })
     if (panel) {
+      // Start the slide-down from the current dragged offset (if the exit came from a swipe) so the
+      // motion is continuous rather than snapping back to 0 first.
+      const startTransform = dragDy.current > 0 ? `translateY(${dragDy.current}px)` : 'translateY(0%)'
       const a = reduced
         ? panel.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease-in', fill: 'both' })
-        : panel.animate([{ transform: 'translateY(0%)' }, { transform: 'translateY(100%)' }], { duration: D2.outMs, easing: 'cubic-bezier(0.4,0,1,1)', fill: 'both' })
+        : panel.animate([{ transform: startTransform }, { transform: 'translateY(100%)' }], { duration: D2.outMs, easing: 'cubic-bezier(0.4,0,1,1)', fill: 'both' })
       a.onfinish = finish
-      a.oncancel = finish
+      // NOTE: oncancel deliberately does NOT finish — a cancel means "reopen", not "closed".
     } else {
       finish()
     }
-    // Restore focus to the trigger once closed.
-    restoreFocus.current?.focus?.()
+    dragDy.current = 0
+    return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, mounted])
 
-  // Focus autofocus for the add-forms' text field.
+  // Focus management: autofocus the add-forms' text field; returning to 'main' (Back / Esc / submit)
+  // pulls focus back into the dialog so it never drops to <body> and leaks past the Tab trap.
   useEffect(() => {
+    if (!mounted) return
     if (mode === 'addType') typeInputRef.current?.focus()
     else if (mode === 'addAge') ageInputRef.current?.focus()
-  }, [mode])
+    else dialogRef.current?.focus()
+  }, [mode, mounted])
 
   // Keyboard: Esc closes (commits) from main; from an add-form Esc returns to main. Tab is trapped.
   useEffect(() => {
     if (!mounted) return
     const onKey = (e: KeyboardEvent) => {
+      if (!open) return // during the exit animation the sheet is still mounted — don't act on keys
       if (e.key === 'Escape') {
         e.stopPropagation()
         if (mode === 'main') commit()
@@ -239,7 +253,7 @@ export default function TypeAgeSheet({ open, type, ages, onDone }: TypeAgeSheetP
     }
     document.addEventListener('keydown', onKey, true)
     return () => document.removeEventListener('keydown', onKey, true)
-  }, [mounted, mode, commit])
+  }, [mounted, open, mode, commit])
 
   // ── swipe-down dismiss on the grab handle ─────────────────────────────────────────────────────
   const onHandleDown = (e: React.PointerEvent) => {
@@ -254,6 +268,7 @@ export default function TypeAgeSheet({ open, type, ages, onDone }: TypeAgeSheetP
     if (dy > 0) {
       panel.getAnimations().forEach((a) => a.cancel()) // let the inline transform win while dragging
       panel.style.transform = `translateY(${dy}px)`
+      dragDy.current = dy
     }
   }
   const onHandleUp = (e: React.PointerEvent) => {
@@ -262,11 +277,14 @@ export default function TypeAgeSheet({ open, type, ages, onDone }: TypeAgeSheetP
     swipeStart.current = null
     try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId) } catch { /* ignore */ }
     const panel = panelRef.current
-    if (dy > 80) { commit(); return } // past threshold → dismiss (parent runs the exit slide)
+    // past threshold → dismiss; dragDy is preserved so the exit slide continues from here (no snap).
+    if (dy > 80) { commit(); return }
+    // snap back to rest
+    dragDy.current = 0
     if (panel) {
-      // snap back to rest
+      const from = Math.max(0, dy)
       panel.style.transform = 'translateY(0%)'
-      panel.animate([{ transform: `translateY(${Math.max(0, dy)}px)` }, { transform: 'translateY(0%)' }], { duration: 200, easing: 'cubic-bezier(0.22,0.61,0.36,1)', fill: 'both' })
+      panel.animate([{ transform: `translateY(${from}px)` }, { transform: 'translateY(0%)' }], { duration: 200, easing: 'cubic-bezier(0.22,0.61,0.36,1)', fill: 'both' })
     }
   }
 
@@ -290,6 +308,7 @@ export default function TypeAgeSheet({ open, type, ages, onDone }: TypeAgeSheetP
     } finally {
       setBusy(false)
     }
+    if (!panelRef.current) return // sheet closed while the insert was in flight — don't clobber state
     setTypes((prev) => [...prev, row])
     setWorkType(name)
     setMode('main')
@@ -311,6 +330,7 @@ export default function TypeAgeSheet({ open, type, ages, onDone }: TypeAgeSheetP
     } finally {
       setBusy(false)
     }
+    if (!panelRef.current) return // sheet closed while the insert was in flight — don't clobber state
     setAgeOpts((prev) => [...prev, row])
     setWorkAges((prev) => [...prev, label])
     setMode('main')
@@ -428,13 +448,16 @@ function GrabHandle({
       style={{
         flex: '0 0 auto',
         alignSelf: 'center',
-        // 44px-tall hit area (swipe target); the visible 5px bar sits centered inside via the child.
+        // ≥44px-tall hit area (swipe target). Negative top + trimmed bottom margin are hit-slop: they
+        // keep the visible 5px bar's center and the content below exactly where the frame places them
+        // (bar center pinned, content start unchanged) — the bar's size is untouched.
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         width: 60,
-        height: 24,
-        marginBottom: 14,
+        height: 44,
+        marginTop: -10,
+        marginBottom: 4,
         cursor: 'grab',
         touchAction: 'none',
       }}
@@ -674,7 +697,7 @@ function AddForm({
           ref={inputRef}
           value={value}
           placeholder={placeholder}
-          aria-label={heading}
+          aria-label={`${heading} name`}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onSubmit() } }}
           style={{
@@ -701,6 +724,7 @@ function AddForm({
         onClick={onSubmit}
         disabled={!canSubmit}
         aria-disabled={!canSubmit}
+        aria-busy={busy}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -718,7 +742,7 @@ function AddForm({
           color: 'rgb(255,255,255)',
         }}
       >
-        {submitLabel}
+        {busy ? 'Adding…' : submitLabel}
       </button>
     </>
   )
