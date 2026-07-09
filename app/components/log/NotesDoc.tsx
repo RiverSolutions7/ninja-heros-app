@@ -18,7 +18,7 @@
 // polish-audit: flag only a11y / tap-targets / state / motion / bugs — not the design values.
 'use client'
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import {
   DndContext,
   KeyboardSensor,
@@ -108,12 +108,16 @@ function TrashGlyph({ color }: { color: string }) {
 function StepRowMenu({
   stepIndex,
   isLast,
+  triggerRef,
   onMerge,
   onDelete,
   onClose,
 }: {
   stepIndex: number
   isLast: boolean
+  /** The invoking ⋯ button — excluded from outside-close (so a second tap toggles it shut via the
+   *  button's own handler, not a reopen race) and refocused when the menu closes. */
+  triggerRef: RefObject<HTMLButtonElement>
   onMerge: () => void
   onDelete: () => void
   onClose: () => void
@@ -140,26 +144,47 @@ function StepRowMenu({
     }
   }, [])
 
-  // Move focus into the menu; Escape closes; outside pointer closes; basic arrow/tab wrap.
+  // Focus into the menu; Escape closes; ArrowUp/Down + Tab stay trapped between the two items;
+  // outside pointer closes. The invoking ⋯ is EXCLUDED from the outside-check so a second tap on it
+  // toggles the menu shut via the button's own handler (no close→reopen race). Focus returns to the
+  // ⋯ on any close.
   useEffect(() => {
+    const menuNode = ref.current
     firstItemRef.current?.focus()
+    const items = () => (menuNode ? (Array.from(menuNode.querySelectorAll('[role="menuitem"]')) as HTMLElement[]) : [])
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation()
         onClose()
+      } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Tab') {
+        const list = items()
+        if (!list.length) return
+        e.preventDefault()
+        const cur = list.indexOf(document.activeElement as HTMLElement)
+        const dir = e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey) ? -1 : 1
+        const nextIdx = (cur + dir + list.length) % list.length
+        list[nextIdx].focus()
       }
     }
     const onPointer = (e: PointerEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+      const t = e.target as Node
+      if (ref.current && ref.current.contains(t)) return
+      if (triggerRef.current && triggerRef.current.contains(t)) return
+      onClose()
     }
     document.addEventListener('keydown', onKey, true)
-    // capture:true so the outside-tap closes before the tapped element acts on it
     document.addEventListener('pointerdown', onPointer, true)
     return () => {
       document.removeEventListener('keydown', onKey, true)
       document.removeEventListener('pointerdown', onPointer, true)
+      // Restore focus to the invoking ⋯ only if focus is still inside the menu (keyboard/Escape close)
+      // or nowhere — never yank it back if the user tapped another control (e.g. started an edit).
+      const active = document.activeElement
+      if (triggerRef.current && (active === document.body || active === null || (menuNode && menuNode.contains(active)))) {
+        triggerRef.current.focus()
+      }
     }
-  }, [onClose])
+  }, [onClose, triggerRef])
 
   const rowStyle: React.CSSProperties = {
     display: 'flex',
@@ -231,6 +256,7 @@ function StepRow({
   isLast,
   editing,
   menuOpen,
+  menuActive,
   dimmed,
   onStartEdit,
   onCommit,
@@ -244,6 +270,8 @@ function StepRow({
   isLast: boolean
   editing: boolean
   menuOpen: boolean
+  /** True while ANY row's menu is open — bystander rows go inert (no drag, no tap-through). */
+  menuActive: boolean
   dimmed: boolean
   onStartEdit: () => void
   onCommit: (text: string) => void
@@ -254,10 +282,12 @@ function StepRow({
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
-    // Disable the drag sensor on the row being edited or menu'd so taps/typing aren't hijacked.
-    disabled: editing || menuOpen,
+    // Disable the drag sensor while this row is edited, OR while any menu is open anywhere (so a
+    // dimmed bystander row can't be dragged out from under an open menu).
+    disabled: editing || menuActive,
   })
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const optionsRef = useRef<HTMLButtonElement | null>(null)
 
   useEffect(() => {
     if (editing && inputRef.current) {
@@ -296,9 +326,12 @@ function StepRow({
         background: isDragging ? 'rgb(17,26,48)' : 'transparent',
         borderRadius: isDragging ? 10 : 0,
         touchAction: 'none',
+        // Bystander rows (a menu is open on a DIFFERENT row) are dimmed AND inert — no tap-through to
+        // their edit/⋯; the invoked row and any editing row stay live.
+        pointerEvents: dimmed ? 'none' : undefined,
       }}
       {...attributes}
-      {...(editing || menuOpen ? {} : listeners)}
+      {...(editing || menuActive ? {} : listeners)}
     >
       <span aria-hidden="true" style={{ fontWeight: 200, fontSize: 22, lineHeight: 1, color: NUMERAL }}>{index + 1}</span>
 
@@ -338,8 +371,10 @@ function StepRow({
             textAlign: 'left',
             border: 'none',
             background: 'transparent',
-            padding: '10px 0',
-            margin: '-10px 0',
+            // Invisible hit-slop → ≥44px tap height (content ~20px + 12px×2). Negative margin cancels
+            // the padding so the visible text keeps the frame's row rhythm — not a design value.
+            padding: '12px 0',
+            margin: '-12px 0',
             cursor: 'text',
             fontFamily: INTER,
             fontWeight: 400,
@@ -353,6 +388,7 @@ function StepRow({
       )}
 
       <button
+        ref={optionsRef}
         type="button"
         aria-label={`Step ${index + 1} options`}
         aria-haspopup="menu"
@@ -383,6 +419,7 @@ function StepRow({
         <StepRowMenu
           stepIndex={index}
           isLast={isLast}
+          triggerRef={optionsRef}
           onMerge={onMerge}
           onDelete={onDelete}
           onClose={onCloseMenu}
@@ -554,8 +591,9 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
         zIndex: 40,
       }}
     >
-      {/* photo band — DELIBERATE 236px crop (reading state prioritizes the text below) */}
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 236, overflow: 'hidden' }}>
+      {/* photo band — DELIBERATE 236px crop (reading state prioritizes the text below). Base fill
+          rgb(20,28,50) covers the voice-only (no-photo) develop edge case, mirroring DevelopedCard. */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 236, overflow: 'hidden', background: 'rgb(20,28,50)' }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         {photoUrl && (
           <img
@@ -593,10 +631,11 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
         ref={bodyRef}
         style={{ position: 'absolute', inset: '236px 0px 118px', display: 'flex', flexDirection: 'column', gap: 18, padding: '26px 24px 0px', overflow: menuActive ? 'visible' : 'hidden' }}
       >
-        {/* eyebrow + title (title is read-only — 8e-edit does not author title editing; see report) */}
+        {/* eyebrow + title (title is read-only — 8e-edit does not author title editing; see report).
+            role="heading"/aria-level give SR users a landmark to jump to — pure semantics, no visual delta. */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, opacity: menuActive ? 0.5 : 1, transition: 'opacity 150ms ease' }}>
           <div style={{ fontFamily: INTER, fontWeight: 700, fontSize: 10, letterSpacing: '2.2px', textTransform: 'uppercase', color: ACCENT }}>{eyebrow}</div>
-          <div style={{ fontFamily: INTER, fontWeight: 800, fontSize: 21, letterSpacing: '-0.5px', color: 'rgb(255,255,255)' }}>{data.title}</div>
+          <div role="heading" aria-level={1} style={{ fontFamily: INTER, fontWeight: 800, fontSize: 21, letterSpacing: '-0.5px', color: 'rgb(255,255,255)' }}>{data.title}</div>
         </div>
 
         {/* editorial step rows — sortable (long-press), tap-to-edit, per-row ⋯ */}
@@ -611,6 +650,7 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
                   isLast={index === items.length - 1}
                   editing={editingId === item.id}
                   menuOpen={menuId === item.id}
+                  menuActive={menuActive}
                   dimmed={menuActive && menuId !== item.id}
                   onStartEdit={() => { setMenuId(null); setEditingId(item.id) }}
                   onCommit={(text) => commitStep(item.id, text)}
@@ -626,7 +666,7 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
 
         {/* Coach's cues — warm callout, editable inline the same way */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '16px 18px', borderRadius: 14, background: 'rgb(20,28,50)', border: '1px solid rgb(42,52,80)', opacity: menuActive ? 0.5 : 1, transition: 'opacity 150ms ease' }}>
-          <div style={{ fontFamily: INTER, fontWeight: 700, fontSize: 10, letterSpacing: '1.8px', textTransform: 'uppercase', color: 'rgb(255,171,125)' }}>Coach&rsquo;s cues</div>
+            <div role="heading" aria-level={2} style={{ fontFamily: INTER, fontWeight: 700, fontSize: 10, letterSpacing: '1.8px', textTransform: 'uppercase', color: 'rgb(255,171,125)' }}>Coach&rsquo;s cues</div>
           {editingCues ? (
             <textarea
               ref={cuesInputRef}
@@ -659,7 +699,9 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
             <button
               type="button"
               onClick={() => { setMenuId(null); setEditingCues(true) }}
-              style={{ textAlign: 'left', border: 'none', background: 'transparent', padding: '4px 0', margin: '-4px 0', cursor: 'text', fontFamily: INTER, fontWeight: 400, fontStyle: 'italic', fontSize: 13.5, lineHeight: 1.5, color: TEXT }}
+              // Invisible hit-slop → ≥44px tap height even for one-line cues; negative margin cancels
+              // the padding so the callout keeps its authored layout — not a design value.
+              style={{ textAlign: 'left', border: 'none', background: 'transparent', padding: '12px 0', margin: '-12px 0', cursor: 'text', fontFamily: INTER, fontWeight: 400, fontStyle: 'italic', fontSize: 13.5, lineHeight: 1.5, color: TEXT }}
             >
               {cues || 'Add a coaching cue…'}
             </button>
