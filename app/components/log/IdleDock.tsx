@@ -353,6 +353,9 @@ export interface IdleDockProps {
   // Dev door (?dev=rec): auto-run the beatIn/recording/beatOut cycle with a synthesized mic so the
   // motion can be exercised without a real microphone. Prod-guarded by the caller.
   devFakeRecording?: boolean
+  // Interaction lock (chunk 3): true while /api/develop parses the note — the note is the request
+  // payload, so editing/re-recording mid-parse is blocked (visuals unchanged; aria-disabled only).
+  locked?: boolean
 }
 
 // Lift the dock above the on-screen keyboard using the visual viewport (iOS).
@@ -380,7 +383,7 @@ function useKeyboardLift(active: boolean) {
   return lift
 }
 
-export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onCloseTyping, devFakeRecording }: IdleDockProps) {
+export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onCloseTyping, devFakeRecording, locked = false }: IdleDockProps) {
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const lift = useKeyboardLift(typing)
 
@@ -481,7 +484,7 @@ export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onC
 
   const startRec = () => {
     const r = rigRef.current
-    if (!r) return
+    if (!r || locked) return
     if (!devFakeRecording && !voice.isSupported) {
       // No speech recognition (e.g. iOS Safari) — open the typing door instead of a dead mic.
       onOpenTyping()
@@ -520,7 +523,7 @@ export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onC
 
   const onButtonTap = () => {
     const r = rigRef.current
-    if (!r) return
+    if (!r || locked) return
     if (typing) {
       onCloseTyping()
       return
@@ -600,6 +603,7 @@ export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onC
                 type="button"
                 onClick={onOpenTyping}
                 aria-label={hasNote ? `Edit note: ${note}` : 'Add a note (optional)'}
+                aria-disabled={locked}
                 tabIndex={mode === 'idle' ? 0 : -1}
                 style={{
                   flex: '1 1 0%',
@@ -659,33 +663,34 @@ export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onC
         )}
       </div>
 
-      {/* re-record — NOT authored in the export (8c is the active-recording frame). Kept minimal and
-          consistent with the dock's label styles; visible only after a voice take, at idle. */}
+      {/* re-record — 8c didn't author it; styles now match 8d's authored "↺ try again" (frame tpl259:
+          Inter 500 13px rgb(159,176,200), gap 7, ↺ 15px). Visible only after a voice take, at idle. */}
       {tookVoice && mode === 'idle' && !typing && (
         <button
           type="button"
           onClick={startRec}
           aria-label="Try again — re-record voice note"
+          aria-disabled={locked}
           className="transition-transform active:scale-[0.94]"
           style={{
             flex: '0 0 auto',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 4,
+            gap: 7,
             minHeight: 44,
             border: 'none',
             background: 'transparent',
             padding: '0 6px',
             cursor: 'pointer',
             fontFamily: 'var(--font-inter), sans-serif',
-            fontWeight: 600,
-            fontSize: 12.5,
+            fontWeight: 500,
+            fontSize: 13,
             color: 'rgb(159,176,200)',
             whiteSpace: 'nowrap',
           }}
         >
-          <span aria-hidden="true" style={{ fontSize: 13 }}>↺</span> try again
+          <span aria-hidden="true" style={{ fontSize: 15, lineHeight: 1 }}>↺</span> try again
         </button>
       )}
 
@@ -713,6 +718,7 @@ export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onC
         type="button"
         onClick={onButtonTap}
         aria-label={typing ? 'Close note field' : mode === 'recording' ? 'Stop recording' : 'Record a voice note'}
+        aria-disabled={locked}
         className="transition-transform active:scale-[0.94]"
         style={{
           flex: '0 0 auto',

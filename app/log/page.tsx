@@ -1,13 +1,24 @@
-// @design-locked — the rebuilt log-a-component flow route (chunk 1: Capture rest states).
-// Holds the flow state (photos[], note) and the dev-mock door (?dev=photo | ?dev=photos3).
+// @design-locked — the rebuilt log-a-component flow route (chunks 1–3: Capture rest/recording/develop).
+// Holds the flow state (photos[], note) and the dev-mock doors (?dev=photo | photos3 | rec | developed).
 // The visual truth lives in the Capture components; this file is state + wiring only.
 'use client'
 
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Capture, { type Photo } from '@/app/components/log/Capture'
+import type { DevelopResult } from '@/app/components/log/DevelopedCard'
 
 const MOCK_PHOTO = '/design-export-assets/course-photo.svg'
+
+// Dev-only develop payload for ?dev=developed (jump straight into the developed card + cascade).
+const MOCK_DEVELOPED: DevelopResult = {
+  title: 'Balance Gauntlet',
+  setup_steps: ['Cross the balance beam', 'Grab the rings'],
+  cues: 'Keep eyes forward and arms wide for balance.',
+  skills: ['balance', 'grip', 'agility'],
+  equipment: ['balance beam', 'rings'],
+  duration_minutes: null,
+}
 
 let photoSeq = 0
 const nextId = () => `p${Date.now().toString(36)}${(photoSeq++).toString(36)}`
@@ -25,7 +36,7 @@ function LogFlow() {
   const devMockEnabled = process.env.NODE_ENV !== 'production'
   useEffect(() => {
     if (!devMockEnabled) return
-    if (dev === 'photo' || dev === 'rec') setPhotos([{ url: MOCK_PHOTO, id: 'mock-0' }])
+    if (dev === 'photo' || dev === 'rec' || dev === 'developed') setPhotos([{ url: MOCK_PHOTO, id: 'mock-0' }])
     else if (dev === 'photos3') setPhotos([
       { url: MOCK_PHOTO, id: 'mock-0' },
       { url: MOCK_PHOTO, id: 'mock-1' },
@@ -38,6 +49,10 @@ function LogFlow() {
   const showWhisper = devMockEnabled && dev === 'photos3'
   // Recording motion door: fake-voice loop drives the full beatIn/recording/beatOut cycle.
   const devFakeRecording = devMockEnabled && dev === 'rec'
+  // Develop doors: ?dev=rec flows into the opt-in path with a MOCKED /api/develop (no API-key burn);
+  // ?dev=developed jumps straight into the developed card + cascade.
+  const devMockDevelop = devMockEnabled && (dev === 'rec' || dev === 'developed')
+  const startDeveloped = devMockEnabled && dev === 'developed' ? MOCK_DEVELOPED : null
 
   const addPhotos = (files: File[]) => {
     const added = files.map((f) => ({ url: URL.createObjectURL(f), id: nextId() }))
@@ -53,6 +68,8 @@ function LogFlow() {
       onBack={() => router.back()}
       showWhisper={showWhisper}
       devFakeRecording={devFakeRecording}
+      devMockDevelop={devMockDevelop}
+      startDeveloped={startDeveloped}
     />
   )
 }
