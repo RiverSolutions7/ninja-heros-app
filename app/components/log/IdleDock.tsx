@@ -15,12 +15,25 @@
 // backdrop) and its rAF runs ONLY while recording (zero work at rest). Timer is rAF, visibility-gated,
 // survives tab-away. Reduced motion = the crossfade path + a static (un-driven) waveform.
 // polish-audit: flag only a11y / tap-targets / state / motion-perf / bugs — not the design values.
+// Chunk 9 (graceful states): 15a mic-denied (gray disc + "Mic's off" label + raised dock + the
+// "Turn on the mic in Settings ›" line, from 15a-mic-denied.html) · 15b no-speech (the frosted
+// retry toast, from 15b-no-speech-heard.html) · 15d offline (the reassurance line + raised dock,
+// from 15d-offline.html). Never a dead end: typing always works; the mic disc re-arms recording.
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
 import { useVoiceNote } from '@/app/hooks/useVoiceNote'
+import GracefulToast from './GracefulToast'
 
 const ACCENT = 'rgb(255,90,31)'
+const INTER = 'var(--font-inter), sans-serif'
+// 15a mic-denied disc (frame tpl749): gray disc, muted mic glyph.
+const DENIED_DISC = 'rgb(58,67,88)'
+// Copy strings — LAW, copied character-for-character from the 15a/15b/15d frames.
+const COPY_MIC_DENIED = "Mic's off — tap here to type instead"
+const COPY_SETTINGS = 'Turn on the mic in Settings ›'
+const COPY_NO_SPEECH = "Didn't catch that — try again, or tap the note to type."
+const COPY_OFFLINE = "No connection — your recording is saved; it'll process when you're back online."
 
 // ─── frame 8c bar geometry — 46 center-mirrored bars, 3px wide, 2px gap ──────────────────────
 // heights + positional white ramp (#5b6b86 → #8fa0bd → #c8d4e8 → #e7eefa) copied exactly from
@@ -74,6 +87,18 @@ function MicGlyph() {
       <rect x="9" y="2.5" width="6" height="11.5" rx="3" fill="#ffffff" />
       <path d="M5.2 11.5a6.8 6.8 0 0 0 13.6 0" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
       <path d="M12 18.6v2.9" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+// 15a mic-denied glyph — the mic in the muted #7c88a0 ink over the gray disc (frame tpl750). Same
+// silhouette as MicGlyph so the disc reads as "the mic, but off" (not a different icon).
+function MutedMicGlyph() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="9" y="2.5" width="6" height="11.5" rx="3" fill="#7c88a0" />
+      <path d="M5.2 11.5a6.8 6.8 0 0 0 13.6 0" stroke="#7c88a0" strokeWidth="2" strokeLinecap="round" />
+      <path d="M12 18.6v2.9" stroke="#7c88a0" strokeWidth="2" strokeLinecap="round" />
     </svg>
   )
 }
@@ -397,6 +422,15 @@ export interface IdleDockProps {
   // True after a failed parse → "Couldn't structure — try again" (role=alert) fills the label slot;
   // the disc returns to ↑ and the raw note is preserved.
   developError?: boolean
+  // Chunk 9 — offline (15d). Owned by Capture (navigator.onLine + a failed develop/save). Raises the
+  // dock to bottom:74 and renders the reassurance line below it; recording/typing/note stay usable.
+  offline?: boolean
+  // Chunk 9 — a 'network' SpeechRecognition error surfaces up here so Capture can flip `offline` (the
+  // recognizer's relay is unreachable = a connection problem → the 15d reassurance, not a dead mic).
+  onNetworkError?: () => void
+  // Dev door (prod-guarded by the caller): force a graceful surface for review. '15a' = mic-denied,
+  // '15b' = no-speech toast. ('15d' is driven by the `offline` prop; '15c' is a Capture-level screen.)
+  devForceState?: '15a' | '15b' | null
 }
 
 // The dock's resting offset from the layout-viewport bottom (its `bottom: 46`). The keyboard occludes
@@ -439,9 +473,32 @@ function useKeyboardLift(active: boolean) {
   return lift
 }
 
-export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onCloseTyping, devFakeRecording, locked = false, onStructure, structuring = false, developError = false }: IdleDockProps) {
+export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onCloseTyping, devFakeRecording, locked = false, onStructure, structuring = false, developError = false, offline = false, onNetworkError, devForceState = null }: IdleDockProps) {
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const lift = useKeyboardLift(typing)
+
+  // ── graceful states (chunk 9) ────────────────────────────────────────────────────────────────
+  // micDenied (15a): a not-allowed/audio-capture recognition error → gray disc + "Mic's off" label +
+  // the raised dock + the Settings line. noSpeech (15b): an empty take (no-speech error OR a stopped
+  // take with a blank transcript) → the frosted retry toast. Both self-clear; typing/re-record always
+  // escape. Dev doors force the visual without a real mic.
+  const [micDenied, setMicDenied] = useState(false)
+  const [noSpeech, setNoSpeech] = useState(false)
+  const noSpeechTimerRef = useRef<number | null>(null)
+  const micOff = micDenied || devForceState === '15a'
+  const noSpeechShown = noSpeech || devForceState === '15b'
+  const flashNoSpeech = () => {
+    setNoSpeech(true)
+    if (noSpeechTimerRef.current) window.clearTimeout(noSpeechTimerRef.current)
+    // The toast is transient guidance (mirrors the W1 whisper's ~4s life) — it also clears the moment
+    // the coach acts (re-records or taps to type). Never a modal dead end.
+    noSpeechTimerRef.current = window.setTimeout(() => setNoSpeech(false), 4500)
+  }
+  const clearGraceful = () => {
+    setMicDenied(false)
+    setNoSpeech(false)
+    if (noSpeechTimerRef.current) { window.clearTimeout(noSpeechTimerRef.current); noSpeechTimerRef.current = null }
+  }
 
   const voice = useVoiceNote()
   const voiceApiRef = useRef(voice)
@@ -509,6 +566,7 @@ export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onC
       r.destroy()
       voiceApiRef.current?.reset()
       if (stopTimeoutRef.current) window.clearTimeout(stopTimeoutRef.current)
+      if (noSpeechTimerRef.current) window.clearTimeout(noSpeechTimerRef.current)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -518,11 +576,24 @@ export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onC
     latestTranscript.current = voice.transcript
   }, [voice.transcript])
 
-  // Permission denied / recognition error mid-take → don't dead-end: reset + open the typing door
-  // (the full graceful screens are chunk 9).
+  // Recognition error → route to the right graceful surface by error code (chunk 9). Reset the disc
+  // out of any in-flight record beat first, then branch — never dead-end:
+  //   not-allowed / service-not-allowed / audio-capture → 15a mic-denied (gray disc + type-instead)
+  //   no-speech                                          → 15b no-speech toast (re-record or type)
+  //   network                                            → 15d offline (relay unreachable → Capture)
+  //   anything else                                      → open the typing door (the safe fallback)
   useEffect(() => {
-    if (voice.voiceState === 'error' && (mode === 'in' || mode === 'recording')) {
-      rigRef.current?.forceIdle()
+    if (voice.voiceState !== 'error') return
+    if (mode === 'in' || mode === 'recording') rigRef.current?.forceIdle()
+    const code = voice.errorCode
+    if (code === 'not-allowed' || code === 'service-not-allowed' || code === 'audio-capture') {
+      setNoSpeech(false)
+      setMicDenied(true)
+    } else if (code === 'no-speech') {
+      flashNoSpeech()
+    } else if (code === 'network') {
+      onNetworkError?.()
+    } else {
       onOpenTyping()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -540,11 +611,23 @@ export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onC
 
   const hasNote = note.trim().length > 0
 
+  // Open the typing door — the primary escape from every graceful state. Clears the mic-denied /
+  // no-speech surfaces (the coach chose to type) before handing off to the parent.
+  const openTyping = () => {
+    clearGraceful()
+    onOpenTyping()
+  }
+
   const startRec = () => {
     const r = rigRef.current
     if (!r || locked) return
+    // Fresh attempt — drop any prior graceful surface (a mic-denied retry re-requests permission; the
+    // 15b toast clears the moment we re-arm). Also cancel a still-pending stop-timeout so a previous
+    // take's empty-transcript check can't fire flashNoSpeech against THIS new recording.
+    clearGraceful()
+    if (stopTimeoutRef.current) { window.clearTimeout(stopTimeoutRef.current); stopTimeoutRef.current = null }
     if (!devFakeRecording && !voice.isSupported) {
-      // No speech recognition (e.g. iOS Safari) — open the typing door instead of a dead mic.
+      // No speech recognition (e.g. desktop Firefox) — open the typing door instead of a dead mic.
       onOpenTyping()
       return
     }
@@ -575,6 +658,10 @@ export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onC
       if (t) {
         onNoteChange(t)
         setTookVoice(true)
+      } else {
+        // 15b — the take finished with nothing transcribed (the recognizer heard no words and never
+        // fired a no-speech error). Surface the retry toast; the note is untouched. Never a dead end.
+        flashNoSpeech()
       }
     }, 600)
   }
@@ -582,6 +669,9 @@ export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onC
   const onButtonTap = () => {
     const r = rigRef.current
     if (!r || locked || structuring) return
+    // 15a — the gray disc retries the mic (re-requests permission). If still blocked the recognizer
+    // re-errors back into micDenied; if the coach enabled it in Settings, recording proceeds.
+    if (micOff) { startRec(); return }
     if (typing) {
       // full ↑ (text exists) = dismiss the keyboard + structure; dimmed-dead ↑ (empty) = no-op.
       if (hasNote) { onCloseTyping(); onStructure?.() }
@@ -602,33 +692,51 @@ export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onC
   // xfade). Runs only at mode idle, so it never fights the rig's writes to the same opacity.
   useEffect(() => {
     if (recording) return
+    // 15a — the muted-mic face owns the disc; the mic/✓/↑ faces stay hidden (the disc is inert-ish,
+    // a tap retries the mic). The muted face is a plain always-mounted layer toggled by `micOff`.
+    if (micOff) {
+      faceFade(arrowRef.current, 0, 0)
+      faceFade(micRef.current, 0, 0)
+      if (checkRef.current) checkRef.current.style.opacity = '0'
+      return
+    }
     const reduced = !!(typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)
     const dur = reduced ? 0 : 280
     const wantArrow = typing || hasNote
     faceFade(arrowRef.current, wantArrow ? (typing && !hasNote ? 0.4 : 1) : 0, dur)
     faceFade(micRef.current, wantArrow ? 0 : 1, dur)
     if (checkRef.current) checkRef.current.style.opacity = '0'
-  }, [recording, typing, hasNote])
+  }, [recording, typing, hasNote, micOff])
 
   // The disc's role at rest: ↑ (structure) when a note exists or the keyboard is open, else mic.
   const discIsArrow = !recording && (typing || hasNote)
   // Dimmed-dead ↑: keyboard open with no text yet. Tap is a no-op until text exists.
   const arrowDead = typing && !hasNote
-  const discLabel = structuring
-    ? 'Structuring the note'
-    : mode === 'recording'
-      ? 'Stop recording'
-      : discIsArrow
-        ? 'Structure the note with AI'
-        : 'Record a voice note'
+  // 15a a11y: the mic-off state is announced ONCE by the hidden role=alert region below; the controls
+  // then carry only their distinct ACTION (retry the mic / type a note) so VoiceOver doesn't re-read
+  // "microphone is off" on every focus (mirrors the developError "keep it out of the name" pattern).
+  const discLabel = micOff
+    ? 'Retry microphone'
+    : structuring
+      ? 'Structuring the note'
+      : mode === 'recording'
+        ? 'Stop recording'
+        : discIsArrow
+          ? 'Structure the note with AI'
+          : 'Record a voice note'
+
+  // 15a/15d raise the dock to bottom:74 to clear the Settings / reassurance line beneath it. Only at
+  // rest — while typing the keyboard-lift owns the offset and the sub-lines are hidden.
+  const raised = !typing && (micOff || offline)
 
   return (
+   <>
     <div
       style={{
         position: 'absolute',
         left: 12,
         right: 12,
-        bottom: 46,
+        bottom: raised ? 74 : 46,
         display: 'flex',
         alignItems: 'center',
         gap: 12,
@@ -700,10 +808,10 @@ export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onC
               ) : (
                 <button
                   type="button"
-                  onClick={onOpenTyping}
+                  onClick={openTyping}
                   // The failure announcement is owned by the role=alert child below — keep it OUT of
                   // the accessible name so VoiceOver doesn't double-speak it (once as alert, once as name).
-                  aria-label={hasNote ? `Edit note: ${note}` : 'Add a note (optional)'}
+                  aria-label={micOff ? 'Type a note instead' : hasNote ? `Edit note: ${note}` : 'Add a note (optional)'}
                   aria-disabled={locked}
                   tabIndex={mode === 'idle' ? 0 : -1}
                   style={{
@@ -718,13 +826,17 @@ export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onC
                     fontFamily: 'var(--font-inter), sans-serif',
                     fontWeight: 400,
                     fontSize: 13.5,
-                    color: hasNote || developError ? 'rgb(231,238,250)' : 'rgb(159,176,200)',
+                    // 15a label ink rgb(205,216,234) (frame tpl748); else the note/normal ramp.
+                    color: micOff ? 'rgb(205,216,234)' : hasNote || developError ? 'rgb(231,238,250)' : 'rgb(159,176,200)',
                     whiteSpace: 'nowrap',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                   }}
                 >
-                  {developError ? (
+                  {micOff ? (
+                    // 15a — "Mic's off — tap here to type instead" (frame tpl748). Tapping opens typing.
+                    COPY_MIC_DENIED
+                  ) : developError ? (
                     // Failure lands in the SAME label slot; disc returns to ↑, the raw note is intact
                     // (tap to edit, or tap ↑ to retry). role=alert announces the failure once.
                     <span role="alert" style={{ color: 'rgb(159,176,200)' }}>Couldn&rsquo;t structure — try again</span>
@@ -835,7 +947,8 @@ export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onC
           borderRadius: 27,
           border: 'none',
           padding: 0,
-          background: ACCENT,
+          // 15a — the disc greys out (frame tpl749 rgb(58,67,88)); otherwise the accent.
+          background: micOff ? DENIED_DISC : ACCENT,
           // dim + freeze the disc while the parse is in flight (the label carries "Structuring…").
           opacity: structuring ? 0.55 : 1,
           // Pointer-dead when the disc does nothing: while structuring, and while the ↑ is the
@@ -856,7 +969,39 @@ export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onC
         <span ref={arrowRef} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0 }}>
           <ArrowGlyph />
         </span>
+        {/* 15a muted-mic face — always mounted, shown only while the mic is off (no crossfade needed). */}
+        <span aria-hidden="true" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: micOff ? 1 : 0 }}>
+          <MutedMicGlyph />
+        </span>
       </button>
     </div>
+
+    {/* 15a — the Settings line beneath the raised dock (frame tpl755). Guidance only: no web API can
+        deep-link to iOS mic settings from Safari/a PWA, so this is authored text, not a button. The
+        assertive announcement of the mic-denied state lives in the role=alert region below. */}
+    {!typing && micOff && (
+      <div aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, bottom: 46, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+        <span style={{ fontFamily: INTER, fontWeight: 400, fontSize: 12, color: 'rgb(91,107,134)' }}>{COPY_SETTINGS}</span>
+      </div>
+    )}
+
+    {/* 15d — the offline reassurance line beneath the raised dock (frame tpl877). Polite: the coach's
+        recording isn't lost, capture/record/type all keep working. */}
+    {!typing && !micOff && offline && (
+      <div style={{ position: 'absolute', left: 24, right: 24, bottom: 50, display: 'flex', justifyContent: 'center', textAlign: 'center', pointerEvents: 'none' }}>
+        <span role="status" aria-live="polite" style={{ fontFamily: INTER, fontWeight: 400, fontSize: 11.5, lineHeight: 1.4, color: 'rgb(159,176,200)' }}>{COPY_OFFLINE}</span>
+      </div>
+    )}
+
+    {/* 15b — the frosted no-speech retry toast (frame tpl785). Assertive (an error). */}
+    {!typing && noSpeechShown && <GracefulToast text={COPY_NO_SPEECH} assertive />}
+
+    {/* Assertive announcement for the mic-denied transition (the visible line above is aria-hidden). */}
+    {micOff && (
+      <div role="alert" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}>
+        Microphone is off. Type a note instead, or turn on the mic in Settings.
+      </div>
+    )}
+   </>
   )
 }

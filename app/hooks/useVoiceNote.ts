@@ -53,6 +53,9 @@ export function useVoiceNote() {
   const [voiceState, setVoiceState] = useState<VoiceNoteState>('idle')
   const [transcript, setTranscript] = useState('')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  // Machine-readable SpeechRecognition error code ('not-allowed' | 'no-speech' | 'network' | …) —
+  // additive (chunk 9): the graceful states branch on the code, the human strings stay as-is.
+  const [errorCode, setErrorCode] = useState<string | null>(null)
 
   const [isSupported] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false
@@ -119,6 +122,7 @@ export function useVoiceNote() {
     devLog('start')
     setTranscript('')
     setErrorMessage(null)
+    setErrorCode(null)
     transcriptRef.current = ''
 
     const SpeechRecognitionImpl =
@@ -147,6 +151,7 @@ export function useVoiceNote() {
           ? 'Network error — check connection'
           : 'Could not process audio. Try typing instead.'
       setErrorMessage(msg)
+      setErrorCode(event.error)
       setVoiceState('error')
       stopAudioAnalyser()
     }
@@ -248,6 +253,7 @@ export function useVoiceNote() {
     setVoiceState('idle')
     setTranscript('')
     setErrorMessage(null)
+    setErrorCode(null)
     transcriptRef.current = ''
   }
 
@@ -255,6 +261,7 @@ export function useVoiceNote() {
     voiceState,
     transcript,
     errorMessage,
+    errorCode,
     isSupported,
     startRecording,
     stopRecording,

@@ -83,6 +83,9 @@ interface RunState {
   current: number
   /** The current station's save is in flight (Capture disables its finish CTA + header Save). */
   saving: boolean
+  /** The current station's save FAILED (chunk 9) — the stepper does NOT advance; Capture shows the
+   *  retry toast + re-enables the CTA. Cleared on the next save attempt. */
+  saveError: boolean
   /** Every station saved → show the plural celebrate. */
   done: boolean
 }
@@ -181,13 +184,31 @@ function LogFlow() {
         ],
         current: 1,
         saving: false,
+        saveError: false,
         done: false,
       })
     }
+    else if (dev === 'state15a' || dev === 'state15b' || dev === 'state15c' || dev === 'state15d') {
+      // Graceful-state doors (chunk 9): seed the photo (+ a note for 15c/15d) so the forced surface
+      // renders over a realistic capture. The state itself is forced via `devForceState` on Capture.
+      setPhotos([
+        { url: MOCK_PHOTO, id: 'mock-0' },
+        { url: MOCK_PHOTO, id: 'mock-1' },
+        { url: MOCK_PHOTO, id: 'mock-2' },
+      ])
+      if (dev === 'state15c' || dev === 'state15d') setNote('Beam, rings, then a foam-pit landing.')
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dev])
+  // Graceful-state door (chunk 9): force a 15a–15d surface. 15d also runs the fake-recording loop so
+  // the reassurance sits under the live recording dock exactly as the frame authors it.
+  const devForceState: '15a' | '15b' | '15c' | '15d' | null =
+    devMockEnabled && (dev === 'state15a' || dev === 'state15b' || dev === 'state15c' || dev === 'state15d')
+      ? (dev.slice(5) as '15a' | '15b' | '15c' | '15d')
+      : null
+
   // Recording motion door: fake-voice loop drives the full beatIn/recording/beatOut cycle.
-  const devFakeRecording = devMockEnabled && dev === 'rec'
+  const devFakeRecording = devMockEnabled && (dev === 'rec' || dev === 'state15d')
   // Develop doors: ?dev=rec flows into the opt-in path with a MOCKED /api/develop (no API-key burn);
   // ?dev=developed jumps straight into the developed card + cascade.
   const devMockDevelop = devMockEnabled && (dev === 'rec' || dev === 'developed' || dev === 'stepper')
@@ -265,6 +286,7 @@ function LogFlow() {
       stations: bins.map((photoIds) => ({ photoIds, savedRowId: null, card: null })),
       current: 0,
       saving: false,
+      saveError: false,
       done: false,
     })
     setSorting(false)
@@ -278,16 +300,16 @@ function LogFlow() {
       const stations = r.stations.map((s, i) => (i === r.current ? { ...s, savedRowId: rowId, card } : s))
       const isLast = r.current + 1 >= r.stations.length
       return isLast
-        ? { ...r, stations, saving: false, done: true }
-        : { ...r, stations, current: r.current + 1, saving: false }
+        ? { ...r, stations, saving: false, saveError: false, done: true }
+        : { ...r, stations, current: r.current + 1, saving: false, saveError: false }
     })
     setNote('')
   }, [])
 
   // Save the CURRENT station via the full pipeline (dedup-aware), then advance. Awaits the insert so a
   // shared photo is uploaded before a later station reuses it, and so the row truly lands before the
-  // swap. Never dead-ends: a failed insert still advances with the fallback-titled card (chunk 9 owns
-  // the real retry surface, matching the single flow's behaviour).
+  // swap. Never dead-ends, but a FAILED insert does NOT advance (chunk 9): saveStation's catch holds the
+  // stepper and flags run.saveError so Capture shows the retry toast; the draft + earlier rows stay.
   const saveStation = useCallback(
     async (kind: 'structured' | 'photo', card: DevelopResult | null) => {
       const r = run
@@ -302,7 +324,7 @@ function LogFlow() {
       const title = card?.title.trim() || fallbackTitle(saveType)
       const celebrateCard: CelebrateCard = { eyebrow, title, photoUrl: coverUrl }
 
-      setRun((prev) => (prev ? { ...prev, saving: true } : prev))
+      setRun((prev) => (prev ? { ...prev, saving: true, saveError: false } : prev))
 
       if (devRunMock) {
         // Dev door: no DB write — still simulate the awaited beat so the swap timing reads true.
@@ -321,6 +343,9 @@ function LogFlow() {
           skills: kind === 'structured' && card ? card.skills : [],
           equipment: kind === 'structured' && card ? card.equipment : [],
           durationMinutes: kind === 'structured' && card ? card.duration_minutes : null,
+          // A photo-only station save carries the coach's typed note (if any) as the raw note, mirroring
+          // the single flow's 'raw' path — so a note typed but not developed is never silently dropped.
+          rawNote: kind === 'photo' ? (note.trim() || undefined) : undefined,
           photos: stationPhotos.map((p) => ({ id: p.id, file: p.file, url: p.url, uploadedUrl: uploadedUrlsRef.current.get(p.id) })),
         }
         const res = await saveComponent(input)
@@ -336,11 +361,14 @@ function LogFlow() {
         }
         finishStationSave(celebrateCard, res.id)
       } catch (e) {
+        // Chunk 9 — a failed station save must NOT advance the stepper: hold on the current station,
+        // flag the error (Capture shows the retry toast + re-enables the CTA). The draft (this
+        // station's developed card) and every earlier saved row are untouched. Retry re-runs saveStation.
         console.warn('[run] station save failed', e)
-        finishStationSave(celebrateCard, null)
+        setRun((prev) => (prev ? { ...prev, saving: false, saveError: true } : prev))
       }
     },
-    [run, photoById, saveType, saveCurriculums, eyebrow, devRunMock, finishStationSave],
+    [run, photoById, saveType, saveCurriculums, eyebrow, note, devRunMock, finishStationSave],
   )
 
   // Back ‹ mid-run (confirmed) → exit the run, return to the normal capture with the original photos
@@ -415,7 +443,7 @@ function LogFlow() {
     ? runStation.photoIds.map((id) => photoById.get(id)).filter((p): p is Photo => !!p)
     : photos
   const captureRun: CaptureRun | null = runStation && run
-    ? { index: run.current, total: run.stations.length, saving: run.saving, onStationSave: saveStation }
+    ? { index: run.current, total: run.stations.length, saving: run.saving, saveError: run.saveError, onStationSave: saveStation }
     : null
 
   // Plural celebrate (13b) — every station saved. Page-owned (the single-card grow-morph is skipped in
@@ -456,6 +484,7 @@ function LogFlow() {
           onEditTypeAge={() => setSheetOpen(true)}
           onManagePhotos={run ? undefined : () => setPhotoSheetOpen(true)}
           run={captureRun}
+          devForceState={devForceState}
         />
       )}
       {/* The type/age chip stays live in run mode (types/ages editable per station). */}

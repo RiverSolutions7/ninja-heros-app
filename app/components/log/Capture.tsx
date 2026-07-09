@@ -18,6 +18,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import PhotoActionMenu from '@/app/components/log-flow/PhotoActionMenu'
 import IdleDock from './IdleDock'
+import GracefulToast from './GracefulToast'
 import WhisperLozenge from './WhisperLozenge'
 import DevelopedCard, { type DevelopResult, type DevelopCascadeRefs } from './DevelopedCard'
 import NotesDoc from './NotesDoc'
@@ -67,6 +68,10 @@ export interface CaptureProps {
    *  library"), and DELEGATES the save to `onStationSave` (page.tsx owns the pipeline + segment tick +
    *  swap + the plural celebrate) — the single-flow grow-morph/Celebrate is skipped in run mode. */
   run?: CaptureRun | null
+  /** Dev door (?dev=state15a|15b|15c|15d, prod-guarded upstream): force a graceful state for review.
+   *  '15a'/'15b' drive the IdleDock surfaces; '15c' forces the develop-error screen; '15d' forces the
+   *  offline reassurance. Mock photos/note are seeded by the /log route. */
+  devForceState?: '15a' | '15b' | '15c' | '15d' | null
 }
 
 export interface CaptureRun {
@@ -76,6 +81,9 @@ export interface CaptureRun {
   total: number
   /** page-controlled: the current station's save is in flight — disables the finish CTA + header Save. */
   saving: boolean
+  /** page-controlled: the current station's save FAILED (network/offline). Shows the save-failure toast
+   *  and re-enables the CTA for a retry; the station does NOT advance (draft + earlier rows intact). */
+  saveError?: boolean
   /** Save the current station. `kind`: 'structured' (from a developed card) or 'photo' (header Save,
    *  photos only). page.tsx runs the pipeline, ticks the segment, swaps to the next station (or shows
    *  the plural celebrate on the last). */
@@ -97,6 +105,10 @@ const MOCK_DEVELOP: DevelopResult = {
 
 const INTER = 'var(--font-inter), sans-serif'
 
+// Save-failure copy (chunk 9) — UNAUTHORED (no export frame covers a failed insert). Reassures that
+// the draft is safe and points at the retry. Flagged for River. role=alert (assertive).
+const COPY_SAVE_FAIL = 'Couldn’t save — your card is safe. Try again.'
+
 // The develop-state dock (frame 8d tpl259): "↺ try again" re-record · "Save to library" CTA.
 // DELIBERATE DIVERGENCE (same rationale as IdleDock): the export authored this dock frosted
 // (rgba(12,19,34,0.55) + backdrop-filter blur), but the build tokens mandate a SOLID lit-navy dock,
@@ -109,7 +121,7 @@ const INTER = 'var(--font-inter), sans-serif'
 // saveLabel: "Save to library" (single flow / last station) or "Save & next station →" (13c, mid-run).
 // The 13c CTA is the SAME blue button, only the words change. disabled dims it while the run's
 // per-station save is in flight (page awaits the pipeline before swapping stations).
-function DevelopDock({ onTryAgain, onSave, saveLabel = 'Save to library', disabled = false }: { onTryAgain: () => void; onSave: () => void; saveLabel?: string; disabled?: boolean }) {
+function DevelopDock({ onTryAgain, onSave, saveLabel = 'Save to library', disabled = false, tryAgainLabel = 'Try again — re-record the voice note' }: { onTryAgain: () => void; onSave: () => void; saveLabel?: string; disabled?: boolean; tryAgainLabel?: string }) {
   return (
     <div
       style={{
@@ -131,7 +143,7 @@ function DevelopDock({ onTryAgain, onSave, saveLabel = 'Save to library', disabl
       <button
         type="button"
         onClick={onTryAgain}
-        aria-label="Try again — re-record the voice note"
+        aria-label={tryAgainLabel}
         className="transition-transform active:scale-[0.96]"
         style={{ display: 'flex', alignItems: 'center', gap: 7, minHeight: 44, border: 'none', background: 'transparent', padding: '0 6px', margin: '0 -6px', cursor: 'pointer', fontFamily: INTER, fontWeight: 500, fontSize: 13, color: 'rgb(159,176,200)' }}
       >
@@ -479,7 +491,7 @@ function StepperLine({ index, total }: { index: number; total: number }) {
 
 type Phase = 'capture' | 'developing' | 'developed'
 
-export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBack, showWhisper = false, devFakeRecording = false, devMockDevelop = false, startDeveloped = null, startExpanded = false, saveType = 'station', saveCurriculums = [], devMockSave = false, onContinue, eyebrow = EYEBROW, onEditTypeAge, onManagePhotos, run = null }: CaptureProps) {
+export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBack, showWhisper = false, devFakeRecording = false, devMockDevelop = false, startDeveloped = null, startExpanded = false, saveType = 'station', saveCurriculums = [], devMockSave = false, onContinue, eyebrow = EYEBROW, onEditTypeAge, onManagePhotos, run = null, devForceState = null }: CaptureProps) {
   const empty = photos.length === 0
   // Multi-station stepper mode (chunk 8). heroTop drops the photo/card to 112 (13a/13c) to clear the
   // stepper line at top:88; the single flow keeps 92 (8a/8d) — the save morph (skipped in run mode)
@@ -496,6 +508,24 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
   const [developed, setDeveloped] = useState<DevelopResult | null>(null)
   const [developError, setDevelopError] = useState(false)
   const [confirmDiscard, setConfirmDiscard] = useState(false)
+
+  // ── graceful states (chunk 9) ──────────────────────────────────────────────────────────────────
+  // offline: the real connection signal (navigator.onLine + a failed develop/save + a 'network' voice
+  // error). Blocks structuring with the 15d reassurance; capture/record/type stay usable. saveError:
+  // a failed insert in the single flow — holds the celebrate, shows the retry toast, draft intact.
+  // inserting: the awaited insert is in flight (Save disabled) — the celebrate only mounts on success.
+  const [offline, setOffline] = useState(false)
+  const [saveError, setSaveError] = useState(false)
+  const [inserting, setInserting] = useState(false)
+  useEffect(() => {
+    const goOnline = () => setOffline(false)
+    const goOffline = () => setOffline(true)
+    if (typeof navigator !== 'undefined') setOffline(!navigator.onLine)
+    window.addEventListener('online', goOnline)
+    window.addEventListener('offline', goOffline)
+    return () => { window.removeEventListener('online', goOnline); window.removeEventListener('offline', goOffline) }
+  }, [])
+  const showOffline = offline || devForceState === '15d'
   // Expanded editorial notes doc (chunk 4). Opened by "Review & edit ›"; back returns to the glimpse.
   const [expanded, setExpanded] = useState(false)
   const isDeveloped = phase === 'developed'
@@ -563,6 +593,11 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
     }
   }, [startDeveloped, startExpanded])
 
+  // Dev door (?dev=state15c): force the develop-error screen (mock note + photo seeded by the route).
+  useEffect(() => {
+    if (devForceState === '15c') setDevelopError(true)
+  }, [devForceState])
+
   // Run the reveal once the developed card is mounted. This effect runs after the DOM commit, so the
   // cascade refs are already attached — dvStage hides everything (belt on top of the card's JSX
   // opacity:0), then dvReveal deepens the scrim + cascades the content. Run synchronously (no rAF): the
@@ -589,6 +624,14 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
     if (phase !== 'capture') return
     const text = note.trim()
     if (!text) return
+    // 15d — offline blocks structuring (the /api/develop relay is unreachable). Don't spin a doomed
+    // fetch: keep the raw note, surface the reassurance. The coach can still Save the raw note now, or
+    // tap ↑ again once back online. Capture/record/type stay usable.
+    if (!devMockDevelop && typeof navigator !== 'undefined' && !navigator.onLine) {
+      setDevelopError(false)
+      setOffline(true)
+      return
+    }
     abortDevelop()
     const ac = new AbortController()
     developAbortRef.current = ac
@@ -635,92 +678,88 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
     } catch {
       if (ac.signal.aborted || developAbortRef.current !== ac) return // aborted/stale — whoever aborted set the state
       setPhase('capture')
-      setDevelopError(true)
+      // The connection dropped mid-request → route to 15d (offline), not the 15c parse-fail screen.
+      if (typeof navigator !== 'undefined' && !navigator.onLine) setOffline(true)
+      else setDevelopError(true)
     } finally {
       if (developAbortRef.current === ac) developAbortRef.current = null
     }
   }, [phase, note, devMockDevelop, abortDevelop])
 
-  // ── Save pipeline ─────────────────────────────────────────────────────────────────────────────
-  // The data write runs in parallel with the morph — the title never blocks the celebration. kind:
-  // 'structured' (developed card → parse title, no /api/title call) · 'photo' (header Save → vision
-  // title on the cover). Uploads photos, inserts (pre-017-resilient), then swaps the AI title in.
-  const runSavePipeline = useCallback(
-    async (kind: 'structured' | 'photo', card: DevelopResult | null) => {
-      // This save's generation — a later Continue bumps it so stale async resolutions (title swap)
-      // don't write to an abandoned pipeline after the user moved on.
+  // ── Save pipeline (chunk 9 rework — the insert is now AWAITED before the celebrate) ─────────────
+  // The silent-save-failure gap is closed here: the insert must SUCCEED before "Logged. Forever." can
+  // appear. On failure we hold the celebrate, raise the retry toast, and keep the draft (photos/note/
+  // card) exactly. The AI title is still best-effort + async (it never blocks the celebration).
+  //   kind: 'structured' (developed card) · 'photo' (photo-only header Save) · 'raw' (15c raw note).
+  type SaveKind = 'structured' | 'photo' | 'raw'
+
+  // Best-effort AI title, resolved AFTER the celebrate is up (fills in quietly; a later Continue bumps
+  // saveGenRef so a stale resolution can't write to an abandoned save).
+  const swapTitle = useCallback(
+    async (kind: SaveKind, card: DevelopResult | null, id: string | null) => {
       const gen = saveGenRef.current
-
-      // Resolve the AI title (best-effort) — used for 'photo' (vision) or a missing structured title.
-      // Pass the captured File (not its object URL) so Continue's URL revocation can't race the read.
-      const resolveTitle = async (): Promise<string | null> => {
-        if (kind === 'photo') return titleFromPhoto(photos[0]?.file ?? photos[0]?.url ?? '')
-        if (kind === 'structured' && card && !card.title.trim()) return titleFromText(note)
-        return null
-      }
-      const live = () => gen === saveGenRef.current
-
-      if (devMockSave) {
-        // Dev door: no DB write. Still resolve a title for realism (falls back if the API is mocked
-        // to fail) so the swap-in is exercisable.
-        savedIdRef.current = null
-        const t = await resolveTitle()
-        if (t && live() && !userRenamedRef.current) setCelebTitle(t)
-        return
-      }
-
-      const input: SaveCardInput = {
-        type: saveType,
-        title: (card?.title.trim() || celebTitle || fallbackTitle(saveType)),
-        curriculums: saveCurriculums,
-        setupSteps: kind === 'structured' && card ? card.setup_steps : [],
-        cues: kind === 'structured' && card ? card.cues : '',
-        skills: kind === 'structured' && card ? card.skills : [],
-        equipment: kind === 'structured' && card ? card.equipment : [],
-        durationMinutes: kind === 'structured' && card ? card.duration_minutes : null,
-        photos: photos.map((p) => ({ file: p.file, url: p.url })),
-      }
-
-      try {
-        const { id } = await saveComponent(input)
-        savedIdRef.current = id
-        // A rename that landed before the row existed applies now.
-        if (pendingRenameRef.current) {
-          updateComponentTitle(id, pendingRenameRef.current).catch((e) => console.warn('[save] rename failed', e))
-          pendingRenameRef.current = null
-          return
-        }
-        const t = await resolveTitle()
-        if (t && !userRenamedRef.current) {
-          // The row always gets the resolved title; the on-screen swap only if this save is still live.
-          if (live()) setCelebTitle(t)
-          updateComponentTitle(id, t).catch((e) => console.warn('[save] title swap failed', e))
-        }
-      } catch (e) {
-        // The card is already on the celebrate screen with a valid title — surface the write failure
-        // quietly. NOTE (deferred to chunk 9's graceful states): this is currently the ONLY signal on a
-        // failed insert; the coach still sees "Logged. Forever." A user-facing retry surface is chunk 9.
-        console.warn('[save] insert failed', e)
-      }
+      const t =
+        kind === 'photo'
+          ? await titleFromPhoto(photos[0]?.file ?? photos[0]?.url ?? '')
+          : kind === 'raw' || (kind === 'structured' && card && !card.title.trim())
+            ? await titleFromText(note)
+            : null
+      if (!t || userRenamedRef.current) return
+      if (gen === saveGenRef.current) setCelebTitle(t)
+      if (id) updateComponentTitle(id, t).catch((e) => console.warn('[save] title swap failed', e))
     },
-    [devMockSave, saveType, saveCurriculums, photos, note, celebTitle],
+    [photos, note],
   )
 
-  // Kick off a save: seed the celebrate title, mount Celebrate (staged), start the data write. The
-  // morph itself runs in a layout effect once Celebrate has mounted (so the thumb slot is measurable).
+  // Kick off a save. Awaits the insert; only on success does it mount Celebrate (staged) + run the
+  // morph (the layout effect below fires on savePhase 'run'). On failure it sets saveError (retry
+  // toast) and leaves the draft untouched — the coach taps Save again to retry.
   const beginSave = useCallback(
-    (mode: 'morph' | 'arrive', kind: 'structured' | 'photo', card: DevelopResult | null) => {
-      if (saving) return
+    async (mode: 'morph' | 'arrive', kind: SaveKind, card: DevelopResult | null) => {
+      if (saving || inserting) return
+      setSaveError(false)
       savedIdRef.current = null
       userRenamedRef.current = false
       pendingRenameRef.current = null
       const seed = card?.title.trim() || fallbackTitle(saveType)
+
+      let id: string | null = null
+      if (!devMockSave) {
+        const input: SaveCardInput = {
+          type: saveType,
+          title: seed,
+          curriculums: saveCurriculums,
+          setupSteps: kind === 'structured' && card ? card.setup_steps : [],
+          cues: kind === 'structured' && card ? card.cues : '',
+          skills: kind === 'structured' && card ? card.skills : [],
+          equipment: kind === 'structured' && card ? card.equipment : [],
+          durationMinutes: kind === 'structured' && card ? card.duration_minutes : null,
+          // 'raw'/'photo' carry the raw note so a save with no structured steps never drops the coach's
+          // words (saveComponent maps it into `description` when there are no steps/cues).
+          rawNote: kind === 'raw' || kind === 'photo' ? (note.trim() || undefined) : undefined,
+          photos: photos.map((p) => ({ file: p.file, url: p.url })),
+        }
+        setInserting(true)
+        try {
+          const res = await saveComponent(input)
+          id = res.id
+        } catch (e) {
+          console.warn('[save] insert failed', e)
+          setInserting(false)
+          if (typeof navigator !== 'undefined' && !navigator.onLine) setOffline(true)
+          setSaveError(true) // hold the celebrate; the draft is intact; Save retries
+          return
+        }
+        setInserting(false)
+      }
+
+      savedIdRef.current = id
       setCelebTitle(seed)
       setSaveMode(mode)
       setSavePhase('run')
-      void runSavePipeline(kind, card)
+      void swapTitle(kind, card, id)
     },
-    [saving, saveType, runSavePipeline],
+    [saving, inserting, devMockSave, saveType, saveCurriculums, photos, note, swapTitle],
   )
 
   // Run the morph/arrival once Celebrate mounts (savePhase 'run'). Layout effect so the slot rect is
@@ -842,6 +881,14 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
   // re-recording mid-parse would desync what the developed card shows from what the coach sees.
   const locked = phase === 'developing'
 
+  // 15c — the develop-error screen (a full-screen state that REPLACES the capture dock: the authored
+  // failure card + a try-again/Save-to-library bar). The raw note is preserved; "Add the steps
+  // yourself →" returns to the editable capture; Save writes the raw note; try-again re-develops.
+  const showDevelopError = developError && phase === 'capture' && !isDeveloped && !saving
+  // The retry toast is global (it can sit over the developed screen OR the 15c screen). Run-mode
+  // failures are page-owned (run.saveError).
+  const showSaveError = (saveError || !!run?.saveError) && !saving
+
   return (
     <div
       ref={screenRef}
@@ -864,12 +911,14 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
           onChange={setDeveloped}
           onBack={() => setExpanded(false)}
           onTryAgain={() => { setExpanded(false); setPhase('capture'); setDeveloped(null); setDevelopError(false) }}
-          onSave={() => beginSave('arrive', 'structured', developed)}
+          // Run mode: a Save from the expanded notes doc must delegate to the stepper pipeline (not the
+          // single-flow beginSave/Celebrate), same as the developed dock — else it desyncs the run.
+          onSave={() => { if (runMode) run.onStationSave('structured', developed); else void beginSave('arrive', 'structured', developed) }}
           onEditTypeAge={onEditTypeAge}
         />
       )}
 
-      {!showNotes && empty && !isDeveloped && (
+      {!showNotes && !showDevelopError && empty && !isDeveloped && (
         // Top light wash (8b).
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 320, background: 'linear-gradient(rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 100%)', pointerEvents: 'none' }} />
       )}
@@ -877,22 +926,25 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
       {/* Pre-develop header (with photo-only Save). Once developed, the header lives inside the
           chromeRef wrapper below so the save morph can fade it. In run mode header Save = "Save & next
           station" (the photo-only per-station path). */}
-      {!showNotes && !isDeveloped && (
+      {!showNotes && !isDeveloped && !showDevelopError && (
         <Header
           empty={empty}
           developed={false}
           eyebrow={eyebrow}
           onEditTypeAge={onEditTypeAge}
           onBack={handleBack}
-          busy={runMode ? run.saving : false}
-          onSave={() => (runMode ? run.onStationSave('photo', null) : beginSave('arrive', 'photo', null))}
+          busy={runMode ? run.saving : inserting}
+          // Single flow: a note present on a photo save is carried as the raw note (kind 'raw' → title
+          // from text + the words land in `description`); photo-only stays 'photo' (vision title). Run
+          // mode keeps the photo-only per-station path (its note flows through develop → 'structured').
+          onSave={() => { if (runMode) run.onStationSave('photo', null); else void beginSave('arrive', note.trim() ? 'raw' : 'photo', null) }}
         />
       )}
 
       {/* Stepper line (13a/13c) — persists across this station's capture + developed states. */}
       {!showNotes && runMode && <StepperLine index={run.index} total={run.total} />}
 
-      {!showNotes && (isDeveloped ? (
+      {!showNotes && !showDevelopError && (isDeveloped ? (
         <>
           <DevelopedCard
             photoUrl={cover?.url ?? ''}
@@ -1072,15 +1124,15 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
         </div>
       ))}
 
-      {!showNotes && !empty && !isDeveloped && <WhisperLozenge visible={showWhisper} onSort={onManagePhotos} />}
+      {!showNotes && !showDevelopError && !empty && !isDeveloped && <WhisperLozenge visible={showWhisper} onSort={onManagePhotos} />}
 
-      {!showNotes && (isDeveloped ? (
+      {!showNotes && !showDevelopError && (isDeveloped ? (
         <div ref={dockRef}>
           <DevelopDock
             onTryAgain={() => { setPhase('capture'); setDeveloped(null); setDevelopError(false) }}
-            onSave={() => (runMode ? run.onStationSave('structured', developed) : beginSave('morph', 'structured', developed))}
+            onSave={() => { if (runMode) run.onStationSave('structured', developed); else void beginSave('morph', 'structured', developed) }}
             saveLabel={runMode ? (isLastStation ? 'Save to library' : 'Save & next station →') : 'Save to library'}
-            disabled={runMode ? run.saving : false}
+            disabled={runMode ? run.saving : inserting}
           />
         </div>
       ) : (
@@ -1099,6 +1151,9 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
             onStructure={structure}
             structuring={phase === 'developing'}
             developError={developError && phase === 'capture'}
+            offline={showOffline}
+            onNetworkError={() => setOffline(true)}
+            devForceState={devForceState === '15a' || devForceState === '15b' ? devForceState : null}
           />
 
           <PhotoActionMenu
@@ -1112,6 +1167,98 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
           />
         </>
       ))}
+
+      {/* 15c — the develop-error screen (frame 15c-ai-couldn-39-t-parse.html). Replaces the bare label
+          alert: header (no Save) · photo hero · the authored failure card · a try-again / Save-to-library
+          bar. Never a dead end — the raw note is preserved on every branch. */}
+      {!showNotes && showDevelopError && (
+        <>
+          {/* Assertive announcement — the "structuring" attempt failed and the screen changed. VoiceOver
+              users get no signal from the (focus-only) failure card, so announce it on mount. */}
+          <div role="alert" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}>
+            Couldn&rsquo;t structure the note. Add the steps yourself, save it as-is, or try again.
+          </div>
+          <Header empty={empty} developed eyebrow={eyebrow} onEditTypeAge={onEditTypeAge} onBack={handleBack} />
+          {runMode && <StepperLine index={run.index} total={run.total} />}
+
+          {!empty && (
+            <div
+              style={{
+                position: 'absolute',
+                top: heroTop,
+                left: 8,
+                right: 8,
+                aspectRatio: String(bandAspect),
+                borderRadius: 20,
+                overflow: 'hidden',
+                boxShadow: 'rgba(0,0,0,0.55) 0px 24px 60px',
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={cover.url}
+                alt="Obstacle course station"
+                onLoad={(e) => {
+                  const img = e.currentTarget
+                  if (img.naturalWidth && img.naturalHeight) setCoverAspect(img.naturalWidth / img.naturalHeight)
+                }}
+                style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+              <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 130, background: 'linear-gradient(rgba(8,12,26,0) 0%, rgba(8,12,26,0.62) 100%)', pointerEvents: 'none' }} />
+              {photos.length > 0 && (
+                <div style={{ position: 'absolute', left: 0, right: 0, bottom: 31, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 5 }}>
+                  {photos.map((p, i) => (
+                    <div key={p.id} style={{ width: i === 0 ? 14 : 5, height: 5, borderRadius: 3, background: i === 0 ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.35)' }} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* the authored failure card (frame tpl817). The whole card is the "add the steps yourself"
+              action → returns to the editable capture (note intact, header Save available). */}
+          <button
+            type="button"
+            onClick={() => { if (!inserting) setDevelopError(false) }}
+            aria-label="Couldn't auto-fill this one. Add the steps yourself."
+            style={{
+              position: 'absolute',
+              top: 498,
+              left: 20,
+              right: 20,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'flex-start',
+              gap: 11,
+              padding: '18px 20px',
+              borderRadius: 16,
+              background: 'rgb(20,28,50)',
+              border: '1px solid rgb(42,52,80)',
+              boxShadow: 'rgba(0,0,0,0.4) 0px 14px 30px',
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
+          >
+            <span style={{ fontFamily: INTER, fontWeight: 600, fontSize: 13, color: 'rgb(231,238,250)' }}>{"Couldn't auto-fill this one."}</span>
+            <span style={{ fontFamily: INTER, fontWeight: 600, fontSize: 13, color: 'rgb(255,122,47)' }}>Add the steps yourself →</span>
+          </button>
+
+          {/* try again → re-develop · Save to library → save the raw note now (never dead-ends). In a
+              multi-station run the save/retry delegate to the page's stepper pipeline (NOT the single-flow
+              beginSave/Celebrate) so a failed develop mid-run can't desync the run. */}
+          <DevelopDock
+            onTryAgain={() => { if (!inserting && !(runMode && run.saving)) void structure() }}
+            onSave={() => { if (inserting || (runMode && run.saving)) return; if (runMode) run.onStationSave('photo', null); else void beginSave('arrive', 'raw', null) }}
+            saveLabel="Save to library"
+            disabled={inserting || (runMode ? run.saving : false)}
+            tryAgainLabel="Try again — structure the note with AI"
+          />
+        </>
+      )}
+
+      {/* Save-failure retry toast (chunk 9) — assertive; the draft is intact, tapping Save retries.
+          Suppressed behind the expanded notes doc (its own overlay owns that surface). */}
+      {!showNotes && showSaveError && <GracefulToast text={COPY_SAVE_FAIL} assertive bottom={120} />}
 
       {/* Save + celebrate (chunk 5). Mounted staged so the thumb slot is measurable before the morph;
           goes live (staged=false) once settled. Morph shows an empty slot (the card lands there);

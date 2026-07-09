@@ -23,6 +23,9 @@ export interface SaveCardInput {
   /** Hidden data — joined into the legacy text `equipment` column if present. */
   equipment: string[]
   durationMinutes: number | null
+  /** The raw (unstructured) note — chunk 9's manual-edit escape hatch (15c) and the note-carrying
+   *  header Save. Used as the `description` ONLY when there are no setup steps/cues to map. */
+  rawNote?: string
   /** Ordered photos (first = cover). Each is uploaded; a File is uploaded directly, a url is fetched.
    *  `uploadedUrl` short-circuits the upload (already-uploaded — the multi-station run reuses a shared
    *  photo's storage URL across bins so it uploads ONCE). `id` keys the returned `photoUrlById` cache. */
@@ -90,7 +93,9 @@ export async function saveComponent(input: SaveCardInput): Promise<SaveCardResul
     throw new Error(`photo upload failed: ${e instanceof Error ? e.message : String(e)}`)
   }
 
-  const description = buildDescription(input.setupSteps, input.cues)
+  // Structured mapping first; a raw (unstructured) note falls through to description verbatim so a
+  // 15c "Save to library" / note-carrying header Save never silently drops the coach's words.
+  const description = buildDescription(input.setupSteps, input.cues) || (input.rawNote?.trim() ?? '')
   const equipment = input.equipment.length ? input.equipment.join(', ') : null
 
   // Columns that exist pre-017 (the legacy shape the flow must still work against).
