@@ -67,8 +67,14 @@ function isMissingColumnError(err: { code?: string; message?: string } | null): 
 }
 
 export async function saveComponent(input: SaveCardInput): Promise<SaveCardResult> {
-  const uploaded = await Promise.all(input.photos.map(uploadOne))
-  const photoUrls = uploaded.filter((u): u is string => typeof u === 'string')
+  let photoUrls: string[]
+  try {
+    const uploaded = await Promise.all(input.photos.map(uploadOne))
+    photoUrls = uploaded.filter((u): u is string => typeof u === 'string')
+  } catch (e) {
+    // Distinct tag so a storage/upload failure isn't misread as an insert failure downstream.
+    throw new Error(`photo upload failed: ${e instanceof Error ? e.message : String(e)}`)
+  }
 
   const description = buildDescription(input.setupSteps, input.cues)
   const equipment = input.equipment.length ? input.equipment.join(', ') : null

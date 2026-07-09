@@ -462,6 +462,7 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
   const savedIdRef = useRef<string | null>(null)
   const userRenamedRef = useRef(false)
   const pendingRenameRef = useRef<string | null>(null)
+  const saveGenRef = useRef(0)
 
   const cover = photos[0]
   const bandAspect = coverAspect ? Math.min(AR_MAX, Math.max(AR_MIN, coverAspect)) : 1
@@ -567,19 +568,25 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
   // title on the cover). Uploads photos, inserts (pre-017-resilient), then swaps the AI title in.
   const runSavePipeline = useCallback(
     async (kind: 'structured' | 'photo', card: DevelopResult | null) => {
+      // This save's generation — a later Continue bumps it so stale async resolutions (title swap)
+      // don't write to an abandoned pipeline after the user moved on.
+      const gen = saveGenRef.current
+
       // Resolve the AI title (best-effort) — used for 'photo' (vision) or a missing structured title.
+      // Pass the captured File (not its object URL) so Continue's URL revocation can't race the read.
       const resolveTitle = async (): Promise<string | null> => {
-        if (kind === 'photo') return titleFromPhoto(photos[0]?.url ?? '')
+        if (kind === 'photo') return titleFromPhoto(photos[0]?.file ?? photos[0]?.url ?? '')
         if (kind === 'structured' && card && !card.title.trim()) return titleFromText(note)
         return null
       }
+      const live = () => gen === saveGenRef.current
 
       if (devMockSave) {
         // Dev door: no DB write. Still resolve a title for realism (falls back if the API is mocked
         // to fail) so the swap-in is exercisable.
         savedIdRef.current = null
         const t = await resolveTitle()
-        if (t && !userRenamedRef.current) setCelebTitle(t)
+        if (t && live() && !userRenamedRef.current) setCelebTitle(t)
         return
       }
 
@@ -606,12 +613,14 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
         }
         const t = await resolveTitle()
         if (t && !userRenamedRef.current) {
-          setCelebTitle(t)
+          // The row always gets the resolved title; the on-screen swap only if this save is still live.
+          if (live()) setCelebTitle(t)
           updateComponentTitle(id, t).catch((e) => console.warn('[save] title swap failed', e))
         }
       } catch (e) {
         // The card is already on the celebrate screen with a valid title — surface the write failure
-        // quietly (the graceful-retry surface is chunk 9; never a dead end).
+        // quietly. NOTE (deferred to chunk 9's graceful states): this is currently the ONLY signal on a
+        // failed insert; the coach still sees "Logged. Forever." A user-facing retry surface is chunk 9.
         console.warn('[save] insert failed', e)
       }
     },
@@ -688,6 +697,21 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savePhase, saveMode])
 
+  // While saving, everything behind the celebrate layer is faded but still in the DOM — take it out of
+  // the tab order + accessibility tree (`inert`) so keyboard/VoiceOver users don't traverse invisible
+  // Back/Save/try-again/Review controls before reaching Share/Continue. Covers BOTH the morph chrome
+  // and the photo-state chrome (arrive path). The celebrate layer is exempt via its data marker.
+  useEffect(() => {
+    const root = screenRef.current
+    if (!root) return
+    const kids = Array.from(root.children) as HTMLElement[]
+    kids.forEach((k) => {
+      if (k.hasAttribute('data-celebrate-layer')) return
+      if (saving) { k.setAttribute('inert', ''); k.setAttribute('aria-hidden', 'true') }
+      else { k.removeAttribute('inert'); k.removeAttribute('aria-hidden') }
+    })
+  }, [saving])
+
   const handleRename = (next: string) => {
     userRenamedRef.current = true
     setCelebTitle(next)
@@ -707,6 +731,7 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
 
   const handleContinue = () => {
     // Reset to a fresh empty capture (frame 8b). Parent revokes the saved photos' object URLs.
+    saveGenRef.current += 1 // abandon any still-in-flight title swap for the finished save
     setSavePhase('idle')
     setSaveMode('morph')
     setCelebTitle('')

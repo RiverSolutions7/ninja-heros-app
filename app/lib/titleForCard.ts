@@ -33,13 +33,13 @@ export async function titleFromText(text: string): Promise<string | null> {
   return requestTitle({ mode: 'text', text: t })
 }
 
-// Read a cover photo to base64 (strip the data-url prefix) and ask for a vision title. Returns null
-// on any read/fetch failure so the caller falls back.
-export async function titleFromPhoto(coverUrl: string): Promise<string | null> {
-  if (!coverUrl) return null
+// Read a cover photo to base64 (strip the data-url prefix) and ask for a vision title. Accepts the
+// captured File directly (preferred — no dependency on a blob: object URL that Continue may revoke) or
+// a url to fetch. Returns null on any read/fetch failure so the caller falls back.
+export async function titleFromPhoto(cover: File | string): Promise<string | null> {
+  if (!cover) return null
   try {
-    const res = await fetch(coverUrl)
-    const blob = await res.blob()
+    const blob = typeof cover === 'string' ? await (await fetch(cover)).blob() : cover
     const mediaType = blob.type || 'image/jpeg'
     const imageBase64 = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader()

@@ -67,9 +67,15 @@ export default function Celebrate({
   const [renaming, setRenaming] = useState(false)
   const [announce, setAnnounce] = useState('')
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const renameBtnRef = useRef<HTMLButtonElement | null>(null)
+  const wasRenaming = useRef(false)
 
-  // Politely announce arrival to screen readers (set after mount so the live region fires).
+  // Politely announce arrival to screen readers (set after mount so the live region fires) and move
+  // focus into the celebrate region so keyboard/VoiceOver users land here — not on the now-invisible
+  // capture chrome behind it (which is also marked inert by Capture while saving).
   useEffect(() => {
+    rootRef.current?.focus()
     const id = window.setTimeout(() => setAnnounce('Saved'), 60)
     return () => window.clearTimeout(id)
   }, [])
@@ -80,7 +86,11 @@ export default function Celebrate({
       el.focus()
       const len = el.value.length
       el.setSelectionRange(len, len)
+    } else if (!renaming && wasRenaming.current) {
+      // Closing the inline rename returns focus to its trigger (not dropped to <body>).
+      renameBtnRef.current?.focus()
     }
+    wasRenaming.current = renaming
   }, [renaming])
 
   const commitRename = (raw: string) => {
@@ -93,10 +103,14 @@ export default function Celebrate({
 
   return (
     <div
+      ref={rootRef}
+      data-celebrate-layer
+      tabIndex={-1}
       style={{
         position: 'absolute',
         inset: 0,
         zIndex: 50,
+        outline: 'none',
         fontFamily: 'var(--font-inter), system-ui, sans-serif',
         pointerEvents: staged ? 'none' : 'auto',
       }}
@@ -200,12 +214,15 @@ export default function Celebrate({
                 />
               ) : (
                 <button
+                  ref={renameBtnRef}
                   type="button"
                   onClick={() => setRenaming(true)}
                   aria-label={`${title}. Tap to rename`}
-                  // Invisible hit-slop → ≥44px tap height on the small title; negative margin keeps the
-                  // authored card layout. Not a design value.
-                  style={{ textAlign: 'left', border: 'none', background: 'transparent', padding: '12px 8px', margin: '-12px -8px', cursor: 'text', fontFamily: INTER, fontWeight: 700, fontSize: 13.5, letterSpacing: '-0.2px', color: 'rgb(231,238,250)' }}
+                  className="transition-transform active:scale-[0.97]"
+                  // Invisible hit-slop → ≥44px tap height on the small title (16px padding matches the
+                  // "Review & edit" hit-slop in DevelopedCard); negative margin keeps the authored card
+                  // layout. Not a design value.
+                  style={{ textAlign: 'left', border: 'none', background: 'transparent', padding: '16px 8px', margin: '-16px -8px', cursor: 'text', fontFamily: INTER, fontWeight: 700, fontSize: 13.5, letterSpacing: '-0.2px', color: 'rgb(231,238,250)' }}
                 >
                   {title}
                 </button>
