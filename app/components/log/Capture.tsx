@@ -23,6 +23,7 @@ export interface CaptureProps {
   onAddPhotos: (files: File[]) => void
   onBack: () => void
   showWhisper?: boolean
+  devFakeRecording?: boolean
 }
 
 // Clamp the natural aspect (w/h) of the cover photo to the band range [16:9 … 4:5].
@@ -121,7 +122,7 @@ function Header({ empty, onBack }: { empty: boolean; onBack: () => void }) {
   )
 }
 
-export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBack, showWhisper = false }: CaptureProps) {
+export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBack, showWhisper = false, devFakeRecording = false }: CaptureProps) {
   const empty = photos.length === 0
   const [typing, setTyping] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -283,7 +284,7 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
         typing={typing}
         onOpenTyping={() => setTyping(true)}
         onCloseTyping={() => setTyping(false)}
-        onMicTap={() => { /* recording flow — chunk 2 */ }}
+        devFakeRecording={devFakeRecording}
       />
 
       <PhotoActionMenu

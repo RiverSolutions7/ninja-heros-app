@@ -25,7 +25,7 @@ function LogFlow() {
   const devMockEnabled = process.env.NODE_ENV !== 'production'
   useEffect(() => {
     if (!devMockEnabled) return
-    if (dev === 'photo') setPhotos([{ url: MOCK_PHOTO, id: 'mock-0' }])
+    if (dev === 'photo' || dev === 'rec') setPhotos([{ url: MOCK_PHOTO, id: 'mock-0' }])
     else if (dev === 'photos3') setPhotos([
       { url: MOCK_PHOTO, id: 'mock-0' },
       { url: MOCK_PHOTO, id: 'mock-1' },
@@ -36,6 +36,8 @@ function LogFlow() {
 
   // The whisper renders under the 3-photo mock (real trigger wiring lands in chunk 7).
   const showWhisper = devMockEnabled && dev === 'photos3'
+  // Recording motion door: fake-voice loop drives the full beatIn/recording/beatOut cycle.
+  const devFakeRecording = devMockEnabled && dev === 'rec'
 
   const addPhotos = (files: File[]) => {
     const added = files.map((f) => ({ url: URL.createObjectURL(f), id: nextId() }))
@@ -50,6 +52,7 @@ function LogFlow() {
       onAddPhotos={addPhotos}
       onBack={() => router.back()}
       showWhisper={showWhisper}
+      devFakeRecording={devFakeRecording}
     />
   )
 }
