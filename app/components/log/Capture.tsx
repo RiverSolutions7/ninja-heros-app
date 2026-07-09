@@ -62,6 +62,24 @@ export interface CaptureProps {
   onEditTypeAge?: () => void
   /** Photo stack-chip tap AND the whisper's "Sort →" → open the PhotoSheet (owned by the /log route). */
   onManagePhotos?: () => void
+  /** Multi-station stepper mode (chunk 8). When set, Capture runs ONE station of a run: it shows the
+   *  stepper line (13a), relabels the finish CTA ("Save & next station →" until the last, then "Save to
+   *  library"), and DELEGATES the save to `onStationSave` (page.tsx owns the pipeline + segment tick +
+   *  swap + the plural celebrate) — the single-flow grow-morph/Celebrate is skipped in run mode. */
+  run?: CaptureRun | null
+}
+
+export interface CaptureRun {
+  /** 0-based index of the current station. */
+  index: number
+  /** total stations in the run. */
+  total: number
+  /** page-controlled: the current station's save is in flight — disables the finish CTA + header Save. */
+  saving: boolean
+  /** Save the current station. `kind`: 'structured' (from a developed card) or 'photo' (header Save,
+   *  photos only). page.tsx runs the pipeline, ticks the segment, swaps to the next station (or shows
+   *  the plural celebrate on the last). */
+  onStationSave: (kind: 'structured' | 'photo', card: DevelopResult | null) => void
 }
 
 // Fallback eyebrow — used only if the parent hasn't wired the live one. NEVER shows duration.
@@ -88,7 +106,10 @@ const INTER = 'var(--font-inter), sans-serif'
 // every other value (height 52, radius 26, padding, the blue Save button, try-again text) is exact.
 // NOTE for River: "Save to library" is authored BLUE (rgb(42,107,219)) in the frame, not the orange
 // accent — kept per the Fidelity Law; flag if you want it orange.
-function DevelopDock({ onTryAgain, onSave }: { onTryAgain: () => void; onSave: () => void }) {
+// saveLabel: "Save to library" (single flow / last station) or "Save & next station →" (13c, mid-run).
+// The 13c CTA is the SAME blue button, only the words change. disabled dims it while the run's
+// per-station save is in flight (page awaits the pipeline before swapping stations).
+function DevelopDock({ onTryAgain, onSave, saveLabel = 'Save to library', disabled = false }: { onTryAgain: () => void; onSave: () => void; saveLabel?: string; disabled?: boolean }) {
   return (
     <div
       style={{
@@ -120,13 +141,14 @@ function DevelopDock({ onTryAgain, onSave }: { onTryAgain: () => void; onSave: (
       {/* The button is a transparent ≥44px hit area; the visible pill keeps the authored 40px. */}
       <button
         type="button"
-        onClick={onSave}
-        aria-label="Save to library"
+        onClick={() => { if (!disabled) onSave() }}
+        aria-label={saveLabel}
+        aria-disabled={disabled}
         className="transition-transform active:scale-[0.96]"
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 44, border: 'none', background: 'transparent', padding: 0, cursor: 'pointer' }}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 44, border: 'none', background: 'transparent', padding: 0, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.55 : 1 }}
       >
-        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 40, padding: '0px 20px', borderRadius: 20, background: 'rgb(42,107,219)', fontFamily: INTER, fontWeight: 700, fontSize: 13.5, color: 'rgb(255,255,255)' }}>
-          Save to library
+        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 40, padding: '0px 20px', borderRadius: 20, background: 'rgb(42,107,219)', fontFamily: INTER, fontWeight: 700, fontSize: 13.5, color: 'rgb(255,255,255)', whiteSpace: 'nowrap' }}>
+          {saveLabel}
         </span>
       </button>
     </div>
@@ -138,7 +160,19 @@ function DevelopDock({ onTryAgain, onSave }: { onTryAgain: () => void; onSave: (
 // (font-heading = Russo One, accent-fire, Tailwind radii) which the flow's pinned tokens ban
 // (Inter only, #ff5a1f, screen-local surfaces). This screen-local sheet covers the a11y contract
 // itself: focus moves in on open, Tab is trapped between the two buttons, Escape cancels.
-function DiscardConfirm({ onDiscard, onCancel }: { onDiscard: () => void; onCancel: () => void }) {
+function DiscardConfirm({
+  onDiscard,
+  onCancel,
+  title = 'Discard this draft?',
+  body = 'Your note and the structured card won’t be saved.',
+  confirmLabel = 'Discard',
+}: {
+  onDiscard: () => void
+  onCancel: () => void
+  title?: string
+  body?: string
+  confirmLabel?: string
+}) {
   const discardRef = useRef<HTMLButtonElement | null>(null)
   const cancelRef = useRef<HTMLButtonElement | null>(null)
 
@@ -173,7 +207,7 @@ function DiscardConfirm({ onDiscard, onCancel }: { onDiscard: () => void; onCanc
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Discard draft"
+      aria-label={title}
       onClick={onCancel}
       style={{ position: 'absolute', inset: 0, zIndex: 60, background: 'rgba(8,12,26,0.72)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
     >
@@ -181,8 +215,8 @@ function DiscardConfirm({ onDiscard, onCancel }: { onDiscard: () => void; onCanc
         onClick={(e) => e.stopPropagation()}
         style={{ width: '100%', maxWidth: 390, margin: '0 12px 24px', background: 'rgb(20,28,50)', border: '1px solid rgb(42,52,80)', borderRadius: 20, padding: '22px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}
       >
-        <span style={{ fontFamily: INTER, fontWeight: 700, fontSize: 17, color: 'rgb(255,255,255)', textAlign: 'center' }}>Discard this draft?</span>
-        <span style={{ fontFamily: INTER, fontWeight: 400, fontSize: 13.5, lineHeight: 1.5, color: 'rgb(159,176,200)', textAlign: 'center' }}>Your note and the structured card won&rsquo;t be saved.</span>
+        <span style={{ fontFamily: INTER, fontWeight: 700, fontSize: 17, color: 'rgb(255,255,255)', textAlign: 'center' }}>{title}</span>
+        <span style={{ fontFamily: INTER, fontWeight: 400, fontSize: 13.5, lineHeight: 1.5, color: 'rgb(159,176,200)', textAlign: 'center' }}>{body}</span>
         <button
           ref={discardRef}
           type="button"
@@ -190,7 +224,7 @@ function DiscardConfirm({ onDiscard, onCancel }: { onDiscard: () => void; onCanc
           className="transition-transform active:scale-[0.98]"
           style={{ minHeight: 48, border: 'none', borderRadius: 14, background: 'rgb(255,90,31)', cursor: 'pointer', fontFamily: INTER, fontWeight: 700, fontSize: 15, color: 'rgb(255,255,255)' }}
         >
-          Discard
+          {confirmLabel}
         </button>
         <button
           ref={cancelRef}
@@ -357,7 +391,8 @@ function PhotoStackGlyph() {
 
 // Header — grid 1fr/auto/1fr. Back · type-age chip (opens the TypeAgeSheet) · Save (pre-develop only).
 // Save handoff LAW: once `developed`, the header Save is gone — "Save to library" owns the finish.
-function Header({ empty, developed, eyebrow, onBack, onSave, onEditTypeAge }: { empty: boolean; developed: boolean; eyebrow: string; onBack: () => void; onSave?: () => void; onEditTypeAge?: () => void }) {
+function Header({ empty, developed, eyebrow, onBack, onSave, onEditTypeAge, busy = false }: { empty: boolean; developed: boolean; eyebrow: string; onBack: () => void; onSave?: () => void; onEditTypeAge?: () => void; busy?: boolean }) {
+  const saveDisabled = empty || busy
   // Invisible hit-slop → ≥44px tap targets without moving the visible glyph/text (negative margin
   // cancels the padding so the header grid doesn't shift). Not a design value — a safety dimension.
   const hit: React.CSSProperties = { minHeight: 0, padding: '14px 18px', margin: '-14px -18px' }
@@ -400,9 +435,9 @@ function Header({ empty, developed, eyebrow, onBack, onSave, onEditTypeAge }: { 
           <button
             type="button"
             aria-label="Save"
-            aria-disabled={empty}
-            onClick={() => { if (!empty) onSave?.() }}
-            style={{ ...hit, border: 'none', background: 'transparent', fontFamily: 'var(--font-inter), sans-serif', fontWeight: 600, fontSize: 15, color: 'rgb(255,255,255)', opacity: empty ? 0.45 : 1, cursor: empty ? 'default' : 'pointer' }}
+            aria-disabled={saveDisabled}
+            onClick={() => { if (!saveDisabled) onSave?.() }}
+            style={{ ...hit, border: 'none', background: 'transparent', fontFamily: 'var(--font-inter), sans-serif', fontWeight: 600, fontSize: 15, color: 'rgb(255,255,255)', opacity: saveDisabled ? 0.45 : 1, cursor: saveDisabled ? 'default' : 'pointer' }}
           >
             Save
           </button>
@@ -412,10 +447,46 @@ function Header({ empty, developed, eyebrow, onBack, onSave, onEditTypeAge }: { 
   )
 }
 
+// Stepper line (frames 13a-1 / 13a-2 / 13c) — the segment progress under the type/age chip. Segments
+// 22×4px r2: current bright #e7eefa · done mid #5b6b86 · pending dim rgb(45,58,90). Label "Station N
+// of N" Inter 600 11px #9fb0c8. The whole Capture remounts per station, so the live-region announce is
+// set post-mount (a fresh live region doesn't fire on initial render — mirrors Celebrate's pattern).
+const STEP_CURRENT = 'rgb(231,238,250)'
+const STEP_DONE = 'rgb(91,107,134)'
+const STEP_PENDING = 'rgb(45,58,90)'
+function StepperLine({ index, total }: { index: number; total: number }) {
+  const [announce, setAnnounce] = useState('')
+  useEffect(() => {
+    const id = window.setTimeout(() => setAnnounce(`Station ${index + 1} of ${total}`), 60)
+    return () => window.clearTimeout(id)
+  }, [index, total])
+  return (
+    <div style={{ position: 'absolute', top: 88, left: 0, right: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, zIndex: 3 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }} aria-hidden="true">
+        {Array.from({ length: total }).map((_, i) => (
+          <div key={i} style={{ width: 22, height: 4, borderRadius: 2, background: i === index ? STEP_CURRENT : i < index ? STEP_DONE : STEP_PENDING }} />
+        ))}
+      </div>
+      <span aria-hidden="true" style={{ fontFamily: INTER, fontWeight: 600, fontSize: 11, color: 'rgb(159,176,200)' }}>
+        Station {index + 1} of {total}
+      </span>
+      <div role="status" aria-live="polite" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}>
+        {announce}
+      </div>
+    </div>
+  )
+}
+
 type Phase = 'capture' | 'developing' | 'developed'
 
-export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBack, showWhisper = false, devFakeRecording = false, devMockDevelop = false, startDeveloped = null, startExpanded = false, saveType = 'station', saveCurriculums = [], devMockSave = false, onContinue, eyebrow = EYEBROW, onEditTypeAge, onManagePhotos }: CaptureProps) {
+export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBack, showWhisper = false, devFakeRecording = false, devMockDevelop = false, startDeveloped = null, startExpanded = false, saveType = 'station', saveCurriculums = [], devMockSave = false, onContinue, eyebrow = EYEBROW, onEditTypeAge, onManagePhotos, run = null }: CaptureProps) {
   const empty = photos.length === 0
+  // Multi-station stepper mode (chunk 8). heroTop drops the photo/card to 112 (13a/13c) to clear the
+  // stepper line at top:88; the single flow keeps 92 (8a/8d) — the save morph (skipped in run mode)
+  // reads MS_START.top:92 unchanged.
+  const runMode = !!run
+  const heroTop = runMode ? 112 : 92
+  const isLastStation = runMode && run.index + 1 >= run.total
   const [typing, setTyping] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [coverAspect, setCoverAspect] = useState<number | null>(null)
@@ -753,6 +824,10 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
   }
 
   const handleBack = () => {
+    // Run mode: backing out mid-run risks ONLY the current station's draft — earlier stations are
+    // already saved library rows. Always confirm (the run-aware copy names that). Confirming exits the
+    // whole run (page.tsx resets it); earlier saves stay.
+    if (runMode) { setConfirmDiscard(true); return }
     // Post-develop OR mid-develop, backing out risks the draft — confirm the discard. Confirming
     // aborts any in-flight develop; canceling lets it continue (if it resolves behind the sheet,
     // the card develops normally). The raw note itself is never lost either way.
@@ -797,10 +872,22 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
       )}
 
       {/* Pre-develop header (with photo-only Save). Once developed, the header lives inside the
-          chromeRef wrapper below so the save morph can fade it. */}
+          chromeRef wrapper below so the save morph can fade it. In run mode header Save = "Save & next
+          station" (the photo-only per-station path). */}
       {!showNotes && !isDeveloped && (
-        <Header empty={empty} developed={false} eyebrow={eyebrow} onEditTypeAge={onEditTypeAge} onBack={handleBack} onSave={() => beginSave('arrive', 'photo', null)} />
+        <Header
+          empty={empty}
+          developed={false}
+          eyebrow={eyebrow}
+          onEditTypeAge={onEditTypeAge}
+          onBack={handleBack}
+          busy={runMode ? run.saving : false}
+          onSave={() => (runMode ? run.onStationSave('photo', null) : beginSave('arrive', 'photo', null))}
+        />
       )}
+
+      {/* Stepper line (13a/13c) — persists across this station's capture + developed states. */}
+      {!showNotes && runMode && <StepperLine index={run.index} total={run.total} />}
 
       {!showNotes && (isDeveloped ? (
         <>
@@ -813,6 +900,7 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
             cardRef={cardRef}
             overlayRef={overlayRef}
             zIndex={saving ? 60 : 30}
+            top={heroTop}
           />
           {/* developed-state chrome — faded together by the save morph (header · dots · dock). */}
           <div ref={chromeRef}>
@@ -820,7 +908,7 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
           </div>
           {/* screen-level pill dots (tpl255) — the morph fades these out. */}
           {photos.length > 0 && (
-            <div ref={dotsRef} style={{ position: 'absolute', top: 430, left: 0, right: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 5 }}>
+            <div ref={dotsRef} style={{ position: 'absolute', top: heroTop + 338, left: 0, right: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 5 }}>
               {photos.map((p, i) => (
                 <div key={p.id} style={{ width: i === 0 ? 14 : 5, height: 5, borderRadius: 3, background: i === 0 ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.35)' }} />
               ))}
@@ -874,11 +962,11 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
           </button>
         </div>
       ) : (
-        // Photo hero — natural whole-photo band (8a).
+        // Photo hero — natural whole-photo band (8a). heroTop = 112 in run mode (clears the stepper).
         <div
           style={{
             position: 'absolute',
-            top: 92,
+            top: heroTop,
             left: 8,
             right: 8,
             aspectRatio: String(bandAspect),
@@ -915,41 +1003,68 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
             ))}
           </div>
 
-          {/* frosted stack-count chip (2+ photos) — static blur. ONE tap opens the PhotoSheet.
-              The visible chip keeps the frame's 28px height; an invisible ≥44px hit-slop wraps it. */}
+          {/* frosted stack-count chip (2+ photos) — static blur. In the single flow ONE tap opens the
+              PhotoSheet; in run mode (13a) the photos are fixed by the sort, so it is a STATIC count
+              indicator (no tap target, no dialog affordance). */}
           {photos.length >= 2 && (
-            <button
-              type="button"
-              onClick={() => { if (!locked) onManagePhotos?.() }}
-              aria-label={`Manage ${photos.length} photos`}
-              aria-disabled={locked}
-              aria-haspopup="dialog"
-              className="transition-transform active:scale-[0.96]"
-              style={{
-                position: 'absolute',
-                left: 12,
-                bottom: 12,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                height: 28,
-                padding: '0px 11px',
-                borderRadius: 14,
-                border: 'none',
-                cursor: 'pointer',
-                background: 'rgba(12,19,34,0.55)',
-                backdropFilter: 'blur(20px)',
-                WebkitBackdropFilter: 'blur(20px)',
-                boxShadow: 'rgba(255,255,255,0.14) 0px 0px 0px 1px inset',
-              }}
-            >
-              {/* invisible hit-slop → ≥44px tap target without growing the compact chip */}
-              <span aria-hidden="true" style={{ position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', width: '100%', minWidth: 44, height: 44 }} />
-              <StackCountGlyph />
-              <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontWeight: 600, fontSize: 12, color: 'rgb(231,238,250)' }}>
-                {photos.length}
-              </span>
-            </button>
+            runMode ? (
+              <div
+                aria-label={`${photos.length} photos in this station`}
+                style={{
+                  position: 'absolute',
+                  left: 12,
+                  bottom: 12,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  height: 28,
+                  padding: '0px 11px',
+                  borderRadius: 14,
+                  background: 'rgba(12,19,34,0.55)',
+                  backdropFilter: 'blur(20px)',
+                  WebkitBackdropFilter: 'blur(20px)',
+                  boxShadow: 'rgba(255,255,255,0.14) 0px 0px 0px 1px inset',
+                }}
+              >
+                <StackCountGlyph />
+                <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontWeight: 600, fontSize: 12, color: 'rgb(231,238,250)' }}>
+                  {photos.length}
+                </span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => { if (!locked) onManagePhotos?.() }}
+                aria-label={`Manage ${photos.length} photos`}
+                aria-disabled={locked}
+                aria-haspopup="dialog"
+                className="transition-transform active:scale-[0.96]"
+                style={{
+                  position: 'absolute',
+                  left: 12,
+                  bottom: 12,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  height: 28,
+                  padding: '0px 11px',
+                  borderRadius: 14,
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: 'rgba(12,19,34,0.55)',
+                  backdropFilter: 'blur(20px)',
+                  WebkitBackdropFilter: 'blur(20px)',
+                  boxShadow: 'rgba(255,255,255,0.14) 0px 0px 0px 1px inset',
+                }}
+              >
+                {/* invisible hit-slop → ≥44px tap target without growing the compact chip */}
+                <span aria-hidden="true" style={{ position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', width: '100%', minWidth: 44, height: 44 }} />
+                <StackCountGlyph />
+                <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontWeight: 600, fontSize: 12, color: 'rgb(231,238,250)' }}>
+                  {photos.length}
+                </span>
+              </button>
+            )
           )}
         </div>
       ))}
@@ -960,7 +1075,9 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
         <div ref={dockRef}>
           <DevelopDock
             onTryAgain={() => { setPhase('capture'); setDeveloped(null); setDevelopError(false) }}
-            onSave={() => beginSave('morph', 'structured', developed)}
+            onSave={() => (runMode ? run.onStationSave('structured', developed) : beginSave('morph', 'structured', developed))}
+            saveLabel={runMode ? (isLastStation ? 'Save to library' : 'Save & next station →') : 'Save to library'}
+            disabled={runMode ? run.saving : false}
           />
         </div>
       ) : (
@@ -1014,6 +1131,13 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
         <DiscardConfirm
           onDiscard={() => { abortDevelop(); setConfirmDiscard(false); onBack() }}
           onCancel={() => setConfirmDiscard(false)}
+          {...(runMode
+            ? {
+                title: 'Leave this station?',
+                body: run.index > 0 ? 'Only this station’s draft is lost — your saved stations stay in your library.' : 'This station’s draft is lost.',
+                confirmLabel: 'Leave',
+              }
+            : {})}
         />
       )}
     </div>

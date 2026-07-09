@@ -54,6 +54,9 @@ export interface DevelopedCardProps {
   /** Root z-index. Default 30 (the frame). Chunk 5's morph elevates it to 60 so the shrinking card
    *  rides above the celebrate backdrop as it lands in the thumb slot. */
   zIndex?: number
+  /** Card top (px). Default 92 (single flow, frame 8d). The multi-station stepper (13c) drops it to
+   *  112 to clear the stepper line at top:88 — the morph is skipped in run mode so this is safe. */
+  top?: number
 }
 
 const INTER = 'var(--font-inter), sans-serif'
@@ -72,7 +75,7 @@ function StepRow({ n, text, settleRef }: { n: number; text: string; settleRef: R
   )
 }
 
-export default function DevelopedCard({ photoUrl, eyebrow, data, refs, onExpand, cardRef, overlayRef, zIndex = 30 }: DevelopedCardProps) {
+export default function DevelopedCard({ photoUrl, eyebrow, data, refs, onExpand, cardRef, overlayRef, zIndex = 30, top = 92 }: DevelopedCardProps) {
   const steps = data.setup_steps.slice(0, 2)
   const skills = data.skills.slice(0, 3)
 
@@ -81,7 +84,7 @@ export default function DevelopedCard({ photoUrl, eyebrow, data, refs, onExpand,
       ref={cardRef}
       style={{
         position: 'absolute',
-        top: 92,
+        top,
         left: 8,
         width: 374,
         height: 374,

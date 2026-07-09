@@ -3,13 +3,17 @@
 // The visual truth lives in the Capture components; this file is state + wiring only.
 'use client'
 
-import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import Capture, { type Photo } from '@/app/components/log/Capture'
-import Celebrate from '@/app/components/log/Celebrate'
+import Capture, { type Photo, type CaptureRun } from '@/app/components/log/Capture'
+import Celebrate, { type CelebrateCard } from '@/app/components/log/Celebrate'
 import TypeAgeSheet from '@/app/components/log/TypeAgeSheet'
 import PhotoSheet from '@/app/components/log/PhotoSheet'
+import SortBins from '@/app/components/log/SortBins'
 import { formatEyebrow } from '@/app/lib/typeAge'
+import { saveComponent, updateComponentTitle, type SaveCardInput } from '@/app/lib/saveComponent'
+import { fallbackTitle, titleFromPhoto } from '@/app/lib/titleForCard'
+import { shareCard } from '@/app/lib/shareCard'
 import type { DevelopResult } from '@/app/components/log/DevelopedCard'
 
 const MOCK_PHOTO = '/design-export-assets/course-photo.svg'
@@ -62,6 +66,26 @@ const nextId = () => `p${Date.now().toString(36)}${(photoSeq++).toString(36)}`
 
 // The W1 "Multiple setups? Sort →" whisper shows for ~4s the first time a capture reaches 3 photos.
 const WHISPER_MS = 4000
+
+// ── multi-station run (chunk 8) ───────────────────────────────────────────────────────────────────
+// After SortBins, the run walks the stations one at a time (Rhythm A): each station is captured with
+// ITS photos only, saved via the full pipeline ("Save & next station →"), then the screen swaps to the
+// next. The last station's "Save to library" flips `done` → the plural celebrate. Forward-only.
+interface RunStation {
+  photoIds: string[]
+  /** The saved library row id (null until saved / on a mock-or-failed save). */
+  savedRowId: string | null
+  /** The card summary shown on the plural celebrate (set when the station saves). */
+  card: CelebrateCard | null
+}
+interface RunState {
+  stations: RunStation[]
+  current: number
+  /** The current station's save is in flight (Capture disables its finish CTA + header Save). */
+  saving: boolean
+  /** Every station saved → show the plural celebrate. */
+  done: boolean
+}
 
 function LogFlow() {
   const router = useRouter()
@@ -132,13 +156,41 @@ function LogFlow() {
       if (dev === 'photosheet') setPhotoSheetOpen(true) // door: open the manage sheet with 3 mocks
       if (dev === 'photos3') setWhisper(true) // door: preview the whisper persistently (no auto-fade)
     }
+    else if (dev === 'sortbins') {
+      // door: the bins screen with 4 mock photos to sort.
+      setPhotos([
+        { url: MOCK_PHOTO, id: 'mock-0' },
+        { url: MOCK_PHOTO, id: 'mock-1' },
+        { url: MOCK_PHOTO, id: 'mock-2' },
+        { url: MOCK_PHOTO, id: 'mock-3' },
+      ])
+      setSorting(true)
+    }
+    else if (dev === 'stepper') {
+      // door: a 2-station run mid-flight — station 1 already saved (mock), station 2 (index 1) active.
+      setPhotos([
+        { url: MOCK_PHOTO, id: 'mock-0' },
+        { url: MOCK_PHOTO, id: 'mock-1' },
+        { url: MOCK_PHOTO, id: 'mock-2' },
+        { url: MOCK_PHOTO, id: 'mock-3' },
+      ])
+      setRun({
+        stations: [
+          { photoIds: ['mock-0', 'mock-1'], savedRowId: 'mock-row-1', card: { eyebrow: 'Station · Ages 5–7', title: 'Balance Gauntlet', photoUrl: MOCK_PHOTO } },
+          { photoIds: ['mock-2', 'mock-3'], savedRowId: null, card: null },
+        ],
+        current: 1,
+        saving: false,
+        done: false,
+      })
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dev])
   // Recording motion door: fake-voice loop drives the full beatIn/recording/beatOut cycle.
   const devFakeRecording = devMockEnabled && dev === 'rec'
   // Develop doors: ?dev=rec flows into the opt-in path with a MOCKED /api/develop (no API-key burn);
   // ?dev=developed jumps straight into the developed card + cascade.
-  const devMockDevelop = devMockEnabled && (dev === 'rec' || dev === 'developed')
+  const devMockDevelop = devMockEnabled && (dev === 'rec' || dev === 'developed' || dev === 'stepper')
   const startDeveloped = devMockEnabled
     ? dev === 'developed'
       ? MOCK_DEVELOPED
@@ -186,10 +238,141 @@ function LogFlow() {
     })
   }, [])
 
-  // Sort into separate stations (⊟ row / whisper) — CHUNK 8 (SortBins) fills this. INERT stub today.
+  // ── SortBins + multi-station run (chunk 8) ────────────────────────────────────────────────────────
+  const [sorting, setSorting] = useState(false)
+  const [run, setRun] = useState<RunState | null>(null)
+  // Dedup cache: a photo dropped into 2 bins uploads ONCE — the first station that saves it caches the
+  // storage URL here (keyed by photo id); later stations reuse it (saveComponent's `uploadedUrl`).
+  const uploadedUrlsRef = useRef<Map<string, string>>(new Map())
+
+  // id→Photo lookup for the run's per-station photo subsets (computed during render, always current).
+  const photoById = useMemo(() => new Map(photos.map((p) => [p.id, p])), [photos])
+
+  // Sort into separate stations (⊟ row / whisper) → open SortBins over the current photos.
   const handleSortIntoStations = useCallback(() => {
-    // no-op until chunk 8 wires the multi-station sort-bins flow
+    setPhotoSheetOpen(false)
+    setSorting(true)
   }, [])
+
+  // Dev doors run without a DB write (mirrors devMockSave). `?dev=stepper&real=1` opts into a real run.
+  const devRunMock = devMockEnabled && dev === 'stepper' && params.get('real') !== '1'
+
+  // SortBins confirm → start the run (both bins guaranteed non-empty by SortBins). Fresh note + cache.
+  const startRun = useCallback((bins: string[][]) => {
+    uploadedUrlsRef.current = new Map()
+    setNote('')
+    setRun({
+      stations: bins.map((photoIds) => ({ photoIds, savedRowId: null, card: null })),
+      current: 0,
+      saving: false,
+      done: false,
+    })
+    setSorting(false)
+  }, [])
+
+  // Advance after a station's save resolves: record its card + row, then tick to the next station (or
+  // flip `done` on the last). Fresh note for the next station.
+  const finishStationSave = useCallback((card: CelebrateCard, rowId: string | null) => {
+    setRun((r) => {
+      if (!r) return r
+      const stations = r.stations.map((s, i) => (i === r.current ? { ...s, savedRowId: rowId, card } : s))
+      const isLast = r.current + 1 >= r.stations.length
+      return isLast
+        ? { ...r, stations, saving: false, done: true }
+        : { ...r, stations, current: r.current + 1, saving: false }
+    })
+    setNote('')
+  }, [])
+
+  // Save the CURRENT station via the full pipeline (dedup-aware), then advance. Awaits the insert so a
+  // shared photo is uploaded before a later station reuses it, and so the row truly lands before the
+  // swap. Never dead-ends: a failed insert still advances with the fallback-titled card (chunk 9 owns
+  // the real retry surface, matching the single flow's behaviour).
+  const saveStation = useCallback(
+    async (kind: 'structured' | 'photo', card: DevelopResult | null) => {
+      const r = run
+      if (!r || r.done) return
+      const station = r.stations[r.current]
+      const stationPhotos = station.photoIds
+        .map((id) => photoById.get(id))
+        .filter((p): p is Photo => !!p)
+      const coverUrl = stationPhotos[0]?.url ?? ''
+      const title = card?.title.trim() || fallbackTitle(saveType)
+      const celebrateCard: CelebrateCard = { eyebrow, title, photoUrl: coverUrl }
+
+      setRun((prev) => (prev ? { ...prev, saving: true } : prev))
+
+      if (devRunMock) {
+        // Dev door: no DB write — still simulate the awaited beat so the swap timing reads true.
+        await new Promise((res) => window.setTimeout(res, 260))
+        finishStationSave(celebrateCard, null)
+        return
+      }
+
+      try {
+        const input: SaveCardInput = {
+          type: saveType,
+          title,
+          curriculums: saveCurriculums,
+          setupSteps: kind === 'structured' && card ? card.setup_steps : [],
+          cues: kind === 'structured' && card ? card.cues : '',
+          skills: kind === 'structured' && card ? card.skills : [],
+          equipment: kind === 'structured' && card ? card.equipment : [],
+          durationMinutes: kind === 'structured' && card ? card.duration_minutes : null,
+          photos: stationPhotos.map((p) => ({ id: p.id, file: p.file, url: p.url, uploadedUrl: uploadedUrlsRef.current.get(p.id) })),
+        }
+        const res = await saveComponent(input)
+        // Cache uploaded URLs so a shared photo in a later station reuses them (upload once).
+        for (const [id, url] of Object.entries(res.photoUrlById)) uploadedUrlsRef.current.set(id, url)
+        // Best-effort AI title for a photo-only station (vision on the cover); writes to the row only —
+        // the plural celebrate keeps the fallback title (no live swap needed there).
+        if (kind === 'photo' && stationPhotos[0]) {
+          const cover = stationPhotos[0]
+          void titleFromPhoto(cover.file ?? cover.url ?? '').then((t) => {
+            if (t) updateComponentTitle(res.id, t).catch((e) => console.warn('[run] title swap failed', e))
+          })
+        }
+        finishStationSave(celebrateCard, res.id)
+      } catch (e) {
+        console.warn('[run] station save failed', e)
+        finishStationSave(celebrateCard, null)
+      }
+    },
+    [run, photoById, saveType, saveCurriculums, eyebrow, devRunMock, finishStationSave],
+  )
+
+  // Back ‹ mid-run (confirmed) → exit the run, return to the normal capture with the original photos
+  // intact. Earlier stations stay saved as library rows (forward-only). Note reset.
+  const exitRun = useCallback(() => {
+    setRun(null)
+    setSorting(false)
+    setNote('')
+  }, [])
+
+  // Continue on the plural celebrate → reset the WHOLE flow (revoke every owned URL, fresh empty
+  // capture, whisper latch reset) — same lifecycle as the single-flow Continue.
+  const continueAfterRun = useCallback(() => {
+    setPhotos((prev) => {
+      prev.forEach((p) => { if (p.url.startsWith('blob:')) URL.revokeObjectURL(p.url) })
+      return []
+    })
+    setNote('')
+    uploadedUrlsRef.current = new Map()
+    whisperFiredRef.current = false
+    setWhisper(false)
+    if (whisperTimerRef.current) { window.clearTimeout(whisperTimerRef.current); whisperTimerRef.current = null }
+    setPhotoSheetOpen(false)
+    setSorting(false)
+    setRun(null)
+  }, [])
+
+  // Share on the plural celebrate → share the FIRST logged station's card (a single-image share of the
+  // run's opening cover). CHOICE flagged for River (13b authors one Share for the whole run).
+  const handleRunShare = useCallback(() => {
+    const first = run?.stations.find((s) => s.card)?.card
+    if (!first) return
+    void shareCard({ title: first.title, eyebrow: first.eyebrow, photoUrl: first.photoUrl, setupSteps: [], cues: '' })
+  }, [run])
 
   // Continue on the celebrate screen → revoke the saved photos' object URLs (only blob: ones we own)
   // and reset to a fresh empty capture. Capture resets its own flow state.
@@ -224,37 +407,69 @@ function LogFlow() {
     )
   }
 
+  // ── run-mode derived render state ──────────────────────────────────────────────────────────────
+  const runStation = run && !run.done ? run.stations[run.current] : null
+  const runPhotos = runStation
+    ? runStation.photoIds.map((id) => photoById.get(id)).filter((p): p is Photo => !!p)
+    : photos
+  const captureRun: CaptureRun | null = runStation && run
+    ? { index: run.current, total: run.stations.length, saving: run.saving, onStationSave: saveStation }
+    : null
+
+  // Plural celebrate (13b) — every station saved. Page-owned (the single-card grow-morph is skipped in
+  // run mode: a morph has one target, the plural screen has N cards). Arrives as its own screen.
+  if (run?.done) {
+    const cards = run.stations.map((s) => s.card).filter((c): c is CelebrateCard => !!c)
+    return (
+      <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgb(8,12,26)', overflow: 'hidden', fontFamily: 'var(--font-inter), system-ui, sans-serif' }}>
+        <Celebrate eyebrow={eyebrow} title="" photoUrl="" cards={cards} onShare={handleRunShare} onContinue={continueAfterRun} onRename={() => {}} />
+      </div>
+    )
+  }
+
   return (
     <>
-      <Capture
-        photos={photos}
-        note={note}
-        onNoteChange={setNote}
-        onAddPhotos={addPhotos}
-        onBack={() => router.back()}
-        showWhisper={whisper}
-        devFakeRecording={devFakeRecording}
-        devMockDevelop={devMockDevelop}
-        startDeveloped={startDeveloped}
-        startExpanded={startExpanded}
-        saveType={saveType}
-        saveCurriculums={saveCurriculums}
-        devMockSave={devMockSave}
-        onContinue={handleContinue}
-        eyebrow={eyebrow}
-        onEditTypeAge={() => setSheetOpen(true)}
-        onManagePhotos={() => setPhotoSheetOpen(true)}
-      />
+      {sorting ? (
+        <SortBins photos={photos} onConfirm={startRun} onBack={() => setSorting(false)} />
+      ) : (
+        <Capture
+          // Remount per station so each gets a fresh phase/develop/note (the run's state is threaded via
+          // props + the note reset on advance). 'single' key for the normal flow.
+          key={run ? `station-${run.current}` : 'single'}
+          photos={runPhotos}
+          note={note}
+          onNoteChange={setNote}
+          onAddPhotos={addPhotos}
+          onBack={run ? exitRun : () => router.back()}
+          showWhisper={run ? false : whisper}
+          devFakeRecording={devFakeRecording}
+          devMockDevelop={devMockDevelop}
+          startDeveloped={run ? null : startDeveloped}
+          startExpanded={run ? false : startExpanded}
+          saveType={saveType}
+          saveCurriculums={saveCurriculums}
+          devMockSave={devMockSave}
+          onContinue={handleContinue}
+          eyebrow={eyebrow}
+          onEditTypeAge={() => setSheetOpen(true)}
+          onManagePhotos={run ? undefined : () => setPhotoSheetOpen(true)}
+          run={captureRun}
+        />
+      )}
+      {/* The type/age chip stays live in run mode (types/ages editable per station). */}
       <TypeAgeSheet open={sheetOpen} type={saveType} ages={saveCurriculums} onDone={handleTypeAgeDone} />
-      <PhotoSheet
-        open={photoSheetOpen}
-        photos={photos}
-        onClose={() => setPhotoSheetOpen(false)}
-        onReorder={reorderPhotos}
-        onRemove={removePhoto}
-        onAddPhotos={addPhotos}
-        onSortIntoStations={handleSortIntoStations}
-      />
+      {/* PhotoSheet is a single-flow surface only — hidden during sorting / a run. */}
+      {!run && !sorting && (
+        <PhotoSheet
+          open={photoSheetOpen}
+          photos={photos}
+          onClose={() => setPhotoSheetOpen(false)}
+          onReorder={reorderPhotos}
+          onRemove={removePhoto}
+          onAddPhotos={addPhotos}
+          onSortIntoStations={handleSortIntoStations}
+        />
+      )}
     </>
   )
 }

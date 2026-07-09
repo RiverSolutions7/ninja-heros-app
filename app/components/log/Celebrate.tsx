@@ -30,6 +30,13 @@ export interface CelebrateRefs {
   thumbSlot: RefObject<HTMLDivElement>
 }
 
+/** One logged station on the plural celebrate (13b) — eyebrow · title · cover thumbnail. */
+export interface CelebrateCard {
+  eyebrow: string
+  title: string
+  photoUrl: string
+}
+
 export interface CelebrateProps {
   eyebrow: string
   title: string
@@ -40,6 +47,11 @@ export interface CelebrateProps {
   /** Morph target shows an EMPTY slot (the card lands there). Settled/no-card paths show the cover. */
   showThumbPhoto?: boolean
   refs?: CelebrateRefs
+  /** PLURAL variant (frame 13b) — when 2+ cards are passed the whole screen switches to the stacked
+   *  multi-station celebrate ("N stations logged. Forever." + a card per logged station). Used only by
+   *  the multi-station run's finish; the single-card morph is skipped (a grow-morph has one target, not
+   *  N). Arrives via a crossfade (no `staged`/`refs`). Ignored when absent/short. */
+  cards?: CelebrateCard[]
   onShare: () => void
   onContinue: () => void
   onRename: (next: string) => void
@@ -60,6 +72,7 @@ export default function Celebrate({
   staged = false,
   showThumbPhoto = true,
   refs,
+  cards,
   onShare,
   onContinue,
   onRename,
@@ -70,15 +83,17 @@ export default function Celebrate({
   const rootRef = useRef<HTMLDivElement | null>(null)
   const renameBtnRef = useRef<HTMLButtonElement | null>(null)
   const wasRenaming = useRef(false)
+  const plural = Array.isArray(cards) && cards.length >= 2
 
   // Politely announce arrival to screen readers (set after mount so the live region fires) and move
   // focus into the celebrate region so keyboard/VoiceOver users land here — not on the now-invisible
   // capture chrome behind it (which is also marked inert by Capture while saving).
   useEffect(() => {
     rootRef.current?.focus()
-    const id = window.setTimeout(() => setAnnounce('Saved'), 60)
+    const msg = plural && cards ? `${cards.length} stations logged` : 'Saved'
+    const id = window.setTimeout(() => setAnnounce(msg), 60)
     return () => window.clearTimeout(id)
-  }, [])
+  }, [plural, cards])
 
   useEffect(() => {
     if (renaming && inputRef.current) {
@@ -100,6 +115,84 @@ export default function Celebrate({
   }
 
   const hidden = staged ? 0 : 1
+
+  // ── PLURAL variant (frame 13b) — stacked cards, one per logged station. Built from
+  // 13b-plural-celebrate.html: every color/size/radius/spacing copied. No morph, no rename; arrives
+  // via the page's crossfade. Share shares the FIRST card (a single-image share of the run's cover —
+  // CHOICE flagged for River). Continue resets the whole run.
+  if (plural && cards) {
+    return (
+      <div
+        ref={rootRef}
+        data-celebrate-layer
+        tabIndex={-1}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          zIndex: 50,
+          outline: 'none',
+          background:
+            'linear-gradient(rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 100%) top / 100% 320px no-repeat, rgb(8,12,26)',
+          fontFamily: 'var(--font-inter), system-ui, sans-serif',
+        }}
+      >
+        <div style={{ position: 'absolute', inset: '120px 36px 160px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 26, textAlign: 'center' }}>
+          {/* check disc (tpl646) */}
+          <div style={{ width: 56, height: 56, borderRadius: 28, background: 'linear-gradient(rgba(255,255,255,0.09) 0%, rgba(255,255,255,0) 55%), rgb(20,28,50)', boxShadow: 'rgb(42,52,80) 0px 0px 0px 1px inset', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <CheckGlyph />
+          </div>
+
+          {/* headline (tpl649) — 24px, no subline in the plural frame */}
+          <span style={{ fontFamily: INTER, fontWeight: 800, fontSize: 24, letterSpacing: '-0.8px', lineHeight: 1.15, color: 'rgb(255,255,255)' }}>
+            {cards.length} stations logged. Forever.
+          </span>
+
+          {/* stacked cards (tpl650) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%' }}>
+            {cards.map((c, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 18px 10px 10px', borderRadius: 16, background: 'rgb(20,28,50)', border: '1px solid rgb(42,52,80)' }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                {c.photoUrl ? (
+                  <img src={c.photoUrl} alt="" style={{ display: 'block', width: 84, height: 56, borderRadius: 10, objectFit: 'cover', flex: '0 0 auto' }} />
+                ) : (
+                  <div style={{ width: 84, height: 56, borderRadius: 10, background: 'rgb(12,19,34)', flex: '0 0 auto' }} />
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-start' }}>
+                  <span style={{ fontFamily: INTER, fontWeight: 600, fontSize: 9, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'rgb(255,90,31)' }}>{c.eyebrow}</span>
+                  <span style={{ fontFamily: INTER, fontWeight: 600, fontSize: 12, letterSpacing: '-0.2px', color: 'rgb(231,238,250)' }}>{c.title}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Share · Continue (tpl661) */}
+        <div style={{ position: 'absolute', left: 16, right: 16, bottom: 46, display: 'flex', gap: 12 }}>
+          <button
+            type="button"
+            onClick={onShare}
+            className="transition-transform active:scale-[0.97]"
+            style={{ flex: '1 1 0%', display: 'flex', alignItems: 'center', justifyContent: 'center', height: 52, borderRadius: 26, border: 'none', background: 'rgb(20,28,50)', boxShadow: 'rgb(42,52,80) 0px 0px 0px 1px inset', cursor: 'pointer', fontFamily: INTER, fontWeight: 600, fontSize: 14.5, color: 'rgb(231,238,250)' }}
+          >
+            Share
+          </button>
+          <button
+            type="button"
+            onClick={onContinue}
+            className="transition-transform active:scale-[0.97]"
+            style={{ flex: '1 1 0%', display: 'flex', alignItems: 'center', justifyContent: 'center', height: 52, borderRadius: 26, border: 'none', background: 'rgb(255,90,31)', cursor: 'pointer', fontFamily: INTER, fontWeight: 700, fontSize: 14.5, color: 'rgb(255,255,255)' }}
+          >
+            Continue
+          </button>
+        </div>
+
+        {/* polite arrival announcement */}
+        <div role="status" aria-live="polite" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}>
+          {announce}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div

@@ -23,14 +23,20 @@ export interface SaveCardInput {
   /** Hidden data — joined into the legacy text `equipment` column if present. */
   equipment: string[]
   durationMinutes: number | null
-  /** Ordered photos (first = cover). Each is uploaded; a File is uploaded directly, a url is fetched. */
-  photos: Array<{ file?: File; url?: string }>
+  /** Ordered photos (first = cover). Each is uploaded; a File is uploaded directly, a url is fetched.
+   *  `uploadedUrl` short-circuits the upload (already-uploaded — the multi-station run reuses a shared
+   *  photo's storage URL across bins so it uploads ONCE). `id` keys the returned `photoUrlById` cache. */
+  photos: Array<{ file?: File; url?: string; uploadedUrl?: string; id?: string }>
 }
 
 export interface SaveCardResult {
   id: string
   /** True when the insert had to fall back to the pre-017 shape (setup_steps/cues columns absent). */
   usedLegacyShape: boolean
+  /** Ordered public URLs of the uploaded photos (index-aligned with input.photos, absent ones dropped). */
+  photoUrls: string[]
+  /** Public URL keyed by the input photo's `id` — the run's dedup cache reads this to avoid re-upload. */
+  photoUrlById: Record<string, string>
 }
 
 // Transitional description mapping (retired at the library redesign): numbered steps, then a blank
@@ -45,8 +51,10 @@ export function buildDescription(setupSteps: string[], cues: string): string {
 }
 
 // Upload one photo — a captured File goes straight up; a url (e.g. a dev mock asset) is fetched to a
-// blob first so the same path works for both. Returns the public URL.
-async function uploadOne(photo: { file?: File; url?: string }): Promise<string | null> {
+// blob first so the same path works for both. A pre-resolved `uploadedUrl` skips the upload entirely
+// (the run's cross-station dedup). Returns the public URL.
+async function uploadOne(photo: { file?: File; url?: string; uploadedUrl?: string }): Promise<string | null> {
+  if (photo.uploadedUrl) return photo.uploadedUrl
   let file = photo.file
   if (!file && photo.url) {
     const res = await fetch(photo.url)
@@ -68,8 +76,14 @@ function isMissingColumnError(err: { code?: string; message?: string } | null): 
 
 export async function saveComponent(input: SaveCardInput): Promise<SaveCardResult> {
   let photoUrls: string[]
+  const photoUrlById: Record<string, string> = {}
   try {
     const uploaded = await Promise.all(input.photos.map(uploadOne))
+    // Build the id→url map (only for photos that carried an id) before filtering nulls out.
+    input.photos.forEach((p, i) => {
+      const u = uploaded[i]
+      if (p.id && typeof u === 'string') photoUrlById[p.id] = u
+    })
     photoUrls = uploaded.filter((u): u is string => typeof u === 'string')
   } catch (e) {
     // Distinct tag so a storage/upload failure isn't misread as an insert failure downstream.
@@ -112,7 +126,7 @@ export async function saveComponent(input: SaveCardInput): Promise<SaveCardResul
   const id = (inserted.data as { id: string } | null)?.id
   if (!id) throw new Error('save returned no id')
 
-  return { id, usedLegacyShape }
+  return { id, usedLegacyShape, photoUrls, photoUrlById }
 }
 
 // Rename an already-saved row (celebrate title tap-to-rename, and the async AI-title swap-in).
