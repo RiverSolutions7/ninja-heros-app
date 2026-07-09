@@ -19,6 +19,7 @@ import PhotoActionMenu from '@/app/components/log-flow/PhotoActionMenu'
 import IdleDock from './IdleDock'
 import WhisperLozenge from './WhisperLozenge'
 import DevelopedCard, { type DevelopResult, type DevelopCascadeRefs } from './DevelopedCard'
+import NotesDoc from './NotesDoc'
 
 export interface Photo {
   url: string
@@ -37,6 +38,8 @@ export interface CaptureProps {
   devMockDevelop?: boolean
   /** Dev door (?dev=developed): jump straight into the developed state with this mock result. */
   startDeveloped?: DevelopResult | null
+  /** Dev door (?dev=notes): open straight into the expanded NotesDoc over startDeveloped. */
+  startExpanded?: boolean
 }
 
 // Type + ages eyebrow. Static until the type/age sheet is wired (chunk 6). NEVER shows duration.
@@ -338,7 +341,7 @@ function Header({ empty, developed, onBack }: { empty: boolean; developed: boole
 
 type Phase = 'capture' | 'developing' | 'developed'
 
-export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBack, showWhisper = false, devFakeRecording = false, devMockDevelop = false, startDeveloped = null }: CaptureProps) {
+export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBack, showWhisper = false, devFakeRecording = false, devMockDevelop = false, startDeveloped = null, startExpanded = false }: CaptureProps) {
   const empty = photos.length === 0
   const [typing, setTyping] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -349,7 +352,10 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
   const [developed, setDeveloped] = useState<DevelopResult | null>(null)
   const [developError, setDevelopError] = useState(false)
   const [confirmDiscard, setConfirmDiscard] = useState(false)
+  // Expanded editorial notes doc (chunk 4). Opened by "Review & edit ›"; back returns to the glimpse.
+  const [expanded, setExpanded] = useState(false)
   const isDeveloped = phase === 'developed'
+  const showNotes = isDeveloped && expanded
 
   // Cascade refs — the develop rig drives these on the DevelopedCard (WAAPI over the doc timeline).
   const cardRef = useRef<HTMLDivElement | null>(null)
@@ -372,13 +378,15 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
     e.target.value = ''
   }
 
-  // Dev door (?dev=developed): jump straight into the developed state with mock data.
+  // Dev door (?dev=developed | ?dev=notes): jump straight into the developed state with mock data;
+  // ?dev=notes additionally opens the expanded NotesDoc.
   useEffect(() => {
     if (startDeveloped) {
       setDeveloped(startDeveloped)
       setPhase('developed')
+      if (startExpanded) setExpanded(true)
     }
-  }, [startDeveloped])
+  }, [startDeveloped, startExpanded])
 
   // Run the reveal once the developed card is mounted. This effect runs after the DOM commit, so the
   // cascade refs are already attached — dvStage hides everything (belt on top of the card's JSX
@@ -485,21 +493,33 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
     >
       <input ref={fileRef} type="file" accept="image/*" multiple onChange={handleFiles} style={{ display: 'none' }} />
 
-      {empty && !isDeveloped && (
+      {showNotes && (
+        <NotesDoc
+          photoUrl={cover?.url ?? ''}
+          eyebrow={EYEBROW}
+          data={developed ?? MOCK_DEVELOP}
+          onChange={setDeveloped}
+          onBack={() => setExpanded(false)}
+          onTryAgain={() => { setExpanded(false); setPhase('capture'); setDeveloped(null); setDevelopError(false) }}
+          onSave={() => { /* save morph + persistence — chunk 5 */ }}
+        />
+      )}
+
+      {!showNotes && empty && !isDeveloped && (
         // Top light wash (8b).
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 320, background: 'linear-gradient(rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 100%)', pointerEvents: 'none' }} />
       )}
 
-      <Header empty={empty} developed={isDeveloped} onBack={handleBack} />
+      {!showNotes && <Header empty={empty} developed={isDeveloped} onBack={handleBack} />}
 
-      {isDeveloped ? (
+      {!showNotes && (isDeveloped ? (
         <>
           <DevelopedCard
             photoUrl={cover?.url ?? ''}
             eyebrow={EYEBROW}
             data={developed ?? MOCK_DEVELOP}
             refs={cascade}
-            onExpand={() => { /* notes doc — chunk 4 */ }}
+            onExpand={() => setExpanded(true)}
             cardRef={cardRef}
           />
           {/* screen-level pill dots (tpl255) — sit behind the card now; chunk 5 fades them as the
@@ -628,11 +648,11 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
             </div>
           )}
         </div>
-      )}
+      ))}
 
-      {!empty && !isDeveloped && <WhisperLozenge visible={showWhisper} />}
+      {!showNotes && !empty && !isDeveloped && <WhisperLozenge visible={showWhisper} />}
 
-      {isDeveloped ? (
+      {!showNotes && (isDeveloped ? (
         <DevelopDock
           onTryAgain={() => { setPhase('capture'); setDeveloped(null); setDevelopError(false) }}
           onSave={() => { /* save morph + persistence — chunk 5 */ }}
@@ -682,7 +702,7 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
             style={{ left: 55, bottom: 160 }}
           />
         </>
-      )}
+      ))}
 
       {confirmDiscard && (
         <DiscardConfirm

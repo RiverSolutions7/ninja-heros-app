@@ -20,6 +20,17 @@ const MOCK_DEVELOPED: DevelopResult = {
   duration_minutes: null,
 }
 
+// Dev-only payload for ?dev=notes (expanded editorial doc). Four steps + cues + skills so
+// merge / reorder / delete are all exercisable. Matches frame 8e's content.
+const MOCK_NOTES: DevelopResult = {
+  title: 'Balance Gauntlet',
+  setup_steps: ['Cross the balance beam', 'Grab the rings', 'Cross the warped wall', 'Ring the bell'],
+  cues: 'Eyes up, not down at their feet. Spot every kid on the landing.',
+  skills: ['balance', 'grip', 'agility'],
+  equipment: ['balance beam', 'rings', 'warped wall'],
+  duration_minutes: null,
+}
+
 let photoSeq = 0
 const nextId = () => `p${Date.now().toString(36)}${(photoSeq++).toString(36)}`
 
@@ -36,7 +47,7 @@ function LogFlow() {
   const devMockEnabled = process.env.NODE_ENV !== 'production'
   useEffect(() => {
     if (!devMockEnabled) return
-    if (dev === 'photo' || dev === 'rec' || dev === 'developed') setPhotos([{ url: MOCK_PHOTO, id: 'mock-0' }])
+    if (dev === 'photo' || dev === 'rec' || dev === 'developed' || dev === 'notes') setPhotos([{ url: MOCK_PHOTO, id: 'mock-0' }])
     else if (dev === 'photos3') setPhotos([
       { url: MOCK_PHOTO, id: 'mock-0' },
       { url: MOCK_PHOTO, id: 'mock-1' },
@@ -52,7 +63,14 @@ function LogFlow() {
   // Develop doors: ?dev=rec flows into the opt-in path with a MOCKED /api/develop (no API-key burn);
   // ?dev=developed jumps straight into the developed card + cascade.
   const devMockDevelop = devMockEnabled && (dev === 'rec' || dev === 'developed')
-  const startDeveloped = devMockEnabled && dev === 'developed' ? MOCK_DEVELOPED : null
+  const startDeveloped = devMockEnabled
+    ? dev === 'developed'
+      ? MOCK_DEVELOPED
+      : dev === 'notes'
+        ? MOCK_NOTES
+        : null
+    : null
+  const startExpanded = devMockEnabled && dev === 'notes'
 
   const addPhotos = (files: File[]) => {
     const added = files.map((f) => ({ url: URL.createObjectURL(f), id: nextId() }))
@@ -70,6 +88,7 @@ function LogFlow() {
       devFakeRecording={devFakeRecording}
       devMockDevelop={devMockDevelop}
       startDeveloped={startDeveloped}
+      startExpanded={startExpanded}
     />
   )
 }
