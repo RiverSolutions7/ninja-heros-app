@@ -29,6 +29,10 @@
 // the frame: the tiles area scrolls (overflow-y:auto) when photos exceed the 548px panel — the frame's
 // overflow:hidden is a 3-photo snapshot; N photos need a scroll region.
 //
+// EMPTY STATE (intentional): the sheet opens from the 2+/3+ stack-chip or the whisper, but a coach can
+// ✕ every tile while it's open. At 0 photos the tiles region collapses to just the "+" add tile — that
+// standalone tile IS the "add your first photo" affordance; no separate empty copy is authored (the
+// frame has none) and the sheet does not auto-close (surprising). The ⊟ row correctly hides below 2.
 // polish-audit: flag a11y / tap-targets / state / motion-perf / bugs — not the design values.
 'use client'
 
@@ -36,7 +40,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import {
   DndContext,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
   TouchSensor,
   closestCenter,
   useSensor,
@@ -223,7 +227,14 @@ function Tile({
         aria-label={`Remove photo ${index + 1}`}
         onPointerDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
-        onClick={(e) => { e.stopPropagation(); onRemove(photo.id) }}
+        onClick={(e) => {
+          e.stopPropagation()
+          // Keyboard/VO focus handoff: this tile unmounts on remove, so re-anchor focus to the "+"
+          // add tile (always present) rather than letting it fall to <body> past the Tab trap.
+          const dialog = (e.currentTarget as HTMLElement).closest('[role="dialog"]')
+          onRemove(photo.id)
+          requestAnimationFrame(() => dialog?.querySelector<HTMLElement>('[aria-label="Add photos"]')?.focus())
+        }}
         style={{
           position: 'absolute',
           top: 8,
@@ -299,8 +310,12 @@ export default function PhotoSheet({ open, photos, onClose, onReorder, onRemove,
   const dragDy = useRef(0)
   const restoreFocus = useRef<HTMLElement | null>(null)
 
+  // MouseSensor (not PointerSensor) so mouse input stays SEPARATE from touch: touch also fires pointer
+  // events, so a PointerSensor's 8px distance would win the race before the TouchSensor's 200ms
+  // long-press, hijacking a scroll-intent touch into a drag. MouseSensor listens to mouse events only,
+  // TouchSensor owns touch (long-press), KeyboardSensor owns keyboard reorder — no cross-input race.
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )

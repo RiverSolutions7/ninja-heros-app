@@ -922,6 +922,7 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
               type="button"
               onClick={() => { if (!locked) onManagePhotos?.() }}
               aria-label={`Manage ${photos.length} photos`}
+              aria-disabled={locked}
               aria-haspopup="dialog"
               className="transition-transform active:scale-[0.96]"
               style={{
