@@ -701,7 +701,9 @@ export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onC
                 <button
                   type="button"
                   onClick={onOpenTyping}
-                  aria-label={developError ? `Couldn't structure — try again. Edit note: ${note}` : hasNote ? `Edit note: ${note}` : 'Add a note (optional)'}
+                  // The failure announcement is owned by the role=alert child below — keep it OUT of
+                  // the accessible name so VoiceOver doesn't double-speak it (once as alert, once as name).
+                  aria-label={hasNote ? `Edit note: ${note}` : 'Add a note (optional)'}
                   aria-disabled={locked}
                   tabIndex={mode === 'idle' ? 0 : -1}
                   style={{
@@ -836,7 +838,11 @@ export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onC
           background: ACCENT,
           // dim + freeze the disc while the parse is in flight (the label carries "Structuring…").
           opacity: structuring ? 0.55 : 1,
-          pointerEvents: structuring ? 'none' : 'auto',
+          // Pointer-dead when the disc does nothing: while structuring, and while the ↑ is the
+          // dimmed-dead face (keyboard open, no text). This also stops the press-feedback flash on a
+          // no-op tap AND removes the blur→click race that could otherwise fall through to startRec;
+          // on iOS a tap then falls to the dock behind and simply dismisses the keyboard.
+          pointerEvents: structuring || arrowDead ? 'none' : 'auto',
           transition: 'opacity 200ms ease',
           cursor: 'pointer',
         }}
