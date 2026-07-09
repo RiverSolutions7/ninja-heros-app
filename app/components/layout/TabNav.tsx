@@ -58,6 +58,9 @@ export default function TabNav() {
   if (pathname.startsWith('/library/walkthrough')) return null
   // Hide nav on log-component flow (full-screen immersive)
   if (pathname.startsWith('/library/log-component')) return null
+  // Hide nav on the rebuilt log flow + its dev-frame harness (full-screen immersive)
+  if (pathname === '/log' || pathname.startsWith('/log/')) return null
+  if (pathname.startsWith('/dev/frames/')) return null
 
   return (
     <nav className="fixed bottom-0 inset-x-0 z-[10000] pointer-events-none">
