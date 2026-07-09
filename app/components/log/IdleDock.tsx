@@ -55,6 +55,19 @@ const rightTaper = (i: number) => {
   return Math.pow(1 - d, 1.5)
 }
 
+// Crossfade a disc face to a target opacity. Mirrors RecordingRig.fade (animate + pin style.opacity
+// so the end value survives React re-renders). dur ≤ 0 (reduced motion) = instant set.
+function faceFade(el: HTMLElement | null, to: number, dur: number) {
+  if (!el) return
+  if (dur <= 0) {
+    el.getAnimations().forEach((a) => a.cancel())
+    el.style.opacity = String(to)
+    return
+  }
+  el.animate([{ opacity: getComputedStyle(el).opacity }, { opacity: String(to) }], { duration: dur, easing: 'ease', fill: 'backwards' })
+  el.style.opacity = String(to)
+}
+
 function MicGlyph() {
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -78,6 +91,21 @@ function CheckGlyph() {
   )
 }
 
+// The Continuity ↑ — the disc's THIRD face (a non-empty note exists → tap = structure). UNAUTHORED
+// in any export frame (River's gate-A decision, 2026-07-09) — FLAGGED for his next eyeball pass. Drawn
+// path-filled in the same weighted language as CheckGlyph (a ~3.4px shaft + rounded head, white fill),
+// so mic → ✓ → ↑ read as one continuous glyph family across the 54px footprint.
+function ArrowGlyph() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M12 4.4C12.42 4.4 12.82 4.57 13.1 4.86L19.14 11.04C19.72 11.63 19.71 12.58 19.12 13.16C18.53 13.74 17.58 13.73 17 13.14L13.7 9.76V18.9C13.7 19.84 12.94 20.6 12 20.6C11.06 20.6 10.3 19.84 10.3 18.9V9.76L7 13.14C6.42 13.73 5.47 13.74 4.88 13.16C4.29 12.58 4.28 11.63 4.86 11.04L10.9 4.86C11.18 4.57 11.58 4.4 12 4.4Z"
+        fill="#ffffff"
+      />
+    </svg>
+  )
+}
+
 type Mode = 'idle' | 'in' | 'recording' | 'out'
 
 interface RigEls {
@@ -86,6 +114,7 @@ interface RigEls {
   placeholder: () => HTMLElement | null
   mic: () => HTMLElement | null
   check: () => HTMLElement | null
+  arrow: () => HTMLElement | null
 }
 interface RigOpts {
   getAmp: () => number
@@ -168,6 +197,7 @@ class RecordingRig {
       const d = 200 * factor
       this.fade(this.el.placeholder(), 0, d)
       this.fade(this.el.mic(), 0, d)
+      this.fade(this.el.arrow(), 0, d)
       this.fade(this.el.check(), 1, d)
       bars.forEach((b) => {
         b.style.transform = 'scaleY(1)'
@@ -183,6 +213,7 @@ class RecordingRig {
 
     this.fade(this.el.placeholder(), 0, xfade * factor)
     this.fade(this.el.mic(), 0, xfade * factor)
+    this.fade(this.el.arrow(), 0, xfade * factor)
     this.fade(this.el.check(), 1, xfade * factor)
 
     bars.forEach((b, i) => {
@@ -259,10 +290,11 @@ class RecordingRig {
     this.tickActive = false
     // cancel any in-flight bloom/crossfade so it can't keep overriding the reset styles
     const cancel = (el: HTMLElement | null) => { if (el) el.getAnimations().forEach((a) => a.cancel()) }
-    cancel(this.el.placeholder()); cancel(this.el.mic()); cancel(this.el.check()); cancel(this.el.timer())
+    cancel(this.el.placeholder()); cancel(this.el.mic()); cancel(this.el.arrow()); cancel(this.el.check()); cancel(this.el.timer())
     this.barEls().forEach((b) => b.getAnimations().forEach((a) => a.cancel()))
     const p = this.el.placeholder(); if (p) p.style.opacity = '1'
     const m = this.el.mic(); if (m) m.style.opacity = '1'
+    const a = this.el.arrow(); if (a) a.style.opacity = '0'
     const c = this.el.check(); if (c) c.style.opacity = '0'
     const t = this.el.timer(); if (t) t.style.opacity = '0'
     this.barEls().forEach((b) => { b.style.opacity = '0'; b.style.transform = '' })
@@ -356,34 +388,58 @@ export interface IdleDockProps {
   // Interaction lock (chunk 3): true while /api/develop parses the note — the note is the request
   // payload, so editing/re-recording mid-parse is blocked (visuals unchanged; aria-disabled only).
   locked?: boolean
+  // Gate-A (2026-07-09): the disc's THIRD face. A non-empty note (spoken or typed) turns the disc into
+  // ↑ — tapping it runs the structure/parse path (/api/develop, owned by Capture). The pill is dead.
+  onStructure?: () => void
+  // True while /api/develop is in flight → "Structuring…" fills the dock's label slot (role=status)
+  // and the disc dims/disables. (Same instant as `locked`; a distinct prop for the label copy.)
+  structuring?: boolean
+  // True after a failed parse → "Couldn't structure — try again" (role=alert) fills the label slot;
+  // the disc returns to ↑ and the raw note is preserved.
+  developError?: boolean
 }
 
-// Lift the dock above the on-screen keyboard using the visual viewport (iOS).
+// The dock's resting offset from the layout-viewport bottom (its `bottom: 46`). The keyboard occludes
+// `occluded` px measured from that same bottom edge, so to sit the dock FLUSH on the keyboard we lift
+// it by exactly `occluded − 46` (its resting gap is already 46px above the bottom).
+const DOCK_BOTTOM = 46
+
+// Pin the dock flush to the on-screen keyboard using the visual viewport (iOS + any third-party
+// keyboard, e.g. Wispr Flow). The occluded region = window.innerHeight − (vv.offsetTop + vv.height)
+// is the EXACT height the keyboard covers (measured, never estimated), so the dock lands with zero
+// gap regardless of keyboard height/toolbars. Transform-only (the caller translateY's the dock);
+// rAF-throttled so a burst of resize/scroll events collapses to one write per frame.
 function useKeyboardLift(active: boolean) {
   const [lift, setLift] = useState(0)
   useEffect(() => {
     const vv = typeof window !== 'undefined' ? window.visualViewport : null
     if (!vv) return
-    const update = () => {
-      if (!active) {
-        setLift(0)
-        return
-      }
-      const gap = window.innerHeight - (vv.height + vv.offsetTop)
-      setLift(gap > 40 ? gap : 0)
+    let raf = 0
+    const compute = () => {
+      raf = 0
+      if (!active) { setLift(0); return }
+      const occluded = window.innerHeight - (vv.offsetTop + vv.height)
+      // flush on the keyboard: raise by the occluded height minus the dock's resting bottom gap.
+      setLift(Math.max(0, occluded - DOCK_BOTTOM))
     }
-    update()
-    vv.addEventListener('resize', update)
-    vv.addEventListener('scroll', update)
+    const schedule = () => {
+      if (raf) return
+      raf = requestAnimationFrame(compute)
+    }
+    // measure immediately on activation, then follow the viewport as the keyboard animates in/out.
+    compute()
+    vv.addEventListener('resize', schedule)
+    vv.addEventListener('scroll', schedule)
     return () => {
-      vv.removeEventListener('resize', update)
-      vv.removeEventListener('scroll', update)
+      if (raf) cancelAnimationFrame(raf)
+      vv.removeEventListener('resize', schedule)
+      vv.removeEventListener('scroll', schedule)
     }
   }, [active])
   return lift
 }
 
-export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onCloseTyping, devFakeRecording, locked = false }: IdleDockProps) {
+export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onCloseTyping, devFakeRecording, locked = false, onStructure, structuring = false, developError = false }: IdleDockProps) {
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const lift = useKeyboardLift(typing)
 
@@ -400,6 +456,7 @@ export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onC
   const placeholderRef = useRef<HTMLDivElement | null>(null)
   const micRef = useRef<HTMLSpanElement | null>(null)
   const checkRef = useRef<HTMLSpanElement | null>(null)
+  const arrowRef = useRef<HTMLSpanElement | null>(null)
   const stopTimeoutRef = useRef<number | null>(null)
 
   // Synthesized amplitude for the dev door; real amplitude from the voice analyser otherwise.
@@ -419,6 +476,7 @@ export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onC
         placeholder: () => placeholderRef.current,
         mic: () => micRef.current,
         check: () => checkRef.current,
+        arrow: () => arrowRef.current,
       },
       {
         getAmp,
@@ -523,16 +581,46 @@ export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onC
 
   const onButtonTap = () => {
     const r = rigRef.current
-    if (!r || locked) return
+    if (!r || locked || structuring) return
     if (typing) {
-      onCloseTyping()
+      // full ↑ (text exists) = dismiss the keyboard + structure; dimmed-dead ↑ (empty) = no-op.
+      if (hasNote) { onCloseTyping(); onStructure?.() }
       return
     }
+    if (hasNote) { onStructure?.(); return } // ↑ face → structure the raw note
     if (r.mode === 'idle') startRec()
     else if (r.mode === 'recording') stopRec()
   }
 
   const recording = mode === 'recording' || mode === 'in' || mode === 'out'
+
+  // ── disc third face (gate A) — reconcile mic ↔ ↑ at idle ────────────────────────────────────────
+  // The RecordingRig owns the mic↔✓ crossfade DURING the record cycle (mode in/recording/out); this
+  // effect owns the mic↔↑ crossfade at rest. A non-empty note (spoken or typed) OR an open keyboard
+  // makes the disc the ↑; while typing with empty text the ↑ rides DIMMED (0.4) and dead (the June Q4b
+  // pattern — it brightens dim→full the moment text exists). Face changes crossfade 280ms (the dock's
+  // xfade). Runs only at mode idle, so it never fights the rig's writes to the same opacity.
+  useEffect(() => {
+    if (recording) return
+    const reduced = !!(typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+    const dur = reduced ? 0 : 280
+    const wantArrow = typing || hasNote
+    faceFade(arrowRef.current, wantArrow ? (typing && !hasNote ? 0.4 : 1) : 0, dur)
+    faceFade(micRef.current, wantArrow ? 0 : 1, dur)
+    if (checkRef.current) checkRef.current.style.opacity = '0'
+  }, [recording, typing, hasNote])
+
+  // The disc's role at rest: ↑ (structure) when a note exists or the keyboard is open, else mic.
+  const discIsArrow = !recording && (typing || hasNote)
+  // Dimmed-dead ↑: keyboard open with no text yet. Tap is a no-op until text exists.
+  const arrowDead = typing && !hasNote
+  const discLabel = structuring
+    ? 'Structuring the note'
+    : mode === 'recording'
+      ? 'Stop recording'
+      : discIsArrow
+        ? 'Structure the note with AI'
+        : 'Record a voice note'
 
   return (
     <div
@@ -599,32 +687,48 @@ export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onC
                 pointerEvents: mode === 'idle' ? 'auto' : 'none',
               }}
             >
-              <button
-                type="button"
-                onClick={onOpenTyping}
-                aria-label={hasNote ? `Edit note: ${note}` : 'Add a note (optional)'}
-                aria-disabled={locked}
-                tabIndex={mode === 'idle' ? 0 : -1}
-                style={{
-                  flex: '1 1 0%',
-                  // hit-slop: pad the tap target back to ≥44px without moving the (align-centre) text.
-                  minHeight: 44,
-                  textAlign: 'left',
-                  border: 'none',
-                  background: 'transparent',
-                  padding: '13px 0',
-                  cursor: 'text',
-                  fontFamily: 'var(--font-inter), sans-serif',
-                  fontWeight: 400,
-                  fontSize: 13.5,
-                  color: hasNote ? 'rgb(231,238,250)' : 'rgb(159,176,200)',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                {hasNote ? note : <>Add a note… <span style={{ color: 'rgb(91,107,134)' }}>(optional)</span></>}
-              </button>
+              {structuring ? (
+                // The parse is in flight — the label slot carries a calm status (the disc is dimmed +
+                // frozen). No spinner theatre; role=status announces it once.
+                <span
+                  role="status"
+                  aria-live="polite"
+                  style={{ flex: '1 1 0%', padding: '13px 0', fontFamily: 'var(--font-inter), sans-serif', fontWeight: 400, fontSize: 13.5, color: 'rgb(159,176,200)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                >
+                  Structuring…
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onOpenTyping}
+                  aria-label={developError ? `Couldn't structure — try again. Edit note: ${note}` : hasNote ? `Edit note: ${note}` : 'Add a note (optional)'}
+                  aria-disabled={locked}
+                  tabIndex={mode === 'idle' ? 0 : -1}
+                  style={{
+                    flex: '1 1 0%',
+                    // hit-slop: pad the tap target back to ≥44px without moving the (align-centre) text.
+                    minHeight: 44,
+                    textAlign: 'left',
+                    border: 'none',
+                    background: 'transparent',
+                    padding: '13px 0',
+                    cursor: 'text',
+                    fontFamily: 'var(--font-inter), sans-serif',
+                    fontWeight: 400,
+                    fontSize: 13.5,
+                    color: hasNote || developError ? 'rgb(231,238,250)' : 'rgb(159,176,200)',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {developError ? (
+                    // Failure lands in the SAME label slot; disc returns to ↑, the raw note is intact
+                    // (tap to edit, or tap ↑ to retry). role=alert announces the failure once.
+                    <span role="alert" style={{ color: 'rgb(159,176,200)' }}>Couldn&rsquo;t structure — try again</span>
+                  ) : hasNote ? note : <>Add a note… <span style={{ color: 'rgb(91,107,134)' }}>(optional)</span></>}
+                </button>
+              )}
             </div>
 
             {/* live waveform — 46 bars, transform-only drive. Hidden at rest (opacity 0). */}
@@ -713,12 +817,13 @@ export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onC
         0:00
       </div>
 
-      {/* the disc — mic (idle) morphs into the Continuity ✓ (recording). One 54px footprint. */}
+      {/* the disc — ONE 54px footprint telling a continuous story: mic (idle, no note) → ✓ (recording)
+          → ↑ (a note exists, spoken or typed → tap = structure). Faces crossfade at the dock's xfade. */}
       <button
         type="button"
         onClick={onButtonTap}
-        aria-label={typing ? 'Close note field' : mode === 'recording' ? 'Stop recording' : 'Record a voice note'}
-        aria-disabled={locked}
+        aria-label={discLabel}
+        aria-disabled={locked || structuring || arrowDead}
         className="transition-transform active:scale-[0.94]"
         style={{
           flex: '0 0 auto',
@@ -729,6 +834,10 @@ export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onC
           border: 'none',
           padding: 0,
           background: ACCENT,
+          // dim + freeze the disc while the parse is in flight (the label carries "Structuring…").
+          opacity: structuring ? 0.55 : 1,
+          pointerEvents: structuring ? 'none' : 'auto',
+          transition: 'opacity 200ms ease',
           cursor: 'pointer',
         }}
       >
@@ -737,6 +846,9 @@ export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onC
         </span>
         <span ref={checkRef} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0 }}>
           <CheckGlyph />
+        </span>
+        <span ref={arrowRef} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0 }}>
+          <ArrowGlyph />
         </span>
       </button>
     </div>

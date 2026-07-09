@@ -4,8 +4,9 @@
 // never cropped) — the frame's square placeholder is one instance of that band. Frosted glass is used
 // ONLY over the photo (chip, whisper) and stays STATIC; the dock is solid lit navy (see IdleDock).
 //
-// Develop reveal (chunk 3): after a note lands, "Structure it ✨" (an OPT-IN, ledger-only action —
-// NOT authored in any frame; flagged for River) POSTs /api/develop; on success the photo hero is
+// Develop reveal (chunk 3, revised gate A 2026-07-09): after a note lands, the continuity disc becomes
+// ↑ (the "Structure it ✨" pill is dead, ledger §4 corrected) and tapping it POSTs /api/develop; on
+// success the photo hero is
 // replaced by the DevelopedCard and the develop rig (motion-dc.js dvStage/dvReveal) deepens a scrim +
 // cascades the card content. FREEZE ASSERT: the animated scrim (DevelopedCard tpl239) is a plain rgba
 // linear-gradient, never a backdrop-filter — nothing here animates over a backdrop-filter. Save
@@ -757,8 +758,6 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
     else onBack()
   }
 
-  // "Structure it ✨" shows once a raw note exists (voice take or typed) and we're not mid-typing.
-  const showStructure = phase === 'capture' && note.trim().length > 0 && !typing
   // Interaction lock while the parse is in flight — the note is the request payload; editing or
   // re-recording mid-parse would desync what the developed card shows from what the coach sees.
   const locked = phase === 'developing'
@@ -955,29 +954,9 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
         </div>
       ) : (
         <>
-          {/* "Structure it ✨" — OPT-IN, ledger-only (authored in NO frame). Minimal lit-navy pill in
-              the dock's surface language; the obvious next action after a take. FLAG for River (gate A).
-              While parsing: a calm "Structuring…" in the same text styles (no spinner theater). */}
-          <div style={{ position: 'absolute', left: 0, right: 0, bottom: 124, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, pointerEvents: 'none' }}>
-            {developError && phase === 'capture' && (
-              <span role="alert" style={{ fontFamily: INTER, fontWeight: 400, fontSize: 12, color: 'rgb(159,176,200)' }}>Couldn&rsquo;t structure — try again</span>
-            )}
-            {phase === 'developing' ? (
-              <span role="status" style={{ fontFamily: INTER, fontWeight: 500, fontSize: 13, color: 'rgb(159,176,200)' }}>Structuring…</span>
-            ) : showStructure ? (
-              <button
-                type="button"
-                onClick={structure}
-                aria-label="Structure it — turn your note into a card"
-                className="transition-transform active:scale-[0.97]"
-                style={{ pointerEvents: 'auto', display: 'inline-flex', alignItems: 'center', gap: 7, minHeight: 44, padding: '0px 20px', border: '1px solid rgb(42,52,80)', borderRadius: 22, background: 'rgb(20,28,50)', boxShadow: 'rgba(255,255,255,0.06) 0px 1px 0px inset, rgba(0,0,0,0.4) 0px 10px 24px', cursor: 'pointer', fontFamily: INTER, fontWeight: 600, fontSize: 14, color: 'rgb(255,255,255)' }}
-              >
-                <span aria-hidden="true">✨</span>
-                <span>Structure it</span>
-              </button>
-            ) : null}
-          </div>
-
+          {/* Gate A (River, 2026-07-09): the "Structure it ✨" floating pill is GONE. The continuity
+              disc IS the door — a non-empty note turns it into ↑ (tap = structure). The "Structuring…"
+              status + the failure alert now live in the dock's own label slot (see IdleDock). */}
           <IdleDock
             note={note}
             onNoteChange={onNoteChange}
@@ -986,6 +965,9 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
             onCloseTyping={() => setTyping(false)}
             devFakeRecording={devFakeRecording}
             locked={locked}
+            onStructure={structure}
+            structuring={phase === 'developing'}
+            developError={developError && phase === 'capture'}
           />
 
           <PhotoActionMenu
