@@ -293,7 +293,7 @@ function LogFlow() {
   }, [])
 
   // Advance after a station's save resolves: record its card + row, then tick to the next station (or
-  // flip `done` on the last). Fresh note for the next station.
+  // flip `done` on the last). Fresh note for the next station; any open station photo tray closes.
   const finishStationSave = useCallback((card: CelebrateCard, rowId: string | null) => {
     setRun((r) => {
       if (!r) return r
@@ -304,6 +304,40 @@ function LogFlow() {
         : { ...r, stations, current: r.current + 1, saving: false, saveError: false }
     })
     setNote('')
+    setPhotoSheetOpen(false)
+  }, [])
+
+  // ── station-scoped photo management (chunk 10 item ⑤) ─────────────────────────────────────────────
+  // Mid-run the stack chip opens the PhotoSheet over the CURRENT station's photos only. Edits touch
+  // that station's photoIds — never the other stations or the global photos[] order (exitRun still
+  // returns the full original set). The ⊟ sort row is hidden mid-run (no nested sorting).
+  const reorderStationPhotos = useCallback((orderedIds: string[]) => {
+    setRun((r) => {
+      if (!r || r.done) return r
+      const cur = r.stations[r.current]
+      const valid = orderedIds.filter((id) => cur.photoIds.includes(id))
+      if (valid.length !== cur.photoIds.length) return r
+      return { ...r, stations: r.stations.map((s, i) => (i === r.current ? { ...s, photoIds: valid } : s)) }
+    })
+  }, [])
+  // ✕ mid-run removes MEMBERSHIP from this station only — the photo may live in another bin, and the
+  // original capture keeps it either way, so the object URL is NOT revoked here.
+  const removeStationPhoto = useCallback((id: string) => {
+    setRun((r) => {
+      if (!r || r.done) return r
+      return { ...r, stations: r.stations.map((s, i) => (i === r.current ? { ...s, photoIds: s.photoIds.filter((x) => x !== id) } : s)) }
+    })
+  }, [])
+  // "+" mid-run adds to the global pool AND assigns to the current station (whisper untouched — it
+  // stays dormant during runs).
+  const addStationPhotos = useCallback((files: File[]) => {
+    if (!files.length) return
+    const added = files.map((f) => ({ url: URL.createObjectURL(f), id: nextId(), file: f }))
+    setPhotos((prev) => [...prev, ...added])
+    setRun((r) => {
+      if (!r || r.done) return r
+      return { ...r, stations: r.stations.map((s, i) => (i === r.current ? { ...s, photoIds: [...s.photoIds, ...added.map((a) => a.id)] } : s)) }
+    })
   }, [])
 
   // Save the CURRENT station via the full pipeline (dedup-aware), then advance. Awaits the insert so a
@@ -469,7 +503,7 @@ function LogFlow() {
           photos={runPhotos}
           note={note}
           onNoteChange={setNote}
-          onAddPhotos={addPhotos}
+          onAddPhotos={run ? addStationPhotos : addPhotos}
           onBack={run ? exitRun : () => router.back()}
           showWhisper={run ? false : whisper}
           devFakeRecording={devFakeRecording}
@@ -482,23 +516,26 @@ function LogFlow() {
           onContinue={handleContinue}
           eyebrow={eyebrow}
           onEditTypeAge={() => setSheetOpen(true)}
-          onManagePhotos={run ? undefined : () => setPhotoSheetOpen(true)}
+          onManagePhotos={() => setPhotoSheetOpen(true)}
+          onReorderPhotos={run ? reorderStationPhotos : reorderPhotos}
           run={captureRun}
           devForceState={devForceState}
         />
       )}
       {/* The type/age chip stays live in run mode (types/ages editable per station). */}
       <TypeAgeSheet open={sheetOpen} type={saveType} ages={saveCurriculums} onDone={handleTypeAgeDone} />
-      {/* PhotoSheet is a single-flow surface only — hidden during sorting / a run. */}
-      {!run && !sorting && (
+      {/* PhotoSheet (chunk 10 item ⑤): live in BOTH modes — mid-run it is scoped to the CURRENT
+          station's photos (add/remove/reorder/cover touch that station only) and the ⊟ sort row is
+          hidden (onSortIntoStations undefined → no nested sorting). Hidden only while SortBins is up. */}
+      {!sorting && (
         <PhotoSheet
           open={photoSheetOpen}
-          photos={photos}
+          photos={run ? runPhotos : photos}
           onClose={() => setPhotoSheetOpen(false)}
-          onReorder={reorderPhotos}
-          onRemove={removePhoto}
-          onAddPhotos={addPhotos}
-          onSortIntoStations={handleSortIntoStations}
+          onReorder={run ? reorderStationPhotos : reorderPhotos}
+          onRemove={run ? removeStationPhoto : removePhoto}
+          onAddPhotos={run ? addStationPhotos : addPhotos}
+          onSortIntoStations={run ? undefined : handleSortIntoStations}
         />
       )}
     </>

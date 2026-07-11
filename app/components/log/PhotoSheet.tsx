@@ -21,13 +21,19 @@
 // frost is only ever painted on a STATIC element. dnd's per-tile transform is the only motion in the
 // tile grid; no backdrop-filter is ever keyframed.
 //
-// MASONRY: the frame shows a 2-column whole-photo masonry with varying tile heights. Implemented with
-// CSS `columns:2` (true gapless column-fill, no grid row-alignment gaps) + tiles sized by each photo's
-// natural aspect (clamped) so photos show WHOLE (object-fit cover on a box that matches the aspect =
-// no crop). Reorder correctness rides on onDragEnd's flat-array arrayMove (rectSortingStrategy), not
-// the mid-drag preview, so the CSS-columns layout can't corrupt the committed order. DIVERGENCE from
-// the frame: the tiles area scrolls (overflow-y:auto) when photos exceed the 548px panel — the frame's
-// overflow:hidden is a 3-photo snapshot; N photos need a scroll region.
+// MASONRY: the frame shows a 2-column whole-photo masonry with varying tile heights. CHUNK 10 gate-B
+// mechanism swap (River: "sometimes when I drag photos, there's a little glitch"): the original CSS
+// `columns:2` was the ROOT CAUSE — multi-column lays tiles COLUMN-major (0,1,2 down the left, then
+// 3,4,5 down the right) and rebalances the column heights whenever a tile's box changes, so dnd-kit's
+// rectSortingStrategy (which shifts each item toward its array-neighbour) sent tiles DOWN-then-ACROSS,
+// out of step with the visual reading order → the jump. Replaced with a TWO-COLUMN FLEX split
+// (even indices → left, odd → right) so the array order reads ROW-major (0=TL, 1=TR, 2=L, 3=R…),
+// dnd's rect math matches what the eye sees, and the flex columns never rebalance mid-drag (transforms
+// don't relayout). Every computed value matches frame 8i: column width = (content − 10)/2 (columnGap
+// was 10 → the row's `gap:10`), tile gutter = each column's `gap:10`, r14 tiles, same aspects. Reorder
+// correctness still rides on onDragEnd's flat-array arrayMove. DIVERGENCE from the frame: the tiles
+// area scrolls (overflow-y:auto) when photos exceed the 548px panel — the frame's overflow:hidden is a
+// 3-photo snapshot; N photos need a scroll region.
 //
 // EMPTY STATE (intentional): the sheet opens from the 2+/3+ stack-chip or the whisper, but a coach can
 // ✕ every tile while it's open. At 0 photos the tiles region collapses to just the "+" add tile — that
@@ -163,8 +169,7 @@ function Tile({
         aspectRatio: String(aspect),
         borderRadius: 14,
         overflow: 'hidden',
-        marginBottom: 10, // CSS-columns gutter (columns use margin, not gap)
-        breakInside: 'avoid',
+        // Gutter is the flex column's `gap:10` (was a CSS-columns margin — see the masonry note).
         transform: dragged,
         transition,
         // the dragged tile lifts: frame shadow rgba(0,0,0,0.6) 0 18px 34px + z 2 (tpl500)
@@ -499,58 +504,67 @@ export default function PhotoSheet({ open, photos, onClose, onReorder, onRemove,
           </button>
         </div>
 
-        {/* tiles (tpl486) — 2-col whole-photo masonry via CSS columns; scrolls if photos overflow */}
+        {/* tiles (tpl486) — 2-col whole-photo masonry via a TWO-COLUMN FLEX split (see the masonry
+            note); scrolls if photos overflow. The "+" add tile lands in the column the next photo
+            would fill (parity), so it always sits at the end of the shorter reading position. */}
         <div
           role="group"
           aria-label="Photos — drag to reorder, first is the cover"
-          style={{ flex: '1 1 0%', minHeight: 0, overflowY: 'auto', columns: 2, columnGap: 10 }}
+          style={{ flex: '1 1 0%', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}
         >
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setDragging(false)}>
             <SortableContext items={ids} strategy={rectSortingStrategy}>
-              {photos.map((p, i) => (
-                <Tile
-                  key={p.id}
-                  photo={p}
-                  index={i}
-                  total={photos.length}
-                  isCover={i === 0}
-                  aspect={aspects[p.id] ?? 1}
-                  onRemove={onRemove}
-                  onAspect={setAspect}
-                />
-              ))}
+              <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                {[0, 1].map((col) => (
+                  <div key={col} style={{ flex: '1 1 0%', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {photos.map((p, i) => (i % 2 === col ? (
+                      <Tile
+                        key={p.id}
+                        photo={p}
+                        index={i}
+                        total={photos.length}
+                        isCover={i === 0}
+                        aspect={aspects[p.id] ?? 1}
+                        onRemove={onRemove}
+                        onAspect={setAspect}
+                      />
+                    ) : null))}
+                    {/* "+" add tile (tpl505) — reuses the existing add path. Not sortable. Sits in the
+                        column the NEXT photo (index photos.length) would fill so the grid stays balanced. */}
+                    {photos.length % 2 === col && (
+                      <button
+                        type="button"
+                        onClick={pickFiles}
+                        aria-label="Add photos"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '100%',
+                          // a whole-photo tile averages ~1:1; the add tile shares that footprint.
+                          aspectRatio: '1 / 1',
+                          borderRadius: 14,
+                          border: 'none',
+                          background: 'linear-gradient(rgba(255,255,255,0.09) 0%, rgba(255,255,255,0) 55%), rgb(20,28,50)',
+                          boxShadow: 'rgb(42,52,80) 0px 0px 0px 1px inset',
+                          cursor: 'pointer',
+                          // hidden while a tile is dragging so it can't become a stray drop target visually.
+                          opacity: dragging ? 0.5 : 1,
+                        }}
+                      >
+                        <PlusGlyph />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
             </SortableContext>
           </DndContext>
-
-          {/* "+" add tile (tpl505) — reuses the existing add path. Not sortable. */}
-          <button
-            type="button"
-            onClick={pickFiles}
-            aria-label="Add photos"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '100%',
-              // a whole-photo tile averages ~1:1; the add tile shares that footprint so it sits in a column.
-              aspectRatio: '1 / 1',
-              marginBottom: 10,
-              breakInside: 'avoid',
-              borderRadius: 14,
-              border: 'none',
-              background: 'linear-gradient(rgba(255,255,255,0.09) 0%, rgba(255,255,255,0) 55%), rgb(20,28,50)',
-              boxShadow: 'rgb(42,52,80) 0px 0px 0px 1px inset',
-              cursor: 'pointer',
-              // hidden while a tile is dragging so it can't become a stray drop target visually.
-              opacity: dragging ? 0.5 : 1,
-            }}
-          >
-            <PlusGlyph />
-          </button>
         </div>
 
-        {/* ⊟ row (tpl508) — 2+ photos only. INERT stub → chunk 8's sort-bins flow. */}
-        {photos.length >= 2 && (
+        {/* ⊟ row (tpl508) — 2+ photos only, AND only when sorting is offered (hidden mid-run: chunk 10
+            item ⑤ — no nested sorting during a stepper run). */}
+        {onSortIntoStations && photos.length >= 2 && (
           <button
             type="button"
             onClick={() => onSortIntoStations?.()}

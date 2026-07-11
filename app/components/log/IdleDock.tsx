@@ -431,6 +431,10 @@ export interface IdleDockProps {
   // Dev door (prod-guarded by the caller): force a graceful surface for review. '15a' = mic-denied,
   // '15b' = no-speech toast. ('15d' is driven by the `offline` prop; '15c' is a Capture-level screen.)
   devForceState?: '15a' | '15b' | null
+  // Chunk 10 (item ③): true while the record cycle is live (beat-in / recording / beat-out). Capture
+  // uses it to keep the hero photo from being a tap target during a take (the viewer must not open).
+  // Logic-only signal — no visual rides on it.
+  onRecActiveChange?: (active: boolean) => void
 }
 
 // The dock's resting offset from the layout-viewport bottom (its `bottom: 46`). The keyboard occludes
@@ -473,7 +477,7 @@ function useKeyboardLift(active: boolean) {
   return lift
 }
 
-export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onCloseTyping, devFakeRecording, locked = false, onStructure, structuring = false, developError = false, offline = false, onNetworkError, devForceState = null }: IdleDockProps) {
+export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onCloseTyping, devFakeRecording, locked = false, onStructure, structuring = false, developError = false, offline = false, onNetworkError, devForceState = null, onRecActiveChange }: IdleDockProps) {
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const lift = useKeyboardLift(typing)
 
@@ -683,6 +687,12 @@ export default function IdleDock({ note, onNoteChange, typing, onOpenTyping, onC
   }
 
   const recording = mode === 'recording' || mode === 'in' || mode === 'out'
+
+  // Chunk 10 (item ③): surface the live record-cycle state up to Capture (gates the hero-photo tap).
+  useEffect(() => {
+    onRecActiveChange?.(recording)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recording])
 
   // ── disc third face (gate A) — reconcile mic ↔ ↑ at idle ────────────────────────────────────────
   // The RecordingRig owns the mic↔✓ crossfade DURING the record cycle (mode in/recording/out); this

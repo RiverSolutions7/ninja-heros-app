@@ -204,14 +204,14 @@ export default function SortBins({ photos, onConfirm, onBack }: SortBinsProps) {
   const activePhoto = activeId ? photosById.get(activeId) : null
 
   return (
-    <div ref={rootRef} tabIndex={-1} role="group" aria-label="Sort photos into stations" style={{ position: 'fixed', inset: 0, zIndex: 150, background: 'rgb(8,12,26)', overflow: 'hidden', outline: 'none', fontFamily: 'var(--font-inter), system-ui, sans-serif' }}>
+    <div ref={rootRef} tabIndex={-1} role="group" aria-label="Sort photos into stations" style={{ position: 'fixed', inset: 0, zIndex: 150, background: 'rgb(8,12,26)', display: 'flex', flexDirection: 'column', outline: 'none', fontFamily: 'var(--font-inter), system-ui, sans-serif' }}>
       {/* polite arrival announcement */}
       <div role="status" aria-live="polite" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}>
         {announce}
       </div>
 
       {/* back ‹ — UNAUTHORED (8j has no header); needed to cancel out of sorting. Flagged for River. */}
-      <div style={{ position: 'absolute', top: 46, left: 0, right: 0, height: 40, display: 'flex', alignItems: 'center', padding: '0 20px', zIndex: 2 }}>
+      <div style={{ flex: '0 0 auto', marginTop: 46, height: 40, display: 'flex', alignItems: 'center', padding: '0 20px' }}>
         <button
           type="button"
           onClick={onBack}
@@ -222,30 +222,39 @@ export default function SortBins({ photos, onConfirm, onBack }: SortBinsProps) {
         </button>
       </div>
 
-      {/* title block (tpl518) */}
-      <div style={{ position: 'absolute', top: 110, left: 20, right: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <span style={{ fontFamily: INTER, fontWeight: 800, fontSize: 27, letterSpacing: '-0.8px', lineHeight: 1.15, color: 'rgb(255,255,255)' }}>Sort into stations</span>
-        <span style={{ fontFamily: INTER, fontWeight: 400, fontSize: 13.5, lineHeight: 1.5, color: 'rgb(159,176,200)' }}>Drag each photo into its station.</span>
-      </div>
-
       <DndContext sensors={sensors} accessibility={{ announcements }} collisionDetection={closestCenter} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setActiveId(null)}>
-        {/* source palette (tpl526) — horizontal; scrolls if photos overflow the row (frame is a 5-tile
-            snapshot). */}
-        <div
-          role="group"
-          aria-label="Photos to sort — drag each into a station"
-          style={{ position: 'absolute', top: 206, left: 16, right: 16, display: 'flex', flexWrap: 'nowrap', alignItems: 'center', gap: 8, overflowX: 'auto', paddingBottom: 4 }}
-        >
-          {photos.map((p, i) => (
-            <SourceTile key={p.id} photo={p} index={i} total={photos.length} assigned={assignedIds.has(p.id)} />
-          ))}
-        </div>
+        {/* CHUNK 10 gate-B (item ④): the frame is a fixed 844-tall snapshot; ported literally it placed
+            the min-height:296 bins block (absolute top:314) UNDER the bottom-anchored CTA on any shorter
+            viewport — real iPhone Safari shows ≈ 667–750 visible px, and a filled bin grows past 296 —
+            a measured 41px overlap at 390×667. Fixed by FLOWING the layout: title/palette/bins sit in a
+            scroll region between the back bar and a pinned CTA, so content scrolls and the CTA never
+            collides. At the frame's ~844 the tall scroll region + bottom CTA reproduce the authored
+            spacing (bins up top, palette gaps, CTA resting at bottom:46) to the pixel. */}
+        <div style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', display: 'flex', flexDirection: 'column' }}>
+          {/* title block (tpl518) */}
+          <div style={{ flex: '0 0 auto', marginTop: 24, padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <span style={{ fontFamily: INTER, fontWeight: 800, fontSize: 27, letterSpacing: '-0.8px', lineHeight: 1.15, color: 'rgb(255,255,255)' }}>Sort into stations</span>
+            <span style={{ fontFamily: INTER, fontWeight: 400, fontSize: 13.5, lineHeight: 1.5, color: 'rgb(159,176,200)' }}>Drag each photo into its station.</span>
+          </div>
 
-        {/* bins (tpl537) */}
-        <div style={{ position: 'absolute', top: 314, left: 16, right: 16, display: 'flex', gap: 12 }}>
-          {bins.map((bin, i) => (
-            <DroppableBin key={i} index={i} bin={bin} photosById={photosById} onRemove={removeFromBin} />
-          ))}
+          {/* source palette (tpl526) — horizontal; scrolls if photos overflow the row (frame is a 5-tile
+              snapshot). */}
+          <div
+            role="group"
+            aria-label="Photos to sort — drag each into a station"
+            style={{ flex: '0 0 auto', marginTop: 37, padding: '0 16px 4px', display: 'flex', flexWrap: 'nowrap', alignItems: 'center', gap: 8, overflowX: 'auto' }}
+          >
+            {photos.map((p, i) => (
+              <SourceTile key={p.id} photo={p} index={i} total={photos.length} assigned={assignedIds.has(p.id)} />
+            ))}
+          </div>
+
+          {/* bins (tpl537) */}
+          <div style={{ flex: '0 0 auto', marginTop: 40, padding: '0 16px 24px', display: 'flex', gap: 12 }}>
+            {bins.map((bin, i) => (
+              <DroppableBin key={i} index={i} bin={bin} photosById={photosById} onRemove={removeFromBin} />
+            ))}
+          </div>
         </div>
 
         <DragOverlay dropAnimation={null}>
@@ -257,35 +266,35 @@ export default function SortBins({ photos, onConfirm, onBack }: SortBinsProps) {
         </DragOverlay>
       </DndContext>
 
-      {/* CTA (tpl554) — orange; enabled only on a complete 2-way split */}
-      <button
-        type="button"
-        onClick={() => { if (canConfirm) onConfirm(bins.map((b) => b.photoIds)) }}
-        aria-disabled={!canConfirm}
-        aria-label={canConfirm ? 'Next: describe each station' : 'Sort every photo into a station to continue'}
-        className="transition-transform active:scale-[0.98]"
-        style={{
-          position: 'absolute',
-          left: 16,
-          right: 16,
-          bottom: 46,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: 52,
-          borderRadius: 26,
-          border: 'none',
-          background: 'rgb(255,90,31)',
-          cursor: canConfirm ? 'pointer' : 'default',
-          opacity: canConfirm ? 1 : 0.4,
-          fontFamily: INTER,
-          fontWeight: 700,
-          fontSize: 14.5,
-          color: 'rgb(255,255,255)',
-        }}
-      >
-        Next: describe each
-      </button>
+      {/* CTA (tpl554) — orange; enabled only on a complete 2-way split. Pinned below the scroll region
+          (resting bottom:46 via the wrapper padding), never overlapping the bins. */}
+      <div style={{ flex: '0 0 auto', padding: '12px 16px 46px' }}>
+        <button
+          type="button"
+          onClick={() => { if (canConfirm) onConfirm(bins.map((b) => b.photoIds)) }}
+          aria-disabled={!canConfirm}
+          aria-label={canConfirm ? 'Next: describe each station' : 'Sort every photo into a station to continue'}
+          className="transition-transform active:scale-[0.98]"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '100%',
+            height: 52,
+            borderRadius: 26,
+            border: 'none',
+            background: 'rgb(255,90,31)',
+            cursor: canConfirm ? 'pointer' : 'default',
+            opacity: canConfirm ? 1 : 0.4,
+            fontFamily: INTER,
+            fontWeight: 700,
+            fontSize: 14.5,
+            color: 'rgb(255,255,255)',
+          }}
+        >
+          Next: describe each
+        </button>
+      </div>
     </div>
   )
 }

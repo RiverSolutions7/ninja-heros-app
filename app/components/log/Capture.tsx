@@ -22,6 +22,7 @@ import GracefulToast from './GracefulToast'
 import WhisperLozenge from './WhisperLozenge'
 import DevelopedCard, { type DevelopResult, type DevelopCascadeRefs } from './DevelopedCard'
 import NotesDoc from './NotesDoc'
+import PhotoViewer from './PhotoViewer'
 import Celebrate, { type CelebrateRefs } from './Celebrate'
 import { saveComponent, updateComponentTitle, type SaveCardInput } from '@/app/lib/saveComponent'
 import { fallbackTitle, titleFromPhoto, titleFromText } from '@/app/lib/titleForCard'
@@ -61,8 +62,12 @@ export interface CaptureProps {
   eyebrow?: string
   /** Chip tap → open the TypeAgeSheet (owned by the /log route). */
   onEditTypeAge?: () => void
-  /** Photo stack-chip tap AND the whisper's "Sort →" → open the PhotoSheet (owned by the /log route). */
+  /** Photo stack-chip tap AND the whisper's "Sort →" → open the PhotoSheet (owned by the /log route).
+   *  Chunk 10 (item ⑤): live in run mode too — the route scopes the sheet to the current station. */
   onManagePhotos?: () => void
+  /** Chunk 10 (item ③): reorder photos to this id order (index 0 = cover). Used by the full-screen
+   *  viewer's "Make cover". The route maps it to the single-flow photos[] or the station's subset. */
+  onReorderPhotos?: (orderedIds: string[]) => void
   /** Multi-station stepper mode (chunk 8). When set, Capture runs ONE station of a run: it shows the
    *  stepper line (13a), relabels the finish CTA ("Save & next station →" until the last, then "Save to
    *  library"), and DELEGATES the save to `onStationSave` (page.tsx owns the pipeline + segment tick +
@@ -491,7 +496,7 @@ function StepperLine({ index, total }: { index: number; total: number }) {
 
 type Phase = 'capture' | 'developing' | 'developed'
 
-export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBack, showWhisper = false, devFakeRecording = false, devMockDevelop = false, startDeveloped = null, startExpanded = false, saveType = 'station', saveCurriculums = [], devMockSave = false, onContinue, eyebrow = EYEBROW, onEditTypeAge, onManagePhotos, run = null, devForceState = null }: CaptureProps) {
+export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBack, showWhisper = false, devFakeRecording = false, devMockDevelop = false, startDeveloped = null, startExpanded = false, saveType = 'station', saveCurriculums = [], devMockSave = false, onContinue, eyebrow = EYEBROW, onEditTypeAge, onManagePhotos, onReorderPhotos, run = null, devForceState = null }: CaptureProps) {
   const empty = photos.length === 0
   // Multi-station stepper mode (chunk 8). heroTop drops the photo/card to 112 (13a/13c) to clear the
   // stepper line at top:88; the single flow keeps 92 (8a/8d) — the save morph (skipped in run mode)
@@ -501,7 +506,14 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
   const isLastStation = runMode && run.index + 1 >= run.total
   const [typing, setTyping] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
-  const [coverAspect, setCoverAspect] = useState<number | null>(null)
+  // Chunk 10 (item ③): the hero now BROWSES — heroIndex is the photo the band shows (the D2 dots
+  // track it); heroAspects holds each photo's natural aspect (the band resizes to the shown photo,
+  // keeping the natural-band law per photo). viewerOpen = the full-screen viewer; recActive = the
+  // dock's live record cycle (the hero is NOT a tap target during a take).
+  const [heroIndex, setHeroIndex] = useState(0)
+  const [heroAspects, setHeroAspects] = useState<Record<string, number>>({})
+  const [viewerOpen, setViewerOpen] = useState(false)
+  const [recActive, setRecActive] = useState(false)
   const fileRef = useRef<HTMLInputElement | null>(null)
 
   const [phase, setPhase] = useState<Phase>('capture')
@@ -574,7 +586,19 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
   const saveGenRef = useRef(0)
 
   const cover = photos[0]
-  const bandAspect = coverAspect ? Math.min(AR_MAX, Math.max(AR_MIN, coverAspect)) : 1
+  // Clamp heroIndex when photos shrink (sheet removals / station swaps).
+  useEffect(() => {
+    if (heroIndex >= photos.length && photos.length > 0) setHeroIndex(photos.length - 1)
+    else if (photos.length === 0 && heroIndex !== 0) setHeroIndex(0)
+  }, [photos.length, heroIndex])
+  const heroPhoto = photos[Math.min(heroIndex, Math.max(0, photos.length - 1))]
+  const setHeroAspect = useCallback((id: string, ar: number) => {
+    setHeroAspects((prev) => (prev[id] === ar ? prev : { ...prev, [id]: ar }))
+  }, [])
+  const clampBand = (ar: number | undefined) => (ar ? Math.min(AR_MAX, Math.max(AR_MIN, ar)) : 1)
+  // The band sizes to the SHOWN photo (natural-band per photo); the 15c hero stays on the cover.
+  const bandAspect = clampBand(heroPhoto ? heroAspects[heroPhoto.id] : undefined)
+  const coverBandAspect = clampBand(cover ? heroAspects[cover.id] : undefined)
 
   const pickMedia = () => fileRef.current?.click()
   const handleFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -857,7 +881,9 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
     setDeveloped(null)
     setDevelopError(false)
     setExpanded(false)
-    setCoverAspect(null)
+    setHeroIndex(0)
+    setHeroAspects({})
+    setViewerOpen(false)
     savedIdRef.current = null
     onContinue?.()
   }
@@ -880,6 +906,63 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
   // Interaction lock while the parse is in flight — the note is the request payload; editing or
   // re-recording mid-parse would desync what the developed card shows from what the coach sees.
   const locked = phase === 'developing'
+
+  // ── hero swipe-browse + tap → full-screen viewer (chunk 10 item ③) ──────────────────────────────
+  // The D2 dots promised browsing; the strip delivers it transform-only (direct style writes on a ref,
+  // no per-move re-render, no layout thrash — the band's aspect only updates once per committed swipe).
+  // Tap opens the PhotoViewer at rest ONLY: never during a take (recActive), mid-parse, while typing
+  // (the tap's job there is dismissing the keyboard), under the action menu, or during the save morph.
+  const heroStripRef = useRef<HTMLDivElement | null>(null)
+  const heroDrag = useRef<{ startX: number; startY: number; dx: number; captured: boolean; moved: boolean } | null>(null)
+  const heroTapAllowed = phase === 'capture' && !recActive && !typing && !menuOpen && !saving
+  const setHeroStrip = useCallback((dxPx: number, animate: boolean, index: number) => {
+    const el = heroStripRef.current
+    if (!el) return
+    el.style.transition = animate ? 'transform 260ms cubic-bezier(0.22,0.61,0.36,1)' : 'none'
+    el.style.transform = `translateX(calc(${-index * 100}% + ${dxPx}px))`
+  }, [])
+  // Park the strip on the current index (animated — a viewer swipe or a committed hero swipe slides in).
+  useLayoutEffect(() => {
+    setHeroStrip(0, true, Math.min(heroIndex, Math.max(0, photos.length - 1)))
+  }, [heroIndex, photos.length, setHeroStrip])
+  const heroDown = (e: React.PointerEvent) => {
+    if (photos.length === 0) return
+    heroDrag.current = { startX: e.clientX, startY: e.clientY, dx: 0, captured: false, moved: false }
+  }
+  const heroMove = (e: React.PointerEvent) => {
+    const d = heroDrag.current
+    if (!d) return
+    const dx = e.clientX - d.startX
+    const dy = e.clientY - d.startY
+    d.dx = dx
+    if (!d.moved && Math.hypot(dx, dy) > 8) d.moved = true
+    if (!d.captured && d.moved && Math.abs(dx) > Math.abs(dy)) {
+      d.captured = true
+      try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId) } catch { /* ignore */ }
+    }
+    if (d.captured && photos.length > 1) {
+      // rubber-band at the ends (0.35 damping)
+      const atEdge = (heroIndex === 0 && dx > 0) || (heroIndex === photos.length - 1 && dx < 0)
+      setHeroStrip(atEdge ? dx * 0.35 : dx, false, heroIndex)
+    }
+  }
+  const heroUp = (e: React.PointerEvent) => {
+    const d = heroDrag.current
+    heroDrag.current = null
+    if (!d) return
+    try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId) } catch { /* ignore */ }
+    if (d.captured && photos.length > 1) {
+      if (d.dx < -48 && heroIndex < photos.length - 1) setHeroIndex(heroIndex + 1)
+      else if (d.dx > 48 && heroIndex > 0) setHeroIndex(heroIndex - 1)
+      else setHeroStrip(0, true, heroIndex) // under-threshold → snap back
+      return
+    }
+    if (!d.moved && heroTapAllowed) setViewerOpen(true)
+  }
+  const heroCancel = () => {
+    heroDrag.current = null
+    setHeroStrip(0, true, heroIndex)
+  }
 
   // 15c — the develop-error screen (a full-screen state that REPLACES the capture dock: the authored
   // failure card + a try-again/Save-to-library bar). The raw note is preserved; "Add the steps
@@ -1018,6 +1101,8 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
         </div>
       ) : (
         // Photo hero — natural whole-photo band (8a). heroTop = 112 in run mode (clears the stepper).
+        // Chunk 10 (item ③): the band hosts a transform-only SWIPE STRIP (browse between angles, the
+        // dots follow) and a tap opens the full-screen viewer (rest states only — see heroTapAllowed).
         <div
           style={{
             position: 'absolute',
@@ -1030,96 +1115,93 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
             boxShadow: 'rgba(0,0,0,0.55) 0px 24px 60px',
           }}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={cover.url}
-            alt="Obstacle course station"
-            onLoad={(e) => {
-              const img = e.currentTarget
-              if (img.naturalWidth && img.naturalHeight) setCoverAspect(img.naturalWidth / img.naturalHeight)
+          <div
+            role="button"
+            tabIndex={heroTapAllowed ? 0 : -1}
+            aria-label={`Course photo ${Math.min(heroIndex, photos.length - 1) + 1} of ${photos.length}.${heroTapAllowed ? ' View full screen.' : ''}${photos.length > 1 ? ' Swipe to browse.' : ''}`}
+            onPointerDown={heroDown}
+            onPointerMove={heroMove}
+            onPointerUp={heroUp}
+            onPointerCancel={heroCancel}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (heroTapAllowed) setViewerOpen(true) }
+              else if (e.key === 'ArrowLeft') { e.preventDefault(); setHeroIndex((i) => Math.max(0, i - 1)) }
+              else if (e.key === 'ArrowRight') { e.preventDefault(); setHeroIndex((i) => Math.min(photos.length - 1, i + 1)) }
             }}
-            style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }}
-          />
+            style={{ position: 'absolute', inset: 0, touchAction: 'pan-y', cursor: heroTapAllowed ? 'zoom-in' : 'default', outline: 'none' }}
+          >
+            <div ref={heroStripRef} style={{ display: 'flex', width: '100%', height: '100%' }}>
+              {photos.map((p, i) => (
+                <div key={p.id} aria-hidden={i !== heroIndex} style={{ flex: '0 0 100%', height: '100%', position: 'relative' }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={p.url}
+                    alt=""
+                    draggable={false}
+                    onLoad={(e) => {
+                      const img = e.currentTarget
+                      if (img.naturalWidth && img.naturalHeight) setHeroAspect(p.id, img.naturalWidth / img.naturalHeight)
+                    }}
+                    style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
           {/* bottom scrim */}
           <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 130, background: 'linear-gradient(rgba(8,12,26,0) 0%, rgba(8,12,26,0.62) 100%)', pointerEvents: 'none' }} />
 
-          {/* D2 pill-progress dots (photo carousel position) */}
-          <div style={{ position: 'absolute', left: 0, right: 0, bottom: 31, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 5 }}>
+          {/* D2 pill-progress dots (photo carousel position — track the swipe-browse index) */}
+          <div style={{ position: 'absolute', left: 0, right: 0, bottom: 31, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 5, pointerEvents: 'none' }}>
             {photos.map((p, i) => (
               <div
                 key={p.id}
                 style={{
-                  width: i === 0 ? 14 : 5,
+                  width: i === heroIndex ? 14 : 5,
                   height: 5,
                   borderRadius: 3,
-                  background: i === 0 ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.35)',
+                  background: i === heroIndex ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.35)',
                 }}
               />
             ))}
           </div>
 
-          {/* frosted stack-count chip (2+ photos) — static blur. In the single flow ONE tap opens the
-              PhotoSheet; in run mode (13a) the photos are fixed by the sort, so it is a STATIC count
-              indicator (no tap target, no dialog affordance). */}
+          {/* frosted stack-count chip (2+ photos) — static blur. ONE tap opens the PhotoSheet in BOTH
+              modes (chunk 10 item ⑤ — River's gate-B fix: the chip was a dead static indicator mid-run;
+              now the /log route scopes the sheet to the CURRENT station's photos in run mode). */}
           {photos.length >= 2 && (
-            runMode ? (
-              <div
-                aria-label={`${photos.length} photos in this station`}
-                style={{
-                  position: 'absolute',
-                  left: 12,
-                  bottom: 12,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  height: 28,
-                  padding: '0px 11px',
-                  borderRadius: 14,
-                  background: 'rgba(12,19,34,0.55)',
-                  backdropFilter: 'blur(20px)',
-                  WebkitBackdropFilter: 'blur(20px)',
-                  boxShadow: 'rgba(255,255,255,0.14) 0px 0px 0px 1px inset',
-                }}
-              >
-                <StackCountGlyph />
-                <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontWeight: 600, fontSize: 12, color: 'rgb(231,238,250)' }}>
-                  {photos.length}
-                </span>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => { if (!locked) onManagePhotos?.() }}
-                aria-label={`Manage ${photos.length} photos`}
-                aria-disabled={locked}
-                aria-haspopup="dialog"
-                className="transition-transform active:scale-[0.96]"
-                style={{
-                  position: 'absolute',
-                  left: 12,
-                  bottom: 12,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  height: 28,
-                  padding: '0px 11px',
-                  borderRadius: 14,
-                  border: 'none',
-                  cursor: 'pointer',
-                  background: 'rgba(12,19,34,0.55)',
-                  backdropFilter: 'blur(20px)',
-                  WebkitBackdropFilter: 'blur(20px)',
-                  boxShadow: 'rgba(255,255,255,0.14) 0px 0px 0px 1px inset',
-                }}
-              >
-                {/* invisible hit-slop → ≥44px tap target without growing the compact chip */}
-                <span aria-hidden="true" style={{ position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', width: '100%', minWidth: 44, height: 44 }} />
-                <StackCountGlyph />
-                <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontWeight: 600, fontSize: 12, color: 'rgb(231,238,250)' }}>
-                  {photos.length}
-                </span>
-              </button>
-            )
+            <button
+              type="button"
+              onClick={() => { if (!locked) onManagePhotos?.() }}
+              aria-label={runMode ? `Manage this station's ${photos.length} photos` : `Manage ${photos.length} photos`}
+              aria-disabled={locked}
+              aria-haspopup="dialog"
+              className="transition-transform active:scale-[0.96]"
+              style={{
+                position: 'absolute',
+                left: 12,
+                bottom: 12,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                height: 28,
+                padding: '0px 11px',
+                borderRadius: 14,
+                border: 'none',
+                cursor: 'pointer',
+                background: 'rgba(12,19,34,0.55)',
+                backdropFilter: 'blur(20px)',
+                WebkitBackdropFilter: 'blur(20px)',
+                boxShadow: 'rgba(255,255,255,0.14) 0px 0px 0px 1px inset',
+              }}
+            >
+              {/* invisible hit-slop → ≥44px tap target without growing the compact chip */}
+              <span aria-hidden="true" style={{ position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', width: '100%', minWidth: 44, height: 44 }} />
+              <StackCountGlyph />
+              <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontWeight: 600, fontSize: 12, color: 'rgb(231,238,250)' }}>
+                {photos.length}
+              </span>
+            </button>
           )}
         </div>
       ))}
@@ -1154,6 +1236,7 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
             offline={showOffline}
             onNetworkError={() => setOffline(true)}
             devForceState={devForceState === '15a' || devForceState === '15b' ? devForceState : null}
+            onRecActiveChange={setRecActive}
           />
 
           <PhotoActionMenu
@@ -1188,7 +1271,7 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
                 top: heroTop,
                 left: 8,
                 right: 8,
-                aspectRatio: String(bandAspect),
+                aspectRatio: String(coverBandAspect),
                 borderRadius: 20,
                 overflow: 'hidden',
                 boxShadow: 'rgba(0,0,0,0.55) 0px 24px 60px',
@@ -1200,7 +1283,7 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
                 alt="Obstacle course station"
                 onLoad={(e) => {
                   const img = e.currentTarget
-                  if (img.naturalWidth && img.naturalHeight) setCoverAspect(img.naturalWidth / img.naturalHeight)
+                  if (img.naturalWidth && img.naturalHeight) setHeroAspect(cover.id, img.naturalWidth / img.naturalHeight)
                 }}
                 style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }}
               />
@@ -1274,6 +1357,22 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
           onShare={handleShare}
           onContinue={handleContinue}
           onRename={handleRename}
+        />
+      )}
+
+      {/* Full-screen photo viewer (chunk 10 item ③) — UNAUTHORED surface, values flagged in
+          PhotoViewer.tsx. Opens from a hero tap at rest; index is SHARED with the hero (dots sync).
+          "Make cover" reorders via the route (single flow photos[] or the run station's subset). */}
+      {viewerOpen && photos.length > 0 && (
+        <PhotoViewer
+          photos={photos}
+          index={Math.min(heroIndex, photos.length - 1)}
+          onIndexChange={setHeroIndex}
+          onMakeCover={(id) => {
+            onReorderPhotos?.([id, ...photos.filter((p) => p.id !== id).map((p) => p.id)])
+            setHeroIndex(0)
+          }}
+          onClose={() => setViewerOpen(false)}
         />
       )}
 

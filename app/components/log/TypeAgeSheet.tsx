@@ -357,7 +357,7 @@ export default function TypeAgeSheet({ open, type, ages, onDone }: TypeAgeSheetP
         ref={(el) => { panelRef.current = el; dialogRef.current = el }}
         role="dialog"
         aria-modal="true"
-        aria-label={mode === 'addType' ? 'New type' : mode === 'addAge' ? 'New age group' : 'Type and age groups'}
+        aria-label={mode === 'addType' ? 'New type' : mode === 'addAge' ? 'New curriculum' : 'Type and curriculum'}
         tabIndex={-1}
         style={{
           position: 'absolute',
@@ -408,13 +408,13 @@ export default function TypeAgeSheet({ open, type, ages, onDone }: TypeAgeSheetP
           />
         ) : (
           <AddForm
-            heading="New age group"
+            heading="New curriculum"
             value={newAgeName}
-            placeholder="Teens (13+)"
+            placeholder="Competition Team"
             monogram={false}
             inputRef={ageInputRef}
             busy={busy}
-            submitLabel="Add age group"
+            submitLabel="Add curriculum"
             onChange={setNewAgeName}
             onBack={() => setMode('main')}
             onSubmit={submitAge}
@@ -570,9 +570,10 @@ function MainContent({
         + New type
       </button>
 
-      {/* AGE GROUPS (tpl423) */}
+      {/* CURRICULUM (tpl423) — River's gate-B override of the frame's "Age groups": the section
+          holds age bands AND whole curriculums. Data model unchanged (still the curriculums table). */}
       <div style={{ fontFamily: INTER, fontWeight: 600, fontSize: 11, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'rgb(125,138,163)', marginTop: 28, marginBottom: 12 }}>
-        Age groups
+        Curriculum
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
         {ageOpts.map((a) => {
@@ -611,7 +612,7 @@ function MainContent({
         <button
           type="button"
           onClick={onNewAge}
-          aria-label="Add an age group"
+          aria-label="Add a curriculum"
           style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minHeight: 44, padding: '8px 10px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: INTER, fontWeight: 600, fontSize: 13, color: 'rgb(159,176,200)' }}
         >
           + Add

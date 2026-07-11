@@ -19,10 +19,12 @@
 'use client'
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
+import { createPortal } from 'react-dom'
 import {
   DndContext,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   closestCenter,
   useSensor,
   useSensors,
@@ -126,6 +128,20 @@ function StepRowMenu({
 }) {
   const ref = useRef<HTMLDivElement | null>(null)
   const firstItemRef = useRef<HTMLButtonElement | null>(null)
+  const MENU_W = 180
+
+  // CHUNK 10 gate-B (item ⑥): position FIXED from the trigger's viewport rect, not absolute inside the
+  // row. The doc body now scrolls (overflowY:auto), and an absolute menu would be clipped by that scroll
+  // box near the bottom; fixed escapes it. Scroll is locked while the menu is open (the row can't move),
+  // so a single measurement stays valid. Right-aligned to the ⋯ button's right edge (mirrors the old
+  // `right:0`); opens downward 6px below it.
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+  useLayoutEffect(() => {
+    const t = triggerRef.current
+    if (!t) return
+    const r = t.getBoundingClientRect()
+    setPos({ top: Math.round(r.bottom + 6), left: Math.round(r.right - MENU_W) })
+  }, [triggerRef])
 
   // Scale-in from the ⋯ (transform-origin: right top): ~150ms with a whisper of overshoot. Reduced
   // motion → a plain crossfade. Backdrop-filter is NEVER animated — only transform/opacity.
@@ -204,17 +220,22 @@ function StepRowMenu({
     fontSize: 14,
   }
 
-  return (
+  // PORTALED to document.body (chunk 10 item ⑥): the doc body is now a SCROLL container and its
+  // (unauthored) arrival animation briefly holds a transform — either would hijack a nested menu
+  // (overflow clips it; a transformed ancestor rebases position:fixed). From the body it anchors to
+  // the trigger's true viewport rect always. Scroll is LOCKED while open, so one measurement holds.
+  return createPortal(
     <div
       ref={ref}
       role="menu"
       aria-label={`Step ${stepIndex + 1} options`}
       onPointerDown={(e) => e.stopPropagation()}
       style={{
-        position: 'absolute',
-        top: 'calc(100% + 6px)',
-        right: 0,
-        width: 180,
+        position: 'fixed',
+        top: pos?.top ?? 0,
+        left: pos?.left ?? 0,
+        visibility: pos ? 'visible' : 'hidden',
+        width: MENU_W,
         borderRadius: 13,
         background: 'rgba(26,34,56,0.72)',
         backdropFilter: 'blur(24px) saturate(160%)',
@@ -223,7 +244,7 @@ function StepRowMenu({
         boxShadow: 'rgba(0,0,0,0.5) 0px 12px 32px',
         overflow: 'hidden',
         transformOrigin: 'right top',
-        zIndex: 30,
+        zIndex: 400,
       }}
     >
       <button
@@ -247,7 +268,8 @@ function StepRowMenu({
         <span>Delete</span>
         <TrashGlyph color="rgb(255,107,106)" />
       </button>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -327,7 +349,10 @@ function StepRow({
         boxShadow: isDragging ? 'rgba(0,0,0,0.55) 0px 14px 30px' : 'none',
         background: isDragging ? 'rgb(17,26,48)' : 'transparent',
         borderRadius: isDragging ? 10 : 0,
-        touchAction: 'none',
+        // Only lock touch-action once the reorder is actually active — at rest the row must let the doc
+        // scroll (item ⑥). TouchSensor's long-press owns the reorder gesture; preventDefault stops any
+        // residual scroll during the drag.
+        touchAction: isDragging ? 'none' : undefined,
         // Bystander rows (a menu is open on a DIFFERENT row) are dimmed AND inert — no tap-through to
         // their edit/⋯; the invoked row and any editing row stay live.
         pointerEvents: dimmed ? 'none' : undefined,
@@ -527,9 +552,15 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
     }
   }, [editingCues])
 
+  // CHUNK 10 gate-B (item ⑥): MouseSensor + TouchSensor(long-press) — NOT PointerSensor. The old
+  // PointerSensor paired with `touchAction:'none'` on every row, which told the browser "no scrolling
+  // starts here" — so a finger-drag over the steps did nothing (the second half of the dead-scroll bug,
+  // alongside the body's overflow:hidden). TouchSensor's 220ms long-press distinguishes a reorder from
+  // a scroll WITHOUT killing touch-action, so a quick swipe scrolls and a held press reorders (the same
+  // no-cross-input-race pattern PhotoSheet uses). A quick tap still edits.
   const sensors = useSensors(
-    // long-press activation → a quick tap still edits; a held press starts a reorder
-    useSensor(PointerSensor, { activationConstraint: { delay: 220, tolerance: 8 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
 
@@ -629,11 +660,15 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
         <div />
       </div>
 
-      {/* doc body — inset 236 / 118, gap 18, padding 26/24/0. overflow visible while a menu is open so
-          it can escape the clip; otherwise clipped (reading keeps everything above the fold). */}
+      {/* doc body — inset 236 / 118, gap 18. CHUNK 10 gate-B (item ⑥): was `overflow:hidden` (the
+          reading state assumed everything fit above the fold), which on a real device CLIPPED long docs
+          and killed scrolling entirely. Now `overflowY:auto` so all steps + cues + skills scroll; while
+          a row menu is open scroll LOCKS (overflowY:hidden preserves the scroll position — no jump on
+          open/close) and the menu positions FIXED so it isn't clipped by the scroll box. paddingBottom
+          gives the last row breathing room above the dock. */}
       <div
         ref={bodyRef}
-        style={{ position: 'absolute', inset: '236px 0px 118px', display: 'flex', flexDirection: 'column', gap: 18, padding: '26px 24px 0px', overflow: menuActive ? 'visible' : 'hidden' }}
+        style={{ position: 'absolute', inset: '236px 0px 118px', display: 'flex', flexDirection: 'column', gap: 18, padding: '26px 24px 24px', overflowX: 'hidden', overflowY: menuActive ? 'hidden' : 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}
       >
         {/* eyebrow + title (title is read-only — 8e-edit does not author title editing; see report).
             role="heading"/aria-level give SR users a landmark to jump to — pure semantics, no visual delta. */}
