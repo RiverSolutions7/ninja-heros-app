@@ -72,6 +72,14 @@ function prefersReduced() {
   return !!(typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)
 }
 
+// CHUNK 11 ②+④ (River, 2026-07-11): inline editors auto-grow to show the WHOLE text — no clip, no
+// inner scroll. Reset to auto first (so it can SHRINK when text is deleted), then lock to scrollHeight.
+function autoGrow(el: HTMLTextAreaElement | null) {
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${el.scrollHeight}px`
+}
+
 // ── glyphs ───────────────────────────────────────────────────────────────────────────────────────
 function BackChevron() {
   return (
@@ -310,12 +318,13 @@ function StepRow({
     // dimmed bystander row can't be dragged out from under an open menu).
     disabled: editing || menuActive,
   })
-  const inputRef = useRef<HTMLInputElement | null>(null)
+  const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const optionsRef = useRef<HTMLButtonElement | null>(null)
 
   useEffect(() => {
     if (editing && inputRef.current) {
       const el = inputRef.current
+      autoGrow(el) // size to the full text before focusing so nothing is clipped on entry
       el.focus()
       // caret to end (frame shows the caret after the text, not a select-all)
       const len = el.value.length
@@ -369,19 +378,27 @@ function StepRow({
       <span aria-hidden="true" style={{ fontWeight: 200, fontSize: 22, lineHeight: 1, color: NUMERAL }}>{index + 1}</span>
 
       {editing ? (
-        <input
+        // CHUNK 11 ②+④: a full-width AUTO-GROWING textarea (was a fit-content <input> that clipped long
+        // steps). It shows the ENTIRE sentence, grows the row as it wraps, and never inner-scrolls. The
+        // authored hairline-underline inline-quiet look is kept. Enter commits; Shift+Enter inserts a
+        // newline (the sensible iOS choice — a hardware/BT keyboard can still force a line break, and the
+        // on-screen return key commits, which is what a coach expects from a single instruction field).
+        <textarea
           ref={inputRef}
           defaultValue={item.text}
+          rows={1}
           aria-label={`Edit step ${index + 1}`}
+          onInput={(e) => autoGrow(e.currentTarget)}
           onBlur={(e) => commit(e.currentTarget.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() }
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.currentTarget.blur() }
             else if (e.key === 'Escape') { e.preventDefault(); onCommit(item.text) }
           }}
           style={{
-            width: 'fit-content',
-            minWidth: 40,
-            maxWidth: '100%',
+            width: '100%',
+            display: 'block',
+            resize: 'none',
+            overflow: 'hidden',
             border: 'none',
             borderBottom: '1px solid rgb(58,77,119)',
             paddingBottom: 3,
@@ -414,6 +431,9 @@ function StepRow({
             fontSize: 14.5,
             lineHeight: 1.4,
             color: 'inherit',
+            // CHUNK 11 ②+④: preserve any Shift+Enter newline the coach typed (default CSS would collapse
+            // it to a space the moment editing ends). Normal single-line steps are visually unchanged.
+            whiteSpace: 'pre-wrap',
           }}
         >
           {item.text}
@@ -552,6 +572,7 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
   useEffect(() => {
     if (editingCues && cuesInputRef.current) {
       const el = cuesInputRef.current
+      autoGrow(el) // full-text height before focus (chunk 11 ②) — a long cue never clips/inner-scrolls
       el.focus()
       const len = el.value.length
       el.setSelectionRange(len, len)
@@ -718,6 +739,7 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
               defaultValue={cues}
               aria-label="Edit coach's cues"
               rows={2}
+              onInput={(e) => autoGrow(e.currentTarget)}
               onBlur={(e) => commitCues(e.currentTarget.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.currentTarget.blur() }
@@ -726,6 +748,7 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
               style={{
                 width: '100%',
                 resize: 'none',
+                overflow: 'hidden',
                 border: 'none',
                 borderBottom: '1px solid rgb(58,77,119)',
                 paddingBottom: 2,
@@ -746,7 +769,7 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
               onClick={() => { setMenuId(null); setEditingCues(true) }}
               // Invisible hit-slop → ≥44px tap height even for one-line cues; negative margin cancels
               // the padding so the callout keeps its authored layout — not a design value.
-              style={{ textAlign: 'left', border: 'none', background: 'transparent', padding: '12px 0', margin: '-12px 0', cursor: 'text', fontFamily: INTER, fontWeight: 400, fontStyle: 'italic', fontSize: 13.5, lineHeight: 1.5, color: TEXT }}
+              style={{ textAlign: 'left', border: 'none', background: 'transparent', padding: '12px 0', margin: '-12px 0', cursor: 'text', fontFamily: INTER, fontWeight: 400, fontStyle: 'italic', fontSize: 13.5, lineHeight: 1.5, color: TEXT, whiteSpace: 'pre-wrap' }}
             >
               {cues || 'Add a coaching cue…'}
             </button>

@@ -396,8 +396,13 @@ export default function PhotoViewer({ photos, index, onIndexChange, onMakeCover,
           onClick={close}
           style={{
             position: 'absolute',
-            top: 46,
-            right: 12,
+            // CHUNK 11 ③ (River, 2026-07-11 — "put the X in the proper spot / fix the bug"): the viewer
+            // is a full-screen fixed layer, so on a notched iPhone in Safari the old flat top:46/right:12
+            // collided with the status-bar/notch and the dynamic-island chrome. Respect the safe area:
+            // drop below the inset (a 12px breathing offset), never above the authored 46, and pull the
+            // right edge in past any landscape notch. 44px target preserved.
+            top: 'max(46px, calc(env(safe-area-inset-top, 0px) + 12px))',
+            right: 'max(12px, calc(env(safe-area-inset-right, 0px) + 12px))',
             width: 44,
             height: 44,
             border: 'none',
@@ -415,8 +420,9 @@ export default function PhotoViewer({ photos, index, onIndexChange, onMakeCover,
           </span>
         </button>
 
-        {/* bottom chrome — quiet "Make cover" + the D2 dots (the hero's exact dot language) */}
-        <div style={{ position: 'absolute', left: 0, right: 0, bottom: 42, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18, zIndex: 2, pointerEvents: 'none' }}>
+        {/* bottom chrome — quiet "Make cover" + the D2 dots (the hero's exact dot language). CHUNK 11 ③:
+            lift off the home indicator via safe-area-inset-bottom (same notched-device fix as the ✕). */}
+        <div style={{ position: 'absolute', left: 0, right: 0, bottom: 'max(42px, calc(env(safe-area-inset-bottom, 0px) + 24px))', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18, zIndex: 2, pointerEvents: 'none' }}>
           {!isCover && current && (
             <button
               type="button"

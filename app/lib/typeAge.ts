@@ -64,6 +64,9 @@ export function formatEyebrow(type: string, ages: string[]): string {
 }
 
 // Auto-monogram for a custom type: the first non-space character, uppercased.
+// CHUNK 11 ⑤ (2026-07-11): monogram letter-tiles were removed from the UI, so this currently has no
+// call site. Kept (exported) because the `component_types.monogram` column stays for back-compat and a
+// future re-introduction would want this exact helper — intentionally not deleted.
 export function monogramFor(name: string): string {
   const c = name.trim().charAt(0)
   return c ? c.toUpperCase() : '?'

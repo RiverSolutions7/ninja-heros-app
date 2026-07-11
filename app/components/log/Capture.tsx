@@ -16,7 +16,6 @@
 'use client'
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import PhotoActionMenu from '@/app/components/log-flow/PhotoActionMenu'
 import IdleDock from './IdleDock'
 import GracefulToast from './GracefulToast'
 import WhisperLozenge from './WhisperLozenge'
@@ -505,7 +504,6 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
   const heroTop = runMode ? 112 : 92
   const isLastStation = runMode && run.index + 1 >= run.total
   const [typing, setTyping] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
   // Chunk 10 (item ③): the hero now BROWSES — heroIndex is the photo the band shows (the D2 dots
   // track it); heroAspects holds each photo's natural aspect (the band resizes to the shown photo,
   // keeping the natural-band law per photo). viewerOpen = the full-screen viewer; recActive = the
@@ -917,7 +915,7 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
   // (the tap's job there is dismissing the keyboard), under the action menu, or during the save morph.
   const heroStripRef = useRef<HTMLDivElement | null>(null)
   const heroDrag = useRef<{ startX: number; startY: number; dx: number; captured: boolean; moved: boolean } | null>(null)
-  const heroTapAllowed = phase === 'capture' && !recActive && !typing && !menuOpen && !saving
+  const heroTapAllowed = phase === 'capture' && !recActive && !typing && !saving
   const setHeroStrip = useCallback((dxPx: number, animate: boolean, index: number) => {
     const el = heroStripRef.current
     if (!el) return
@@ -997,7 +995,7 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
         fontFamily: 'var(--font-inter), system-ui, sans-serif',
       }}
     >
-      <input ref={fileRef} type="file" accept="image/*" multiple onChange={handleFiles} style={{ display: 'none' }} />
+      <input ref={fileRef} type="file" accept="image/*,video/*" multiple onChange={handleFiles} style={{ display: 'none' }} />
 
       {showNotes && (
         <NotesDoc
@@ -1090,10 +1088,9 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
           </div>
           <button
             type="button"
-            onClick={() => { if (!locked) setMenuOpen(true) }}
+            onClick={() => { if (!locked) pickMedia() }}
             aria-label="Add the course photos"
             aria-disabled={locked}
-            aria-haspopup="menu"
             style={{
               width: 68,
               height: 68,
@@ -1254,16 +1251,6 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
             onNetworkError={() => setOffline(true)}
             devForceState={devForceState === '15a' || devForceState === '15b' ? devForceState : null}
             onRecActiveChange={setRecActive}
-          />
-
-          <PhotoActionMenu
-            visible={menuOpen}
-            onClose={() => setMenuOpen(false)}
-            onAddMedia={pickMedia}
-            onReorder={() => { /* PhotoSheet reorder — chunk 7 */ }}
-            onParsingSettings={() => { /* parsing settings — later */ }}
-            origin="center bottom"
-            style={{ left: 55, bottom: 160 }}
           />
         </>
       ))}

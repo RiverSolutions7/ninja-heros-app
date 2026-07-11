@@ -1,15 +1,18 @@
 // @design-locked — built from design-export/capture/frames/8g-type-age-sheet.html (the picker) +
 // 8h-add-type-form.html (the inline add-type mini-form). Every color/size/radius/opacity/padding here
 // is copied from those frames. Two authored surfaces share ONE sheet container:
-//   · 8g "main": TYPE pills (defaults text-only, no monogram) + "+ New type" · AGE GROUPS multi-select
-//     chips (selected = fill + bright inset ring + white text, NO ✓) + "+ Add" · "Done" (text-only,
-//     Inter 600 white, top-right).
-//   · 8h "addType": back ‹ + "New type" · a name field with a live monogram auto-tile (first letter,
-//     Inter 800, navy tile) · full-width "Add type". No plannable toggle (plannable defaults TRUE).
+//   · 8g "main": TYPE pills (ALL text-only — defaults AND customs) + "+ New type" · AGE GROUPS
+//     multi-select chips (selected = fill + bright inset ring + white text, NO ✓) + "+ Add" · "Done"
+//     (text-only, Inter 600 white, top-right).
+//   · 8h "addType": back ‹ + "New type" · a plain name field · full-width "Add type". No plannable
+//     toggle (plannable defaults TRUE).
+// CHUNK 11 (River, 2026-07-11, ⑤): the monogram letter-tile is DEAD — removed from the custom-type
+// pill AND the add-form field preview; the `monogram` DB column is no longer written (it stays for
+// back-compat). Custom types now render exactly like defaults.
 // UNAUTHORED, screen-local (flagged in the chunk report): (a) custom-type pills — no frame shows one;
-// rendered as a default pill with a small monogram tile prefix in the sheet's own tokens. (b) the
-// "add age group" mini-form — no frame; modeled on 8h minus the monogram (ages have none). (c) the D2
-// spring-settle arrival motion — named in the ledger, no rig in motion-dc.js; values flagged below.
+// rendered as a plain text pill, identical to a default. (b) the "add age group" mini-form — no frame;
+// modeled on 8h. (c) the D2 spring-settle arrival motion — named in the ledger, no rig in
+// motion-dc.js; values flagged below.
 //
 // FROSTED/FREEZE: the frame authors the sheet SOLID (background rgb(20,28,50), no backdrop-filter), so
 // there is nothing to freeze — the D2 settle animates transform/opacity ONLY, never a backdrop-filter.
@@ -22,7 +25,6 @@ import {
   FALLBACK_AGES,
   FALLBACK_TYPES,
   displayType,
-  monogramFor,
   type AgeOption,
   type TypeOption,
 } from '@/app/lib/typeAge'
@@ -69,33 +71,6 @@ function BackChevron() {
     <svg width="11" height="19" viewBox="0 0 10 17" fill="none" aria-hidden="true">
       <path d="M8.2 1.6 1.8 8.5l6.4 6.9" stroke="#ffffff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
-  )
-}
-
-// Small monogram tile for a CUSTOM type pill (unauthored — see header note). Scaled from 8h's 38px
-// field tile to fit inside a pill: 22px navy square, first letter Inter 800.
-function PillMonogram({ letter }: { letter: string }) {
-  return (
-    <span
-      aria-hidden="true"
-      style={{
-        width: 22,
-        height: 22,
-        borderRadius: 7,
-        background: 'rgb(20,28,50)',
-        boxShadow: 'rgba(255,255,255,0.06) 0px 1px 0px inset',
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flex: '0 0 auto',
-        fontFamily: INTER,
-        fontWeight: 800,
-        fontSize: 11,
-        color: 'rgb(231,238,250)',
-      }}
-    >
-      {letter}
-    </span>
   )
 }
 
@@ -295,13 +270,14 @@ export default function TypeAgeSheet({ open, type, ages, onDone }: TypeAgeSheetP
     // Already exists → just select it and return.
     const existing = types.find((t) => t.name === name)
     if (existing) { setWorkType(existing.name); setMode('main'); return }
-    const mono = monogramFor(name)
-    const row: TypeOption = { name, monogram: mono, is_default: false, sort_order: (types.at(-1)?.sort_order ?? 0) + 1 }
+    // River (2026-07-11, chunk 11 ⑤): monograms are dead — no letter-tile renders anywhere, so the
+    // `monogram` column is no longer written (lighter touch; the column itself stays for back-compat).
+    const row: TypeOption = { name, monogram: null, is_default: false, sort_order: (types.at(-1)?.sort_order ?? 0) + 1 }
     setBusy(true)
     try {
       const { error } = await supabase
         .from('component_types')
-        .insert({ name, monogram: mono, plannable: true, is_default: false, sort_order: row.sort_order })
+        .insert({ name, plannable: true, is_default: false, sort_order: row.sort_order })
       if (error) throw error
     } catch {
       // DB unreachable → keep the type in-memory so the flow proceeds (won't persist; flagged).
@@ -395,7 +371,6 @@ export default function TypeAgeSheet({ open, type, ages, onDone }: TypeAgeSheetP
             heading="New type"
             value={newTypeName}
             placeholder="Kata"
-            monogram
             inputRef={typeInputRef}
             busy={busy}
             submitLabel="Add type"
@@ -411,7 +386,6 @@ export default function TypeAgeSheet({ open, type, ages, onDone }: TypeAgeSheetP
             heading="New curriculum"
             value={newAgeName}
             placeholder="Competition Team"
-            monogram={false}
             inputRef={ageInputRef}
             busy={busy}
             submitLabel="Add curriculum"
@@ -528,7 +502,8 @@ function MainContent({
       <div role="radiogroup" aria-label="Type" style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
         {types.map((t) => {
           const sel = t.name === workType
-          const custom = !t.is_default && !!t.monogram
+          // River (2026-07-11, chunk 11 ⑤): custom types render as TEXT-ONLY pills, exactly like
+          // defaults — the monogram letter-tile is gone from the pill row.
           return (
             <button
               key={t.name}
@@ -540,9 +515,8 @@ function MainContent({
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: custom ? 8 : 0,
                 minHeight: 44,
-                padding: custom ? '8px 16px 8px 8px' : '10px 20px',
+                padding: '10px 20px',
                 borderRadius: 22,
                 border: 'none',
                 cursor: 'pointer',
@@ -555,7 +529,6 @@ function MainContent({
                 color: sel ? 'rgb(255,255,255)' : 'rgb(159,176,200)',
               }}
             >
-              {custom && <PillMonogram letter={t.monogram as string} />}
               {displayType(t.name)}
             </button>
           )
@@ -624,12 +597,13 @@ function MainContent({
   )
 }
 
-// ── 8h add-type mini-form (reused for add-age, sans monogram) ─────────────────────────────────────
+// ── 8h add-type mini-form (reused for add-age) ────────────────────────────────────────────────────
+// River (2026-07-11, chunk 11 ⑤): the live monogram letter-tile preview is gone — the field is just
+// the text input (monograms are dead everywhere).
 function AddForm({
   heading,
   value,
   placeholder,
-  monogram,
   inputRef,
   busy,
   submitLabel,
@@ -643,7 +617,6 @@ function AddForm({
   heading: string
   value: string
   placeholder: string
-  monogram: boolean
   inputRef: React.RefObject<HTMLInputElement>
   busy: boolean
   submitLabel: string
@@ -655,7 +628,6 @@ function AddForm({
   onHandleUp: (e: React.PointerEvent) => void
 }) {
   const canSubmit = value.trim().length > 0 && !busy
-  const letter = monogram ? monogramFor(value || placeholder) : ''
   return (
     <>
       <GrabHandle onDown={onHandleDown} onMove={onHandleMove} onUp={onHandleUp} />
@@ -673,27 +645,19 @@ function AddForm({
         <span style={{ fontFamily: INTER, fontWeight: 700, fontSize: 16, letterSpacing: '-0.2px', color: 'rgb(255,255,255)' }}>{heading}</span>
       </div>
 
-      {/* field (tpl456) — [monogram tile] + input */}
+      {/* field (tpl456) — text input only (monogram tile removed, chunk 11 ⑤) */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: 12,
           height: 50,
-          padding: monogram ? '0px 16px 0px 8px' : '0px 16px',
+          padding: '0px 16px',
           borderRadius: 14,
           background: 'rgb(14,20,38)',
           boxShadow: 'rgb(42,52,80) 0px 0px 0px 1px inset',
         }}
       >
-        {monogram && (
-          <div
-            aria-hidden="true"
-            style={{ width: 38, height: 38, borderRadius: 10, background: 'rgb(20,28,50)', boxShadow: 'rgba(255,255,255,0.06) 0px 1px 0px inset', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 auto' }}
-          >
-            <span style={{ fontFamily: INTER, fontWeight: 800, fontSize: 16, color: 'rgb(231,238,250)' }}>{letter}</span>
-          </div>
-        )}
         <input
           ref={inputRef}
           value={value}
