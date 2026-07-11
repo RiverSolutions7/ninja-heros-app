@@ -31,7 +31,13 @@
 // dnd's rect math matches what the eye sees, and the flex columns never rebalance mid-drag (transforms
 // don't relayout). Every computed value matches frame 8i: column width = (content − 10)/2 (columnGap
 // was 10 → the row's `gap:10`), tile gutter = each column's `gap:10`, r14 tiles, same aspects. Reorder
-// correctness still rides on onDragEnd's flat-array arrayMove. DIVERGENCE from the frame: the tiles
+// correctness still rides on onDragEnd's flat-array arrayMove. DOCUMENTED TRADE-OFF (polish audit):
+// the DOM now nests tiles per-column (even indices then odd), so raw Tab/VO order runs 1,3,5…2,4,6 —
+// accepted because (a) every tile's aria-label carries its TRUE position ("Photo 2 of 5, cover"), and
+// (b) keyboard reorder is unaffected (sortableKeyboardCoordinates picks targets by RECT geometry, not
+// DOM order), and (c) the old CSS-columns had the mirror-image mismatch (sequential DOM, column-major
+// visuals). A layout that fixes both needs JS absolute masonry — heavier than the cost it removes.
+// DIVERGENCE from the frame: the tiles
 // area scrolls (overflow-y:auto) when photos exceed the 548px panel — the frame's overflow:hidden is a
 // 3-photo snapshot; N photos need a scroll region.
 //
@@ -178,6 +184,11 @@ function Tile({
         cursor: 'grab',
         // no touchAction:'none' — the TouchSensor delay distinguishes long-press drag from a scroll,
         // so the tiles area can still scroll natively when photos overflow the panel.
+        // iOS long-press hygiene (chunk 10 polish): the 200ms drag hold must not surface the native
+        // image callout / selection — either would hijack the reorder mid-hold.
+        WebkitTouchCallout: 'none',
+        WebkitUserSelect: 'none',
+        userSelect: 'none',
         outline: 'none',
       }}
       {...attributes}

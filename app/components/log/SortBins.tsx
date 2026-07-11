@@ -102,6 +102,11 @@ function SourceTile({ photo, index, total, assigned }: { photo: Photo; index: nu
         boxShadow: 'rgba(255,255,255,0.1) 0px 0px 0px 1px inset',
         cursor: 'grab',
         touchAction: 'manipulation',
+        // iOS long-press hygiene (chunk 10 polish): the 200ms drag hold must not surface the native
+        // image callout / selection — either would hijack the drag mid-hold.
+        WebkitTouchCallout: 'none',
+        WebkitUserSelect: 'none',
+        userSelect: 'none',
         // keep the UA focus-visible ring — this div is a keyboard-draggable (dnd-kit tabIndex/role),
         // so a keyboard user must see which tile is selected before Space picks it up (WCAG 2.4.7).
         // the original tile fades while its overlay is lifted; assigned tiles rest dimmer.

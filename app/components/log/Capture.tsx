@@ -839,20 +839,23 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savePhase, saveMode])
 
-  // While saving, everything behind the celebrate layer is faded but still in the DOM — take it out of
-  // the tab order + accessibility tree (`inert`) so keyboard/VoiceOver users don't traverse invisible
-  // Back/Save/try-again/Review controls before reaching Share/Continue. Covers BOTH the morph chrome
-  // and the photo-state chrome (arrive path). The celebrate layer is exempt via its data marker.
+  // While saving OR while the full-screen photo viewer is up, everything behind the overlay layer is
+  // still in the DOM — take it out of the tab order + accessibility tree (`inert`) so keyboard/
+  // VoiceOver users don't traverse invisible Back/Save/try-again/Review/hero controls behind it.
+  // Covers the morph chrome, the photo-state chrome (arrive path), and the viewer (chunk 10 polish:
+  // the viewer is aria-modal, but the sibling chrome must ALSO be inert or VO can walk out of it).
+  // The celebrate + viewer layers are exempt via their data markers.
   useEffect(() => {
     const root = screenRef.current
     if (!root) return
+    const overlayUp = saving || viewerOpen
     const kids = Array.from(root.children) as HTMLElement[]
     kids.forEach((k) => {
-      if (k.hasAttribute('data-celebrate-layer')) return
-      if (saving) { k.setAttribute('inert', ''); k.setAttribute('aria-hidden', 'true') }
+      if (k.hasAttribute('data-celebrate-layer') || k.hasAttribute('data-viewer-layer')) return
+      if (overlayUp) { k.setAttribute('inert', ''); k.setAttribute('aria-hidden', 'true') }
       else { k.removeAttribute('inert'); k.removeAttribute('aria-hidden') }
     })
-  }, [saving])
+  }, [saving, viewerOpen])
 
   const handleRename = (next: string) => {
     userRenamedRef.current = true
@@ -926,7 +929,9 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
     setHeroStrip(0, true, Math.min(heroIndex, Math.max(0, photos.length - 1)))
   }, [heroIndex, photos.length, setHeroStrip])
   const heroDown = (e: React.PointerEvent) => {
-    if (photos.length === 0) return
+    // During a take the photo is not a control at all (polish #2): no tap AND no swipe-browse —
+    // the whole gesture surface is dead until the recording cycle ends.
+    if (photos.length === 0 || recActive) return
     heroDrag.current = { startX: e.clientX, startY: e.clientY, dx: 0, captured: false, moved: false }
   }
   const heroMove = (e: React.PointerEvent) => {
@@ -963,6 +968,14 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
     heroDrag.current = null
     setHeroStrip(0, true, heroIndex)
   }
+  // VoiceOver announce for hero browse (polish #4 — mirrors the viewer's live region). Populated only
+  // on a CHANGE (not mount) so arriving on the screen doesn't speak a stray "Photo 1 of N".
+  const [heroAnnounce, setHeroAnnounce] = useState('')
+  const heroAnnouncedOnce = useRef(false)
+  useEffect(() => {
+    if (!heroAnnouncedOnce.current) { heroAnnouncedOnce.current = true; return }
+    if (photos.length > 1) setHeroAnnounce(`Photo ${Math.min(heroIndex, photos.length - 1) + 1} of ${photos.length}`)
+  }, [heroIndex, photos.length])
 
   // 15c — the develop-error screen (a full-screen state that REPLACES the capture dock: the authored
   // failure card + a try-again/Save-to-library bar). The raw note is preserved; "Add the steps
@@ -1128,7 +1141,7 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
               else if (e.key === 'ArrowLeft') { e.preventDefault(); setHeroIndex((i) => Math.max(0, i - 1)) }
               else if (e.key === 'ArrowRight') { e.preventDefault(); setHeroIndex((i) => Math.min(photos.length - 1, i + 1)) }
             }}
-            style={{ position: 'absolute', inset: 0, touchAction: 'pan-y', cursor: heroTapAllowed ? 'zoom-in' : 'default', outline: 'none' }}
+            style={{ position: 'absolute', inset: 0, touchAction: 'pan-y', cursor: heroTapAllowed ? 'zoom-in' : 'default', outline: 'none', WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
           >
             <div ref={heroStripRef} style={{ display: 'flex', width: '100%', height: '100%' }}>
               {photos.map((p, i) => (
@@ -1151,6 +1164,10 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
           {/* bottom scrim */}
           <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 130, background: 'linear-gradient(rgba(8,12,26,0) 0%, rgba(8,12,26,0.62) 100%)', pointerEvents: 'none' }} />
 
+          {/* polite announce for the swipe-browse index (visually hidden) */}
+          <div role="status" aria-live="polite" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}>
+            {heroAnnounce}
+          </div>
           {/* D2 pill-progress dots (photo carousel position — track the swipe-browse index) */}
           <div style={{ position: 'absolute', left: 0, right: 0, bottom: 31, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 5, pointerEvents: 'none' }}>
             {photos.map((p, i) => (

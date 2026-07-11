@@ -353,6 +353,12 @@ function StepRow({
         // scroll (item ⑥). TouchSensor's long-press owns the reorder gesture; preventDefault stops any
         // residual scroll during the drag.
         touchAction: isDragging ? 'none' : undefined,
+        // iOS long-press hygiene (chunk 10 polish): the 220ms drag hold must not start a text
+        // selection / callout — either would hijack the reorder mid-hold. (Editing uses a real
+        // <input>, which keeps its own selection behavior.)
+        WebkitTouchCallout: 'none',
+        WebkitUserSelect: 'none',
+        userSelect: 'none',
         // Bystander rows (a menu is open on a DIFFERENT row) are dimmed AND inert — no tap-through to
         // their edit/⋯; the invoked row and any editing row stay live.
         pointerEvents: dimmed ? 'none' : undefined,

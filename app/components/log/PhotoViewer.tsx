@@ -153,12 +153,25 @@ export default function PhotoViewer({ photos, index, onIndexChange, onMakeCover,
     window.setTimeout(finish, dur + 120)
   }, [onClose])
 
-  // ── keyboard ────────────────────────────────────────────────────────────────────────────────────
+  // ── keyboard (Esc closes · arrows browse · Tab trapped inside the dialog) ──────────────────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { e.stopPropagation(); close() }
       else if (e.key === 'ArrowLeft') { e.preventDefault(); onIndexChange(clampIndex(indexRef.current - 1)) }
       else if (e.key === 'ArrowRight') { e.preventDefault(); onIndexChange(clampIndex(indexRef.current + 1)) }
+      else if (e.key === 'Tab') {
+        // Focus trap (mirrors PhotoSheet's): the viewer is modal — Tab cycles ✕ / Make cover only.
+        const root = rootRef.current
+        if (!root) return
+        const f = Array.from(root.querySelectorAll<HTMLElement>('button, [tabindex]:not([tabindex="-1"])'))
+          .filter((el) => !el.hasAttribute('disabled') && el.getClientRects().length > 0)
+        if (f.length === 0) { e.preventDefault(); return }
+        const first = f[0]
+        const last = f[f.length - 1]
+        const active = document.activeElement
+        if (e.shiftKey && (active === first || !root.contains(active))) { e.preventDefault(); last.focus() }
+        else if (!e.shiftKey && (active === last || !root.contains(active))) { e.preventDefault(); first.focus() }
+      }
     }
     document.addEventListener('keydown', onKey, true)
     return () => document.removeEventListener('keydown', onKey, true)
@@ -232,7 +245,11 @@ export default function PhotoViewer({ photos, index, onIndexChange, onMakeCover,
     }
 
     if (s.mode === 'none') {
-      s.mode = Math.abs(dx) > Math.abs(dy) ? 'swipe' : dy > 0 ? 'dismiss' : 'none'
+      // Direction lock needs a clear 1.5× axis bias (gesture hygiene): a mis-locked 'swipe' is
+      // harmless, but a mis-locked 'dismiss' CLOSES the viewer — an ambiguous diagonal stays
+      // unlocked until the intent is unambiguous.
+      if (Math.abs(dx) > Math.abs(dy) * 1.5) s.mode = 'swipe'
+      else if (dy > 0 && dy > Math.abs(dx) * 1.5) s.mode = 'dismiss'
     }
     if (s.mode === 'swipe') {
       // rubber-band at the ends
@@ -323,6 +340,7 @@ export default function PhotoViewer({ photos, index, onIndexChange, onMakeCover,
       aria-modal="true"
       aria-label={`Photo viewer — photo ${clampIndex(index) + 1} of ${n}`}
       tabIndex={-1}
+      data-viewer-layer=""
       style={{
         position: 'fixed',
         inset: 0,
@@ -341,7 +359,7 @@ export default function PhotoViewer({ photos, index, onIndexChange, onMakeCover,
           onPointerMove={onPointerMove}
           onPointerUp={settle}
           onPointerCancel={settle}
-          style={{ position: 'absolute', inset: 0, overflow: 'hidden', touchAction: 'none' }}
+          style={{ position: 'absolute', inset: 0, overflow: 'hidden', touchAction: 'none', WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
         >
           <div
             ref={stripRef}
