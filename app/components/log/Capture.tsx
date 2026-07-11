@@ -512,6 +512,9 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
   const [heroAspects, setHeroAspects] = useState<Record<string, number>>({})
   const [viewerOpen, setViewerOpen] = useState(false)
   const [recActive, setRecActive] = useState(false)
+  // CHUNK 11.5: true while the develop reveal cascade is playing — the developed card's photo is not a
+  // tap target until it settles (a mid-cascade viewer open would fight the deepening scrim / settle).
+  const [cascadeActive, setCascadeActive] = useState(false)
   const fileRef = useRef<HTMLInputElement | null>(null)
 
   const [phase, setPhase] = useState<Phase>('capture')
@@ -598,6 +601,15 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
   const bandAspect = clampBand(heroPhoto ? heroAspects[heroPhoto.id] : undefined)
   const coverBandAspect = clampBand(cover ? heroAspects[cover.id] : undefined)
 
+  // CHUNK 11.5: open the full-screen viewer at a given index (clamped). Shared with the hero: sets
+  // heroIndex so the viewer opens on the intended photo and the hero/card/band stay in sync on close.
+  // The developed card + notes band both open at the COVER (index 0 = what they display).
+  const openViewerAt = useCallback((i: number) => {
+    if (photos.length === 0) return
+    setHeroIndex(Math.max(0, Math.min(photos.length - 1, i)))
+    setViewerOpen(true)
+  }, [photos.length])
+
   const pickMedia = () => fileRef.current?.click()
   const handleFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? [])
@@ -627,7 +639,16 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
   useEffect(() => {
     if (phase !== 'developed') return
     dvStage(cascade)
-    dvReveal(cascade, prefersReduced())
+    const reduced = prefersReduced()
+    dvReveal(cascade, reduced)
+    // CHUNK 11.5: hold tap-to-view off the developed card until the cascade FULLY settles. The last
+    // cascade element (chips, i=5) starts at total*0.25 + 5*stagger and runs total*0.55, so the true
+    // finish is total*0.8 + 5*stagger (≈1277ms), NOT the raw DV.total — derive it so the guard matches
+    // its own promise. Reduced path = a single 250ms dvFade.
+    setCascadeActive(true)
+    const holdMs = reduced ? 300 : Math.round(DV.total * 0.8 + 5 * DV.stagger) + 80
+    const t = window.setTimeout(() => setCascadeActive(false), holdMs)
+    return () => window.clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])
 
@@ -1009,6 +1030,7 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
           // single-flow beginSave/Celebrate), same as the developed dock — else it desyncs the run.
           onSave={() => { if (runMode) run.onStationSave('structured', developed); else void beginSave('arrive', 'structured', developed) }}
           onEditTypeAge={onEditTypeAge}
+          onViewPhoto={cover ? () => openViewerAt(0) : undefined}
         />
       )}
 
@@ -1046,6 +1068,7 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
             data={developed ?? MOCK_DEVELOP}
             refs={cascade}
             onExpand={() => setExpanded(true)}
+            onViewPhoto={cover && !saving && !cascadeActive ? () => openViewerAt(0) : undefined}
             cardRef={cardRef}
             overlayRef={overlayRef}
             zIndex={saving ? 60 : 30}

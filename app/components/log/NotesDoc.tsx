@@ -61,6 +61,10 @@ export interface NotesDocProps {
   onSave: () => void
   /** Header chip tap → open the TypeAgeSheet (chunk 6). */
   onEditTypeAge?: () => void
+  /** CHUNK 11.5 (River ✎ note, 2026-07-11): tap the photo band → open the full-screen PhotoViewer at the
+   *  cover. Undefined = no photo (voice-only) → no tap layer. The header (back · type chip, zIndex 3)
+   *  paints above the band, so those controls keep their taps. */
+  onViewPhoto?: () => void
 }
 
 interface StepItem {
@@ -531,7 +535,7 @@ function Dock({ onTryAgain, onSave }: { onTryAgain: () => void; onSave: () => vo
 let notesSeq = 0
 const nextStepId = () => `st${(notesSeq++).toString(36)}`
 
-export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, onTryAgain, onSave, onEditTypeAge }: NotesDocProps) {
+export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, onTryAgain, onSave, onEditTypeAge, onViewPhoto }: NotesDocProps) {
   // NotesDoc owns step IDENTITY while mounted (dnd-kit needs stable ids across reorders). It re-inits
   // from flow state on mount (Capture unmounts it on collapse), and every mutation is pushed straight
   // up via emit() so flow state stays the single source of truth for chunk 5's save.
@@ -662,7 +666,21 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
             style={{ display: 'block', position: 'absolute', top: 0, left: 0, width: '100%', height: 236, objectFit: 'cover' }}
           />
         )}
-        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 110, background: 'linear-gradient(rgba(8,12,26,0) 0%, rgba(8,12,26,0.9) 100%)', pointerEvents: 'none' }} />
+        {/* CHUNK 11.5 — tap-to-view hit layer over the band. Below the bottom fade (pointerEvents:none)
+            and below the header (zIndex 3, painted later → wins the back/type-chip taps). */}
+        {photoUrl && onViewPhoto && (
+          <button
+            type="button"
+            onClick={onViewPhoto}
+            aria-label="View the full course photo"
+            style={{
+              position: 'absolute', inset: 0, width: '100%', height: 236,
+              border: 'none', background: 'transparent', padding: 0, margin: 0,
+              cursor: 'zoom-in', zIndex: 1, WebkitTapHighlightColor: 'transparent',
+            }}
+          />
+        )}
+        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 110, background: 'linear-gradient(rgba(8,12,26,0) 0%, rgba(8,12,26,0.9) 100%)', pointerEvents: 'none', zIndex: 2 }} />
       </div>
 
       {/* header — back · type/age chip (no Save; the dock owns the finish) */}

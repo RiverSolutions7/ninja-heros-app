@@ -46,6 +46,11 @@ export interface DevelopedCardProps {
   refs: DevelopCascadeRefs
   /** "Review & edit ›" — opens the notes doc (chunk 4). No-op stub until then. */
   onExpand: () => void
+  /** CHUNK 11.5 (River ✎ note, 2026-07-11): tap the photo area → open the full-screen PhotoViewer at
+   *  the cover. Undefined = tap-to-view disabled (no photo, OR the parent is mid-cascade / saving — the
+   *  photo is not a control then). When set, a transparent hit layer covers the card BELOW the text/CTA
+   *  overlay, so "Review & edit ›" and the skill chips still get their taps first. */
+  onViewPhoto?: () => void
   /** Root ref for chunk 5's geometry morph (card → library thumb). */
   cardRef?: RefObject<HTMLDivElement>
   /** Content-overlay ref (chunk 5): the save morph fades the text/scrim out as the card shrinks to a
@@ -75,7 +80,7 @@ function StepRow({ n, text, settleRef }: { n: number; text: string; settleRef: R
   )
 }
 
-export default function DevelopedCard({ photoUrl, eyebrow, data, refs, onExpand, cardRef, overlayRef, zIndex = 30, top = 92 }: DevelopedCardProps) {
+export default function DevelopedCard({ photoUrl, eyebrow, data, refs, onExpand, onViewPhoto, cardRef, overlayRef, zIndex = 30, top = 92 }: DevelopedCardProps) {
   const steps = data.setup_steps.slice(0, 2)
   const skills = data.skills.slice(0, 3)
 
@@ -101,7 +106,39 @@ export default function DevelopedCard({ photoUrl, eyebrow, data, refs, onExpand,
         <img
           src={photoUrl}
           alt="Obstacle course station"
-          style={{ display: 'block', position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+          style={{
+            display: 'block', position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover',
+            // CHUNK 11.5 — THE BLEND (River ✎ note, 2026-07-11: "should look like a nice blend on the
+            // component view card"). UNAUTHORED, all values FLAGGED for River's eyeball: a bottom-fading
+            // mask so the cover photo DISSOLVES into the card's own base fill (rgb(20,28,50), the authored
+            // no-photo edge fill) instead of reading as a hard cover-crop rectangle under the scrim. The
+            // authored deep-scrim (tpl239) then darkens that navy zone exactly as before — no new hues, no
+            // blur (freeze-rule safe). Cover geometry is KEPT (not object-fit:contain): the 374×374 box is
+            // authored and chunk 5's save morph animates it whole — a letterboxed contain would fight both.
+            // Tradeoff (flagged): the photo is still cover-cropped, so tap-to-view (contain, all angles) is
+            // how the WHOLE photo is seen. Fade window 60%→100% of the card height.
+            maskImage: 'linear-gradient(to bottom, #000 0%, #000 60%, rgba(0,0,0,0) 100%)',
+            WebkitMaskImage: 'linear-gradient(to bottom, #000 0%, #000 60%, rgba(0,0,0,0) 100%)',
+          }}
+        />
+      )}
+
+      {/* CHUNK 11.5 — tap-to-view hit layer. Covers the whole card but sits BELOW the overlay (which is
+          pointerEvents:none). Only the "Review & edit ›" button re-enables pointerEvents:auto, and it is
+          painted after this layer → it wins its own hit area. The skill chips are decorative (no onClick,
+          inherit pointerEvents:none), as are the title/steps — taps on any of those fall through to here
+          and open the viewer, which is fine. Rendered only when tap-to-view is enabled (photo present, not
+          mid-cascade, not saving) — a transparent layer, no visual delta. */}
+      {photoUrl && onViewPhoto && (
+        <button
+          type="button"
+          onClick={onViewPhoto}
+          aria-label="View the full course photo"
+          style={{
+            position: 'absolute', inset: 0, width: '100%', height: '100%',
+            border: 'none', background: 'transparent', padding: 0, margin: 0,
+            cursor: 'zoom-in', WebkitTapHighlightColor: 'transparent',
+          }}
         />
       )}
 
