@@ -373,7 +373,7 @@ function LogFlow() {
           title,
           curriculums: saveCurriculums,
           setupSteps: kind === 'structured' && card ? card.setup_steps : [],
-          cues: kind === 'structured' && card ? card.cues : '',
+          cues: kind === 'structured' && card ? (card.cues ?? '') : '', // null (deleted) saves as none
           skills: kind === 'structured' && card ? card.skills : [],
           equipment: kind === 'structured' && card ? card.equipment : [],
           durationMinutes: kind === 'structured' && card ? card.duration_minutes : null,

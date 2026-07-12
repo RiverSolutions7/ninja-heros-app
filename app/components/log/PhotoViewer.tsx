@@ -3,7 +3,8 @@
 // the flow's token language and FLAGGED for River's eyeball:
 //   · backdrop = near-black rgb(4,7,16) (the flow's scrim base, full opacity) — photo whole
 //     (object-fit contain) on black.
-//   · chrome = minimal: a 44px ✕ top-right (22px disc face, the PhotoSheet ✕ language, scaled up),
+//   · chrome = minimal: a 44px ✕ top-LEFT (30px disc face, the PhotoSheet ✕ language, scaled up;
+//     moved from top-right per River's chunk-12 ✎ note — iOS-Photos convention, off the clock cluster),
 //     the D2 pill-progress dots bottom-center (active 14×5 white pill / inactive 5px, EXACTLY the
 //     hero's dot language), and a quiet "Make cover" text-chip above the dots (Inter 600 12.5px,
 //     rgba(255,255,255,0.12) fill, r17, white text; hidden when the photo already IS the cover).
@@ -389,20 +390,21 @@ export default function PhotoViewer({ photos, index, onIndexChange, onMakeCover,
           {`Photo ${clampIndex(index) + 1} of ${n}${isCover ? ', cover' : ''}`}
         </div>
 
-        {/* ✕ — 44px target, 28px disc face (the PhotoSheet ✕ language, scaled for full-screen) */}
+        {/* ✕ — 44px target, 30px disc face (the PhotoSheet ✕ language, scaled for full-screen) */}
         <button
           type="button"
           aria-label="Close photo viewer"
           onClick={close}
           style={{
             position: 'absolute',
-            // CHUNK 11 ③ (River, 2026-07-11 — "put the X in the proper spot / fix the bug"): the viewer
-            // is a full-screen fixed layer, so on a notched iPhone in Safari the old flat top:46/right:12
-            // collided with the status-bar/notch and the dynamic-island chrome. Respect the safe area:
-            // drop below the inset (a 12px breathing offset), never above the authored 46, and pull the
-            // right edge in past any landscape notch. 44px target preserved.
+            // CHUNK 12 ⑥ (River ✎ note, 2026-07-12: "I don't think the X should be there — kind of
+            // looks like a bug"): moved TOP-LEFT (the iOS-Photos close convention), away from the
+            // clock/battery cluster the top-right spot visually collided with. Safe-area aware (chunk 11
+            // ③'s notch fix carried over): never above 46px, never inside the notch. UNAUTHORED values —
+            // flagged for River's eyeball. 44px target preserved; visible disc bumped 28→30px so the
+            // control reads deliberate in its new corner.
             top: 'max(46px, calc(env(safe-area-inset-top, 0px) + 12px))',
-            right: 'max(12px, calc(env(safe-area-inset-right, 0px) + 12px))',
+            left: 'max(16px, calc(env(safe-area-inset-left, 0px) + 12px))',
             width: 44,
             height: 44,
             border: 'none',
@@ -415,7 +417,7 @@ export default function PhotoViewer({ photos, index, onIndexChange, onMakeCover,
             zIndex: 2,
           }}
         >
-          <span style={{ width: 28, height: 28, borderRadius: 14, background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ width: 30, height: 30, borderRadius: 15, background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <CloseGlyph />
           </span>
         </button>

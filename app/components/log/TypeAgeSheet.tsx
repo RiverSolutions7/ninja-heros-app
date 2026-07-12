@@ -74,6 +74,117 @@ function BackChevron() {
   )
 }
 
+// PhotoSheet's tile-✕ glyph, verbatim (chunk 12 ②: the delete disc reuses that exact language).
+function CloseGlyph() {
+  return (
+    <svg width="9" height="9" viewBox="0 0 9 9" fill="none" aria-hidden="true">
+      <path d="M1.5 1.5l6 6M7.5 1.5l-6 6" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+// ── chunk 12 ② — the corner ✕ delete disc (PhotoSheet's tile-✕ language: 22px disc, rgba(4,7,16,0.55),
+// 44px hit area centered on the disc). Sits on the pill/chip's top-right corner; zIndex keeps its
+// hit-slop above the neighboring pills in the wrap grid.
+function DeleteDisc({ label, onTap }: { label: string; onTap: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={(e) => { e.stopPropagation(); onTap() }}
+      style={{
+        position: 'absolute',
+        top: -5,
+        right: -5,
+        width: 44,
+        height: 44,
+        margin: -11, // center the 22px disc under the 44px hit area (PhotoSheet's exact slop math)
+        border: 'none',
+        background: 'transparent',
+        padding: 0,
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 2,
+      }}
+    >
+      <span style={{ width: 22, height: 22, borderRadius: 11, background: 'rgba(4,7,16,0.55)', boxShadow: 'rgba(255,255,255,0.16) 0px 0px 0px 1px inset', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <CloseGlyph />
+      </span>
+    </button>
+  )
+}
+
+// Screen-local delete confirm (chunk 12 ②) — the flow's pinned tokens (Inter, screen-local surfaces),
+// mirroring Capture's DiscardConfirm a11y contract: focus lands on the SAFE action, Tab is trapped
+// between the two buttons, Escape cancels. The shared ConfirmSheet primitive stays rejected here for
+// the same reason as Capture's (old-app tokens: Russo One, accent-fire, Tailwind radii).
+function DeleteConfirm({ name, onDelete, onCancel }: { name: string; onDelete: () => void; onCancel: () => void }) {
+  const deleteRef = useRef<HTMLButtonElement | null>(null)
+  const cancelRef = useRef<HTMLButtonElement | null>(null)
+
+  useEffect(() => {
+    cancelRef.current?.focus()
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        onCancel()
+      } else if (e.key === 'Tab') {
+        const first = deleteRef.current
+        const last = cancelRef.current
+        if (!first || !last) return
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
+        else if (document.activeElement !== first && document.activeElement !== last) { e.preventDefault(); first.focus() }
+      }
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [onCancel])
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Delete ${name}?`}
+      onClick={onCancel}
+      style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'rgba(4,7,16,0.62)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: '100%', maxWidth: 390, margin: '0 12px 24px', background: 'rgb(20,28,50)', border: '1px solid rgb(42,52,80)', borderRadius: 20, padding: '22px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}
+      >
+        <span style={{ fontFamily: INTER, fontWeight: 700, fontSize: 17, color: 'rgb(255,255,255)', textAlign: 'center' }}>{`Delete ‘${name}’?`}</span>
+        <span style={{ fontFamily: INTER, fontWeight: 400, fontSize: 13.5, lineHeight: 1.5, color: 'rgb(159,176,200)', textAlign: 'center' }}>
+          Cards already using it keep their label.
+        </span>
+        <button
+          ref={deleteRef}
+          type="button"
+          onClick={onDelete}
+          className="transition-transform active:scale-[0.98]"
+          style={{ minHeight: 48, border: 'none', borderRadius: 14, background: 'rgb(255,90,31)', cursor: 'pointer', fontFamily: INTER, fontWeight: 700, fontSize: 15, color: 'rgb(255,255,255)' }}
+        >
+          Delete
+        </button>
+        <button
+          ref={cancelRef}
+          type="button"
+          onClick={onCancel}
+          className="transition-transform active:scale-[0.98]"
+          style={{ minHeight: 44, border: '1px solid rgb(42,52,80)', borderRadius: 14, background: 'transparent', cursor: 'pointer', fontFamily: INTER, fontWeight: 600, fontSize: 14, color: 'rgb(231,238,250)' }}
+        >
+          Keep it
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// What the ✕ is asking to delete (typed so the confirm + handler stay in one place).
+type PendingDelete = { kind: 'type'; name: string } | { kind: 'age'; ageGroup: string; label: string }
+
 export default function TypeAgeSheet({ open, type, ages, onDone }: TypeAgeSheetProps) {
   // Mount lifecycle: mount on open, keep mounted through the exit slide, then unmount.
   const [mounted, setMounted] = useState(false)
@@ -91,6 +202,10 @@ export default function TypeAgeSheet({ open, type, ages, onDone }: TypeAgeSheetP
   const [newTypeName, setNewTypeName] = useState('')
   const [newAgeName, setNewAgeName] = useState('')
   const [busy, setBusy] = useState(false)
+
+  // CHUNK 12 ② (River ✎ note, 2026-07-12: "no way to undo" an added type): the ✕ flow's pending
+  // confirm. null = no confirm up.
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null)
 
   const scrimRef = useRef<HTMLDivElement | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
@@ -134,6 +249,7 @@ export default function TypeAgeSheet({ open, type, ages, onDone }: TypeAgeSheetP
     setMode('main')
     setNewTypeName('')
     setNewAgeName('')
+    setPendingDelete(null)
     restoreFocus.current = (document.activeElement as HTMLElement) ?? null
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
@@ -207,6 +323,7 @@ export default function TypeAgeSheet({ open, type, ages, onDone }: TypeAgeSheetP
     if (!mounted) return
     const onKey = (e: KeyboardEvent) => {
       if (!open) return // during the exit animation the sheet is still mounted — don't act on keys
+      if (pendingDelete) return // the delete confirm owns Escape/Tab while it's up (its own trap)
       if (e.key === 'Escape') {
         e.stopPropagation()
         if (mode === 'main') commit()
@@ -228,7 +345,7 @@ export default function TypeAgeSheet({ open, type, ages, onDone }: TypeAgeSheetP
     }
     document.addEventListener('keydown', onKey, true)
     return () => document.removeEventListener('keydown', onKey, true)
-  }, [mounted, open, mode, commit])
+  }, [mounted, open, mode, commit, pendingDelete])
 
   // ── swipe-down dismiss on the grab handle ─────────────────────────────────────────────────────
   const onHandleDown = (e: React.PointerEvent) => {
@@ -316,6 +433,37 @@ export default function TypeAgeSheet({ open, type, ages, onDone }: TypeAgeSheetP
     setWorkAges((prev) => (prev.includes(ag) ? prev.filter((x) => x !== ag) : [...prev, ag]))
   }
 
+  // ── chunk 12 ② — confirmed delete ───────────────────────────────────────────────────────────────
+  // Local removal is immediate (mirrors the add flow's offline tolerance: the list is responsive even
+  // if the DB is unreachable — an unpersisted delete resurrects next launch, same tradeoff as an
+  // unpersisted add). Selection falls back sensibly: type → 'station'; ages → dropped from selection.
+  const performDelete = useCallback(async (pd: PendingDelete) => {
+    setPendingDelete(null)
+    dialogRef.current?.focus() // the confirm had focus; hand it back to the sheet
+    if (pd.kind === 'type') {
+      setTypes((prev) => prev.filter((t) => t.name !== pd.name))
+      setWorkType((cur) => (cur === pd.name ? 'station' : cur))
+      try {
+        // Belt: is_default=false in the WHERE clause so a default row can never be deleted even if a
+        // stale ✕ somehow targets one (the UI never renders ✕ on defaults).
+        const { error } = await supabase.from('component_types').delete().eq('name', pd.name).eq('is_default', false)
+        if (error) throw error
+      } catch { /* DB unreachable — the removal stays local this session (flagged in the report) */ }
+    } else {
+      setAgeOpts((prev) => prev.filter((a) => a.age_group !== pd.ageGroup))
+      setWorkAges((prev) => prev.filter((x) => x !== pd.ageGroup))
+      try {
+        const { error } = await supabase.from('curriculums').delete().eq('age_group', pd.ageGroup)
+        if (error) throw error
+      } catch { /* same tolerance */ }
+    }
+  }, [])
+
+  const cancelDelete = useCallback(() => {
+    setPendingDelete(null)
+    dialogRef.current?.focus()
+  }, [])
+
   if (!mounted) return null
 
   return (
@@ -361,6 +509,8 @@ export default function TypeAgeSheet({ open, type, ages, onDone }: TypeAgeSheetP
             onToggleAge={toggleAge}
             onNewType={() => setMode('addType')}
             onNewAge={() => setMode('addAge')}
+            onDeleteType={(name) => setPendingDelete({ kind: 'type', name })}
+            onDeleteAge={(ageGroup, label) => setPendingDelete({ kind: 'age', ageGroup, label })}
             onDone={commit}
             onHandleDown={onHandleDown}
             onHandleMove={onHandleMove}
@@ -398,6 +548,15 @@ export default function TypeAgeSheet({ open, type, ages, onDone }: TypeAgeSheetP
           />
         )}
       </div>
+
+      {/* chunk 12 ② — the delete confirm covers the whole sheet (scrim + panel) while up */}
+      {pendingDelete && (
+        <DeleteConfirm
+          name={pendingDelete.kind === 'type' ? displayType(pendingDelete.name) : pendingDelete.label}
+          onDelete={() => void performDelete(pendingDelete)}
+          onCancel={cancelDelete}
+        />
+      )}
     </div>
   )
 }
@@ -451,6 +610,8 @@ function MainContent({
   onToggleAge,
   onNewType,
   onNewAge,
+  onDeleteType,
+  onDeleteAge,
   onDone,
   onHandleDown,
   onHandleMove,
@@ -464,6 +625,8 @@ function MainContent({
   onToggleAge: (ag: string) => void
   onNewType: () => void
   onNewAge: () => void
+  onDeleteType: (name: string) => void
+  onDeleteAge: (ageGroup: string, label: string) => void
   onDone: () => void
   onHandleDown: (e: React.PointerEvent) => void
   onHandleMove: (e: React.PointerEvent) => void
@@ -504,33 +667,37 @@ function MainContent({
           const sel = t.name === workType
           // River (2026-07-11, chunk 11 ⑤): custom types render as TEXT-ONLY pills, exactly like
           // defaults — the monogram letter-tile is gone from the pill row.
+          // CHUNK 12 ②: custom (is_default=false) pills carry the corner ✕ delete disc; defaults NEVER
+          // show it. The wrapper span only hosts the absolutely-positioned disc — zero layout delta.
           return (
-            <button
-              key={t.name}
-              type="button"
-              role="radio"
-              aria-checked={sel}
-              onClick={() => onPickType(t.name)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                minHeight: 44,
-                padding: '10px 20px',
-                borderRadius: 22,
-                border: 'none',
-                cursor: 'pointer',
-                // selected: fill rgb(33,44,76) + inset ring rgb(58,70,102). unselected: no fill, no ring.
-                background: sel ? 'rgb(33,44,76)' : 'transparent',
-                boxShadow: sel ? 'rgb(58,70,102) 0px 0px 0px 1px inset' : 'none',
-                fontFamily: INTER,
-                fontWeight: 600,
-                fontSize: 15,
-                color: sel ? 'rgb(255,255,255)' : 'rgb(159,176,200)',
-              }}
-            >
-              {displayType(t.name)}
-            </button>
+            <span key={t.name} style={{ position: 'relative', display: 'inline-flex' }}>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={sel}
+                onClick={() => onPickType(t.name)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minHeight: 44,
+                  padding: '10px 20px',
+                  borderRadius: 22,
+                  border: 'none',
+                  cursor: 'pointer',
+                  // selected: fill rgb(33,44,76) + inset ring rgb(58,70,102). unselected: no fill, no ring.
+                  background: sel ? 'rgb(33,44,76)' : 'transparent',
+                  boxShadow: sel ? 'rgb(58,70,102) 0px 0px 0px 1px inset' : 'none',
+                  fontFamily: INTER,
+                  fontWeight: 600,
+                  fontSize: 15,
+                  color: sel ? 'rgb(255,255,255)' : 'rgb(159,176,200)',
+                }}
+              >
+                {displayType(t.name)}
+              </button>
+              {!t.is_default && <DeleteDisc label={`Delete the ${displayType(t.name)} type`} onTap={() => onDeleteType(t.name)} />}
+            </span>
           )
         })}
       </div>
@@ -551,34 +718,39 @@ function MainContent({
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
         {ageOpts.map((a) => {
           const sel = workAges.includes(a.age_group)
+          // CHUNK 12 ② NOTE: curriculums has NO default marker column (002 seeded Mini/Junior without
+          // one), so EVERY chip is deletable — including the seeded pair. Flagged in the chunk report;
+          // a future is_default column slots straight into this condition.
           return (
-            <button
-              key={a.age_group}
-              type="button"
-              role="checkbox"
-              aria-checked={sel}
-              aria-label={a.label}
-              onClick={() => onToggleAge(a.age_group)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                minHeight: 44,
-                padding: '8px 16px',
-                borderRadius: 19,
-                border: 'none',
-                cursor: 'pointer',
-                // selected: fill rgb(34,48,78) + bright inset ring rgb(58,77,119). unselected: dim ring only.
-                background: sel ? 'rgb(34,48,78)' : 'transparent',
-                boxShadow: sel ? 'rgb(58,77,119) 0px 0px 0px 1px inset' : 'rgb(42,52,80) 0px 0px 0px 1px inset',
-                fontFamily: INTER,
-                fontWeight: 600,
-                fontSize: 13.5,
-                color: sel ? 'rgb(255,255,255)' : 'rgb(159,176,200)',
-              }}
-            >
-              {a.label}
-            </button>
+            <span key={a.age_group} style={{ position: 'relative', display: 'inline-flex' }}>
+              <button
+                type="button"
+                role="checkbox"
+                aria-checked={sel}
+                aria-label={a.label}
+                onClick={() => onToggleAge(a.age_group)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minHeight: 44,
+                  padding: '8px 16px',
+                  borderRadius: 19,
+                  border: 'none',
+                  cursor: 'pointer',
+                  // selected: fill rgb(34,48,78) + bright inset ring rgb(58,77,119). unselected: dim ring only.
+                  background: sel ? 'rgb(34,48,78)' : 'transparent',
+                  boxShadow: sel ? 'rgb(58,77,119) 0px 0px 0px 1px inset' : 'rgb(42,52,80) 0px 0px 0px 1px inset',
+                  fontFamily: INTER,
+                  fontWeight: 600,
+                  fontSize: 13.5,
+                  color: sel ? 'rgb(255,255,255)' : 'rgb(159,176,200)',
+                }}
+              >
+                {a.label}
+              </button>
+              <DeleteDisc label={`Delete the ${a.label} curriculum`} onTap={() => onDeleteAge(a.age_group, a.label)} />
+            </span>
           )
         })}
         {/* "+ Add" (tpl429) */}

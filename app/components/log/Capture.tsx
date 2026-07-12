@@ -773,7 +773,7 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
           title: seed,
           curriculums: saveCurriculums,
           setupSteps: kind === 'structured' && card ? card.setup_steps : [],
-          cues: kind === 'structured' && card ? card.cues : '',
+          cues: kind === 'structured' && card ? (card.cues ?? '') : '', // null (deleted) saves as none
           skills: kind === 'structured' && card ? card.skills : [],
           equipment: kind === 'structured' && card ? card.equipment : [],
           durationMinutes: kind === 'structured' && card ? card.duration_minutes : null,
@@ -854,7 +854,17 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
     }
     msApplyGeom(card, end) // land exactly on the slot; WAAPI fill:forwards holds it
     const anim = card.animate(kf, { duration: 390, easing: 'linear', fill: 'forwards' })
-    anim.onfinish = () => setSavePhase('done')
+    // CHUNK 12 ⑤ (robustness, PhotoViewer's exact belt): WAAPI finish events ride the rendering-frame
+    // update loop, so a throttled/stalled pipeline (backgrounded tab, an iOS compositor stall) never
+    // fires onfinish — savePhase would wedge at 'run' and the celebrate would sit visible but INERT
+    // (staged pointerEvents:none — Share/Continue/rename dead). Reproduced empirically in chunk 12's
+    // preview (playState 'running', currentTime pinned at 0). The timer belt lands the handoff either
+    // way; inline end-geometry is already applied, so a late-playing animation changes nothing.
+    let done = false
+    const finish = () => { if (!done) { done = true; setSavePhase('done') } }
+    anim.onfinish = finish
+    const belt = window.setTimeout(finish, 390 + 180)
+    return () => window.clearTimeout(belt)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savePhase, saveMode])
 
@@ -884,13 +894,16 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
   }
 
   const handleShare = () => {
-    void shareCard({
-      title: celebTitle,
-      eyebrow,
-      photoUrl: photos[0]?.url ?? '',
-      setupSteps: developed?.setup_steps ?? [],
-      cues: developed?.cues ?? '',
-    })
+    void shareCard(
+      {
+        title: celebTitle,
+        eyebrow,
+        photoUrl: photos[0]?.url ?? '',
+        setupSteps: developed?.setup_steps ?? [],
+        cues: developed?.cues ?? '',
+      },
+      developed?.skills ?? [], // chunk 12 ①: the rebuilt share card draws the skills pills if room
+    )
   }
 
   const handleContinue = () => {
@@ -1069,6 +1082,9 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
             refs={cascade}
             onExpand={() => setExpanded(true)}
             onViewPhoto={cover && !saving && !cascadeActive ? () => openViewerAt(0) : undefined}
+            // CHUNK 12 ⑤: the 11.5 blend mask must not ride the morphing card (iOS re-raster hazard +
+            // a corrupted landed thumb) — dropped for the whole save, restored at rest.
+            blend={!saving}
             cardRef={cardRef}
             overlayRef={overlayRef}
             zIndex={saving ? 60 : 30}

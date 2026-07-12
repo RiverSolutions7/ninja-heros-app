@@ -18,7 +18,7 @@
 // polish-audit: flag only a11y / tap-targets / state / motion / bugs — not the design values.
 'use client'
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import {
   DndContext,
@@ -101,41 +101,29 @@ function TypeChevron() {
   )
 }
 
-// Custom line glyphs for the menu rows (per the chunk-4 menu spec: trailing merge symbol · trash,
-// trash red like its label). Not authored in the sliced frame — see report note.
-function MergeGlyph({ color }: { color: string }) {
-  return (
-    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M4 2.5v2.2c0 1.6 1.5 2.3 4 4.1M12 2.5v2.2c0 1.6-1.5 2.3-4 4.1" stroke={color} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M8 8.8v4.7M6 11.6 8 13.6l2-2" stroke={color} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
-function TrashGlyph({ color }: { color: string }) {
-  return (
-    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M3 4.3h10M6.3 4.3V3.2c0-.5.4-.9.9-.9h1.6c.5 0 .9.4.9.9v1.1M4.4 4.3l.6 8.1c0 .6.5 1.1 1.1 1.1h3.8c.6 0 1.1-.5 1.1-1.1l.6-8.1M6.7 6.7v4.4M9.3 6.7v4.4" stroke={color} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
 // ── anchored M3 menu (frosted, STATIC blur; scales in from the ⋯) ──────────────────────────────────
-function StepRowMenu({
-  stepIndex,
-  isLast,
+// CHUNK 12 ③ (River ✎ note, 2026-07-12: "just delete the logo next to delete and the merge"): the
+// rows are TEXT-ONLY — the trailing merge/trash glyphs are gone (the original frame was text-only).
+// Geometry/hairline/frost unchanged. Generalized to an item list so the cues callout (chunk 12 ④)
+// reuses the exact same surface with a single "Delete" row.
+interface AnchoredMenuItem {
+  label: string
+  danger?: boolean
+  disabled?: boolean
+  onSelect: () => void
+}
+
+function AnchoredMenu({
+  ariaLabel,
+  items,
   triggerRef,
-  onMerge,
-  onDelete,
   onClose,
 }: {
-  stepIndex: number
-  isLast: boolean
+  ariaLabel: string
+  items: AnchoredMenuItem[]
   /** The invoking ⋯ button — excluded from outside-close (so a second tap toggles it shut via the
    *  button's own handler, not a reopen race) and refocused when the menu closes. */
   triggerRef: RefObject<HTMLButtonElement>
-  onMerge: () => void
-  onDelete: () => void
   onClose: () => void
 }) {
   const ref = useRef<HTMLDivElement | null>(null)
@@ -219,8 +207,7 @@ function StepRowMenu({
   const rowStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
+    justifyContent: 'flex-start',
     height: 44,
     padding: '0px 16px',
     width: '100%',
@@ -230,6 +217,7 @@ function StepRowMenu({
     fontFamily: INTER,
     fontWeight: 600,
     fontSize: 14,
+    textAlign: 'left',
   }
 
   // PORTALED to document.body (chunk 10 item ⑥): the doc body is now a SCROLL container and its
@@ -240,7 +228,7 @@ function StepRowMenu({
     <div
       ref={ref}
       role="menu"
-      aria-label={`Step ${stepIndex + 1} options`}
+      aria-label={ariaLabel}
       onPointerDown={(e) => e.stopPropagation()}
       style={{
         position: 'fixed',
@@ -259,27 +247,29 @@ function StepRowMenu({
         zIndex: 400,
       }}
     >
-      <button
-        ref={firstItemRef}
-        type="button"
-        role="menuitem"
-        aria-disabled={isLast}
-        onClick={() => { if (!isLast) onMerge() }}
-        style={{ ...rowStyle, color: isLast ? 'rgba(242,245,251,0.35)' : 'rgb(242,245,251)', cursor: isLast ? 'default' : 'pointer' }}
-      >
-        <span>Merge with next</span>
-        <MergeGlyph color={isLast ? 'rgba(159,176,200,0.35)' : 'rgb(159,176,200)'} />
-      </button>
-      <div style={{ height: 1, background: 'rgba(255,255,255,0.1)' }} />
-      <button
-        type="button"
-        role="menuitem"
-        onClick={onDelete}
-        style={{ ...rowStyle, color: 'rgb(255,107,106)' }}
-      >
-        <span>Delete</span>
-        <TrashGlyph color="rgb(255,107,106)" />
-      </button>
+      {items.map((item, i) => (
+        <Fragment key={item.label}>
+          {i > 0 && <div style={{ height: 1, background: 'rgba(255,255,255,0.1)' }} />}
+          <button
+            ref={i === 0 ? firstItemRef : undefined}
+            type="button"
+            role="menuitem"
+            aria-disabled={item.disabled}
+            onClick={() => { if (!item.disabled) item.onSelect() }}
+            style={{
+              ...rowStyle,
+              color: item.disabled
+                ? 'rgba(242,245,251,0.35)'
+                : item.danger
+                  ? 'rgb(255,107,106)'
+                  : 'rgb(242,245,251)',
+              cursor: item.disabled ? 'default' : 'pointer',
+            }}
+          >
+            <span>{item.label}</span>
+          </button>
+        </Fragment>
+      ))}
     </div>,
     document.body,
   )
@@ -473,12 +463,13 @@ function StepRow({
       </button>
 
       {menuOpen && (
-        <StepRowMenu
-          stepIndex={index}
-          isLast={isLast}
+        <AnchoredMenu
+          ariaLabel={`Step ${index + 1} options`}
           triggerRef={optionsRef}
-          onMerge={onMerge}
-          onDelete={onDelete}
+          items={[
+            { label: 'Merge with next', disabled: isLast, onSelect: onMerge },
+            { label: 'Delete', danger: true, onSelect: onDelete },
+          ]}
           onClose={onCloseMenu}
         />
       )}
@@ -540,16 +531,20 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
   // from flow state on mount (Capture unmounts it on collapse), and every mutation is pushed straight
   // up via emit() so flow state stays the single source of truth for chunk 5's save.
   const [items, setItems] = useState<StepItem[]>(() => data.setup_steps.map((text) => ({ id: nextStepId(), text })))
-  const [cues, setCues] = useState(data.cues)
+  // CHUNK 12 ④: cues is nullable — null = DELETED (callout gone, saves as no cues). '' still means
+  // "none written yet" (the placeholder callout keeps its add affordance for a cue-less develop).
+  const [cues, setCues] = useState<string | null>(data.cues)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingCues, setEditingCues] = useState(false)
   const [menuId, setMenuId] = useState<string | null>(null)
+  const [cuesMenuOpen, setCuesMenuOpen] = useState(false)
 
   const bodyRef = useRef<HTMLDivElement | null>(null)
   const cuesInputRef = useRef<HTMLTextAreaElement | null>(null)
+  const cuesOptionsRef = useRef<HTMLButtonElement | null>(null)
 
   const emit = useCallback(
-    (nextItems: StepItem[], nextCues: string) => {
+    (nextItems: StepItem[], nextCues: string | null) => {
       onChange({ ...data, setup_steps: nextItems.map((i) => i.text), cues: nextCues })
     },
     [onChange, data],
@@ -634,15 +629,25 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
     if (editingId === id) setEditingId(null)
   }
 
+  // CHUNK 12 ④ (River ✎ note, 2026-07-12: "some form of delete option for the coach tips"): an inline
+  // edit committed EMPTY now DELETES the cues (was: empty = unchanged). Steps are unaffected — their
+  // empty commit still means unchanged (deleting a step stays the menu's job).
   const commitCues = (raw: string) => {
     const t = raw.trim()
-    const nextCues = t.length ? t : cues // empty commit = unchanged
+    const nextCues = t.length ? t : null // empty commit = delete the callout
     setCues(nextCues)
     emit(items, nextCues)
     setEditingCues(false)
   }
 
-  const menuActive = menuId !== null
+  const deleteCues = () => {
+    setCues(null)
+    emit(items, null)
+    setCuesMenuOpen(false)
+    setEditingCues(false)
+  }
+
+  const menuActive = menuId !== null || cuesMenuOpen
 
   return (
     <div
@@ -736,9 +741,9 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
                   menuOpen={menuId === item.id}
                   menuActive={menuActive}
                   dimmed={menuActive && menuId !== item.id}
-                  onStartEdit={() => { setMenuId(null); setEditingId(item.id) }}
+                  onStartEdit={() => { setMenuId(null); setCuesMenuOpen(false); setEditingId(item.id) }}
                   onCommit={(text) => commitStep(item.id, text)}
-                  onOpenMenu={() => { setEditingId(null); setMenuId(item.id) }}
+                  onOpenMenu={() => { setEditingId(null); setCuesMenuOpen(false); setMenuId(item.id) }}
                   onCloseMenu={() => setMenuId(null)}
                   onMerge={() => mergeStep(item.id)}
                   onDelete={() => deleteStep(item.id)}
@@ -748,20 +753,61 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
           </DndContext>
         </div>
 
-        {/* Coach's cues — warm callout, editable inline the same way */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '16px 18px', borderRadius: 14, background: 'rgb(20,28,50)', border: '1px solid rgb(42,52,80)', opacity: menuActive ? 0.5 : 1, transition: 'opacity 150ms ease' }}>
+        {/* Coach's cues — warm callout, editable inline the same way. CHUNK 12 ④: gains the same quiet
+            ⋯ → anchored menu (single red "Delete"); deleted (null) = the callout is GONE. The invoked
+            callout stays bright while its own menu is open (only a STEP menu dims it). */}
+        {(cues !== null || editingCues) && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '16px 18px', borderRadius: 14, background: 'rgb(20,28,50)', border: '1px solid rgb(42,52,80)', opacity: menuId !== null ? 0.5 : 1, transition: 'opacity 150ms ease', pointerEvents: menuId !== null ? 'none' : undefined }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div role="heading" aria-level={2} style={{ fontFamily: INTER, fontWeight: 700, fontSize: 10, letterSpacing: '1.8px', textTransform: 'uppercase', color: 'rgb(255,171,125)' }}>Coach&rsquo;s cues</div>
+            <button
+              ref={cuesOptionsRef}
+              type="button"
+              aria-label="Coach's cues options"
+              aria-haspopup="menu"
+              aria-expanded={cuesMenuOpen}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); if (cuesMenuOpen) setCuesMenuOpen(false); else { setMenuId(null); setEditingCues(false); setCuesMenuOpen(true) } }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minWidth: 44,
+                minHeight: 44,
+                // hit-slop: cancel the callout's own padding so the visible ⋯ sits in the authored
+                // top-right corner while the target stays ≥44px. Not a design value.
+                margin: '-16px -18px -16px 0',
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                fontSize: 17,
+                lineHeight: 1,
+                letterSpacing: '1px',
+                color: cuesMenuOpen ? TEXT : 'rgb(143,160,189)',
+              }}
+            >
+              <span aria-hidden="true">⋯</span>
+            </button>
+            {cuesMenuOpen && (
+              <AnchoredMenu
+                ariaLabel="Coach's cues options"
+                triggerRef={cuesOptionsRef}
+                items={[{ label: 'Delete', danger: true, onSelect: deleteCues }]}
+                onClose={() => setCuesMenuOpen(false)}
+              />
+            )}
+          </div>
           {editingCues ? (
             <textarea
               ref={cuesInputRef}
-              defaultValue={cues}
+              defaultValue={cues ?? ''}
               aria-label="Edit coach's cues"
               rows={2}
               onInput={(e) => autoGrow(e.currentTarget)}
               onBlur={(e) => commitCues(e.currentTarget.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.currentTarget.blur() }
-                else if (e.key === 'Escape') { e.preventDefault(); commitCues(cues) }
+                else if (e.key === 'Escape') { e.preventDefault(); setEditingCues(false) }
               }}
               style={{
                 width: '100%',
@@ -784,7 +830,7 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
           ) : (
             <button
               type="button"
-              onClick={() => { setMenuId(null); setEditingCues(true) }}
+              onClick={() => { setMenuId(null); setCuesMenuOpen(false); setEditingCues(true) }}
               // Invisible hit-slop → ≥44px tap height even for one-line cues; negative margin cancels
               // the padding so the callout keeps its authored layout — not a design value.
               style={{ textAlign: 'left', border: 'none', background: 'transparent', padding: '12px 0', margin: '-12px 0', cursor: 'text', fontFamily: INTER, fontWeight: 400, fontStyle: 'italic', fontSize: 13.5, lineHeight: 1.5, color: TEXT, whiteSpace: 'pre-wrap' }}
@@ -793,6 +839,7 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
             </button>
           )}
         </div>
+        )}
 
         {/* skills micro-pill footer */}
         {data.skills.length > 0 && (

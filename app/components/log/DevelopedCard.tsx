@@ -19,7 +19,9 @@ import type { RefObject } from 'react'
 export interface DevelopResult {
   title: string
   setup_steps: string[]
-  cues: string
+  /** CHUNK 12 ④: null = the coach DELETED the cues (callout gone; saves as no cues). '' = the develop
+   *  parse found none (the notes doc still offers the add placeholder). */
+  cues: string | null
   skills: string[]
   equipment: string[]
   duration_minutes: number | null
@@ -51,6 +53,13 @@ export interface DevelopedCardProps {
    *  photo is not a control then). When set, a transparent hit layer covers the card BELOW the text/CTA
    *  overlay, so "Review & edit ›" and the skill chips still get their taps first. */
   onViewPhoto?: () => void
+  /** CHUNK 12 ⑤ (save-morph regression): the 11.5 photo blend must NOT ride the morphing card — a
+   *  masked img inside an overflow-hidden card whose geometry is being animated is an iOS re-raster
+   *  hazard (photo drops out → a navy card morphing over the navy celebrate backdrop = the grow morph
+   *  reads as gone), and even where it paints, the landed 96×64 thumb keeps a navy-dissolved bottom
+   *  instead of the chunk-5 clean photo thumb. Capture passes false while saving; default true keeps
+   *  River's at-rest blend exactly as chunk 11.5 shipped it. */
+  blend?: boolean
   /** Root ref for chunk 5's geometry morph (card → library thumb). */
   cardRef?: RefObject<HTMLDivElement>
   /** Content-overlay ref (chunk 5): the save morph fades the text/scrim out as the card shrinks to a
@@ -80,7 +89,7 @@ function StepRow({ n, text, settleRef }: { n: number; text: string; settleRef: R
   )
 }
 
-export default function DevelopedCard({ photoUrl, eyebrow, data, refs, onExpand, onViewPhoto, cardRef, overlayRef, zIndex = 30, top = 92 }: DevelopedCardProps) {
+export default function DevelopedCard({ photoUrl, eyebrow, data, refs, onExpand, onViewPhoto, blend = true, cardRef, overlayRef, zIndex = 30, top = 92 }: DevelopedCardProps) {
   const steps = data.setup_steps.slice(0, 2)
   const skills = data.skills.slice(0, 3)
 
@@ -117,8 +126,15 @@ export default function DevelopedCard({ photoUrl, eyebrow, data, refs, onExpand,
             // authored and chunk 5's save morph animates it whole — a letterboxed contain would fight both.
             // Tradeoff (flagged): the photo is still cover-cropped, so tap-to-view (contain, all angles) is
             // how the WHOLE photo is seen. Fade window 60%→100% of the card height.
-            maskImage: 'linear-gradient(to bottom, #000 0%, #000 60%, rgba(0,0,0,0) 100%)',
-            WebkitMaskImage: 'linear-gradient(to bottom, #000 0%, #000 60%, rgba(0,0,0,0) 100%)',
+            // CHUNK 12 ⑤: the mask is DROPPED while the card is the save-morph star (blend=false) — see
+            // the `blend` prop note. React removes it in the same commit the morph's layout effect starts,
+            // so the shrinking card is the clean, unmasked cover for every morph frame + the landing.
+            ...(blend
+              ? {
+                  maskImage: 'linear-gradient(to bottom, #000 0%, #000 60%, rgba(0,0,0,0) 100%)',
+                  WebkitMaskImage: 'linear-gradient(to bottom, #000 0%, #000 60%, rgba(0,0,0,0) 100%)',
+                }
+              : null),
           }}
         />
       )}
