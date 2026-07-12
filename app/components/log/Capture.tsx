@@ -326,9 +326,21 @@ function prefersReduced() {
 }
 
 // ── save morph — ports motion-dc.js onSaveTap (the grow-morph of the DevelopedCard into the celebrate
-// thumb slot + the celebrate beats). Baked spring: 390ms, ζ=0.591, ωn=6.6, sampled to 33 WAAPI
-// keyframes; shadow 24px/60px/0.55 → 4px/10px/0. The real app is not transform-scaled (unlike the dev
-// harness), so geometry is in literal px (scale = 1). Nothing here animates over a backdrop-filter.
+// thumb slot + the celebrate beats). Baked spring: 390ms, ζ=0.591, ωn=6.6, sampled to 33 keyframes;
+// shadow 24px/60px/0.55 → 4px/10px/0.
+//
+// CHUNK 14 ① (River ✎ device-note, 2026-07-12 — "What happened to the micro animation where it shifted
+// into a card…?"): the morph is now expressed with the FLIP technique so it survives iOS. The export
+// (and chunks 5/12) animated LAYOUT props (left/top/width/height) — that runs on the MAIN thread, and
+// iOS WebKit starves/skips a layout animation under the save-beat load (photo settle + chrome fades +
+// celebrate beats all in the same beat). Because the end geometry is applied inline as the landing
+// guarantee, a skipped animation = an instant teleport into the celebrate = exactly River's symptom
+// (lands on a working celebrate, no visible card flight). So the trajectory now rides `transform`
+// (translate + scale — GPU-composited, immune to main-thread starvation), recomputed from THE SAME 33
+// spring samples so the visual path matches the baked spring exactly. border-radius + box-shadow ride a
+// SEPARATE paint animation (mixing a paint prop into the transform keyframes would demote the whole
+// animation to the main thread — the very starvation we escape). Nothing here animates over a
+// backdrop-filter. The FLIP keyframe math + the flagged photo tradeoff are documented at the call site.
 interface Geom { left: number; top: number; w: number; h: number; r: number }
 const MS_START: Geom = { left: 8, top: 92, w: 374, h: 374, r: 20 }
 
@@ -337,8 +349,13 @@ function msSpring(t: number): number {
   const zeta = 0.591, wn = 6.6, wd = wn * Math.sqrt(1 - zeta * zeta)
   return 1 - Math.exp(-zeta * wn * t) * (Math.cos(wd * t) + ((zeta * wn) / wd) * Math.sin(wd * t))
 }
+// Authored drop-shadow at progress p (24/60/0.55 → 4/10/0). Returned as parts so the FLIP path can
+// counter-scale the offset/blur (a shadow on a transform-scaled box would otherwise blow up ~5×).
+function msShadowVals(p: number): { oy: number; bl: number; a: number } {
+  return { oy: 24 + (4 - 24) * p, bl: 60 + (10 - 60) * p, a: Math.max(0, 0.55 + (0 - 0.55) * p) }
+}
 function msShadowStr(p: number): string {
-  const oy = 24 + (4 - 24) * p, bl = 60 + (10 - 60) * p, a = Math.max(0, 0.55 + (0 - 0.55) * p)
+  const { oy, bl, a } = msShadowVals(p)
   return `0 ${oy.toFixed(1)}px ${bl.toFixed(1)}px rgba(0,0,0,${a.toFixed(3)})`
 }
 function msApplyGeom(card: HTMLElement, g: Geom) {
@@ -651,6 +668,10 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
   // reveal keyframes start at opacity 0 so there's no flash, and rAF is suspended in a backgrounded tab.
   useEffect(() => {
     if (phase !== 'developed') return
+    // CHUNK 14 ① — promote the card to its own compositor layer BEFORE the Save tap, so the FLIP
+    // morph's transform is already GPU-composited on its very first frame (no promotion hitch mid-
+    // flight). Cleared when the morph finishes; the card unmounts on Continue/back either way.
+    if (cardRef.current) cardRef.current.style.willChange = 'transform'
     dvStage(cascade)
     const reduced = prefersReduced()
     dvReveal(cascade, reduced)
@@ -844,8 +865,11 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
     const end = msTargetGeom(slot, screen)
 
     if (reduced) {
+      // Reduced motion = no flight: place the card in the slot instantly + quick celebrate fades. Drop
+      // the rest-promotion hint (set in the developed effect) since no transform animation runs here.
       msFadeOut(chromeEls)
       msApplyGeom(card, end)
+      card.style.willChange = 'auto'
       msRunCelebReduced(celebRefs)
       const t = window.setTimeout(() => setSavePhase('done'), 300)
       return () => window.clearTimeout(t)
@@ -853,28 +877,62 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
 
     msFadeOut(chromeEls)
     msRunCeleb(celebRefs)
-    const N = 32, kf: Keyframe[] = []
+
+    // ── CHUNK 14 ① — GPU-safe FLIP grow-morph (see the header note for the iOS-starvation why). ──
+    // The card is LAID OUT at the end slot immediately (msApplyGeom below — the landing guarantee,
+    // kept from chunk 5), then `transform` carries it from the start box to identity. transform-origin
+    // is the card's top-left, so with the card's border-box top-left at (end.left, end.top):
+    //   rendered top-left = (end.left + tx, end.top + ty)   rendered size = (end.w·sx, end.h·sy)
+    // Setting rendered == the lerped geometry G(p) = lerp(start, end, p) gives, per spring sample p:
+    //   tx(p) = (start.left − end.left)(1 − p)     sx(p) = lerp(start.w, end.w, p) / end.w
+    //   ty(p) = (start.top  − end.top )(1 − p)     sy(p) = lerp(start.h, end.h, p) / end.h
+    // p=0 → the 374² start box at {8,92}; p=1 → identity == the 96×64 slot (seamless handoff to the
+    // Celebrate thumb). The scale is NON-UNIFORM (square card → 3:2 slot), so a paint track carries the
+    // radius + shadow COUNTER-SCALED to cancel that distortion: radius uses the elliptical `x / y`
+    // syntax (R/sx per axis → a true R×R circular corner after the scale, tracking the authored 20→10);
+    // the shadow divides its y-offset by sy and its blur by the mean scale. Kept OFF the transform
+    // keyframes so the transform stays compositor-composited; if this paint track starves, the transform
+    // still flies the card (no teleport) and the inline landing values (msApplyGeom) hold.
+    // FLAGGED for River's device eyeball: the cover PHOTO is object-fit:cover on the 96×64 layout box
+    // scaled up, so mid-flight it carries the slot's 3:2 crop stretched toward square, converging to the
+    // correct crop as it lands — inherent to FLIP on a cover image; the alternative (layout animation) is
+    // the thing that went invisible. The overlay text's squish is masked by msFadeOut's 150ms crossfade.
+    const N = 32
+    const tKf: Keyframe[] = []
+    const pKf: Keyframe[] = []
     for (let i = 0; i <= N; i++) {
       const p = msSpring(i / N)
-      kf.push({
-        left: MS_START.left + (end.left - MS_START.left) * p + 'px',
-        top: MS_START.top + (end.top - MS_START.top) * p + 'px',
-        width: MS_START.w + (end.w - MS_START.w) * p + 'px',
-        height: MS_START.h + (end.h - MS_START.h) * p + 'px',
-        borderRadius: MS_START.r + (end.r - MS_START.r) * p + 'px',
-        boxShadow: msShadowStr(Math.min(1, p)),
+      const gw = MS_START.w + (end.w - MS_START.w) * p
+      const gh = MS_START.h + (end.h - MS_START.h) * p
+      const sx = gw / end.w
+      const sy = gh / end.h
+      const tx = (MS_START.left - end.left) * (1 - p)
+      const ty = (MS_START.top - end.top) * (1 - p)
+      tKf.push({ transform: `translate(${tx.toFixed(3)}px, ${ty.toFixed(3)}px) scale(${sx.toFixed(5)}, ${sy.toFixed(5)})` })
+      const rad = MS_START.r + (end.r - MS_START.r) * p // authored visual radius 20→10
+      const savg = (sx + sy) / 2
+      const sh = msShadowVals(Math.min(1, p))
+      pKf.push({
+        borderRadius: `${(rad / sx).toFixed(3)}px / ${(rad / sy).toFixed(3)}px`,
+        boxShadow: `0px ${(sh.oy / sy).toFixed(2)}px ${(sh.bl / savg).toFixed(2)}px rgba(0,0,0,${sh.a.toFixed(3)})`,
       })
     }
-    msApplyGeom(card, end) // land exactly on the slot; WAAPI fill:forwards holds it
-    const anim = card.animate(kf, { duration: 390, easing: 'linear', fill: 'forwards' })
-    // CHUNK 12 ⑤ (robustness, PhotoViewer's exact belt): WAAPI finish events ride the rendering-frame
-    // update loop, so a throttled/stalled pipeline (backgrounded tab, an iOS compositor stall) never
-    // fires onfinish — savePhase would wedge at 'run' and the celebrate would sit visible but INERT
-    // (staged pointerEvents:none — Share/Continue/rename dead). Reproduced empirically in chunk 12's
-    // preview (playState 'running', currentTime pinned at 0). The timer belt lands the handoff either
-    // way; inline end-geometry is already applied, so a late-playing animation changes nothing.
+    // Land the LAYOUT on the slot immediately (FLIP guarantee: a starved transform leaves the card
+    // sitting exactly in the slot, never mid-air), then pin the p=0 transform inline so the very first
+    // paint is already the full-size start box (no 1-frame flash of the tiny slot before the anim ticks).
+    msApplyGeom(card, end)
+    card.style.transformOrigin = '0 0'
+    card.style.transform = `translate(${(MS_START.left - end.left).toFixed(3)}px, ${(MS_START.top - end.top).toFixed(3)}px) scale(${(MS_START.w / end.w).toFixed(5)}, ${(MS_START.h / end.h).toFixed(5)})`
+    card.style.willChange = 'transform'
+    const anim = card.animate(tKf, { duration: 390, easing: 'linear', fill: 'forwards' })
+    card.animate(pKf, { duration: 390, easing: 'linear', fill: 'forwards' })
+    // CHUNK 12 ⑤ (robustness, PhotoViewer's exact belt — KEPT): WAAPI finish events ride the
+    // rendering-frame update loop, so a throttled/stalled pipeline never fires onfinish — savePhase would
+    // wedge at 'run' and the celebrate would sit visible but INERT (staged pointerEvents:none —
+    // Share/Continue/rename dead). The timer belt lands the handoff either way; inline end-geometry is
+    // already applied, so a late-playing animation changes nothing. Also drops will-change on finish.
     let done = false
-    const finish = () => { if (!done) { done = true; setSavePhase('done') } }
+    const finish = () => { if (!done) { done = true; card.style.willChange = 'auto'; setSavePhase('done') } }
     anim.onfinish = finish
     const belt = window.setTimeout(finish, 390 + 180)
     return () => window.clearTimeout(belt)
@@ -962,7 +1020,14 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
   // (the tap's job there is dismissing the keyboard), under the action menu, or during the save morph.
   const heroStripRef = useRef<HTMLDivElement | null>(null)
   const heroDrag = useRef<{ startX: number; startY: number; dx: number; captured: boolean; moved: boolean } | null>(null)
+  // Viewer-tap opens a full-screen modal — wrong to pop that mid-take (chunk 10), so it stays gated off
+  // during a recording (recActive), while typing, mid-parse, and during the save morph.
   const heroTapAllowed = phase === 'capture' && !recActive && !typing && !saving
+  // CHUNK 14 ② (River ✎, 2026-07-12: "when I'm using the microphone, see if I can swipe on the pictures
+  // while talking"): swipe-to-browse the angles stays LIVE during a take — a coach flips angles while
+  // describing them. Browsing (swipe + arrow keys + focusability) is allowed whenever there are 2+
+  // photos in the editable capture, INCLUDING while recording; only the viewer-tap is suppressed above.
+  const heroBrowsable = phase === 'capture' && !typing && !saving && photos.length > 1
   const setHeroStrip = useCallback((dxPx: number, animate: boolean, index: number) => {
     const el = heroStripRef.current
     if (!el) return
@@ -974,9 +1039,12 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
     setHeroStrip(0, true, Math.min(heroIndex, Math.max(0, photos.length - 1)))
   }, [heroIndex, photos.length, setHeroStrip])
   const heroDown = (e: React.PointerEvent) => {
-    // During a take the photo is not a control at all (polish #2): no tap AND no swipe-browse —
-    // the whole gesture surface is dead until the recording cycle ends.
-    if (photos.length === 0 || recActive) return
+    // CHUNK 14 ② — a take no longer freezes the gesture surface (was: `|| recActive` here). The swipe
+    // strip stays live so the coach can flip angles mid-sentence; only the viewer-tap is suppressed
+    // (heroUp gates it on heroTapAllowed, which excludes recActive). The gesture never touches the
+    // recording rig: the waveform + timer live in IdleDock (rAF, pointer-independent), and this pointer
+    // is captured to the hero strip alone, so a swipe can't cancel or steal the take.
+    if (photos.length === 0) return
     heroDrag.current = { startX: e.clientX, startY: e.clientY, dx: 0, captured: false, moved: false }
   }
   const heroMove = (e: React.PointerEvent) => {
@@ -1179,16 +1247,24 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
         >
           <div
             role="button"
-            tabIndex={heroTapAllowed ? 0 : -1}
-            aria-label={`Course photo ${Math.min(heroIndex, photos.length - 1) + 1} of ${photos.length}.${heroTapAllowed ? ' View full screen.' : ''}${photos.length > 1 ? ' Swipe to browse.' : ''}`}
+            // Focusable when the viewer-tap is live OR when browsing is (2+ photos, incl. during a take)
+            // so keyboard/VO users get the arrow-key browse mid-record too. The aria-label already keeps
+            // its "Swipe to browse." clause while recording (it's gated on the count, not the tap).
+            tabIndex={heroTapAllowed || heroBrowsable ? 0 : -1}
+            // The "Swipe to browse." clause tracks heroBrowsable (not the raw count) so it stays true
+            // during a take but drops while typing/saving — the label never promises an unavailable swipe.
+            aria-label={`Course photo ${Math.min(heroIndex, photos.length - 1) + 1} of ${photos.length}.${heroTapAllowed ? ' View full screen.' : ''}${heroBrowsable ? ' Swipe to browse.' : ''}`}
             onPointerDown={heroDown}
             onPointerMove={heroMove}
             onPointerUp={heroUp}
             onPointerCancel={heroCancel}
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (heroTapAllowed) setViewerOpen(true) }
-              else if (e.key === 'ArrowLeft') { e.preventDefault(); setHeroIndex((i) => Math.max(0, i - 1)) }
-              else if (e.key === 'ArrowRight') { e.preventDefault(); setHeroIndex((i) => Math.min(photos.length - 1, i + 1)) }
+              // Arrow browse is gated on heroBrowsable too (defense-in-depth): a tabIndex flip to -1 does
+              // not blur a focused element, so without this a retained focus could still browse mid-
+              // typing/saving. Live during a take (heroBrowsable stays true) — the ② intent.
+              else if (e.key === 'ArrowLeft' && heroBrowsable) { e.preventDefault(); setHeroIndex((i) => Math.max(0, i - 1)) }
+              else if (e.key === 'ArrowRight' && heroBrowsable) { e.preventDefault(); setHeroIndex((i) => Math.min(photos.length - 1, i + 1)) }
             }}
             style={{ position: 'absolute', inset: 0, touchAction: 'pan-y', cursor: heroTapAllowed ? 'zoom-in' : 'default', outline: 'none', WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
           >
