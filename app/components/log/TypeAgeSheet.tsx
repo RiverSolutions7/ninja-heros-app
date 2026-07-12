@@ -94,18 +94,21 @@ function DeleteDisc({ label, onTap }: { label: string; onTap: () => void }) {
       onClick={(e) => { e.stopPropagation(); onTap() }}
       style={{
         position: 'absolute',
-        top: -5,
-        right: -5,
+        // 44px target BIASED DOWN-LEFT (polish-audit chunk 12 #3): a centered box overreached ~16px
+        // past the pill's top/right edge — more than the wrap grid's 10px gap — so on a wrapped row it
+        // stole taps from the pill above. The box now tops out 8px above the pill (inside the gap);
+        // the disc's VISIBLE spot is unchanged (its top-right corner still sits at −5,−5 via padding).
+        top: -8,
+        right: -8,
         width: 44,
         height: 44,
-        margin: -11, // center the 22px disc under the 44px hit area (PhotoSheet's exact slop math)
         border: 'none',
         background: 'transparent',
-        padding: 0,
+        padding: '3px 3px 0 0',
         cursor: 'pointer',
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        alignItems: 'flex-start',
+        justifyContent: 'flex-end',
         zIndex: 2,
       }}
     >

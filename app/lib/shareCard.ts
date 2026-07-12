@@ -154,11 +154,14 @@ function layoutHeight(l: Layout): number {
   return h
 }
 
-// Reduce until the content fits the fixed 4:5 canvas: drop skills → clamp cues → clamp long steps →
-// drop cues → drop trailing steps. Every card ends up drawable; nothing ever overflows the panel.
+// Reduce until the content fits the fixed 4:5 canvas: clamp a runaway title → drop skills → clamp
+// cues → clamp long steps → drop cues → drop trailing steps. Every card ends up drawable; nothing
+// ever overflows the panel. (The title clamp exists because the celebrate rename input has no
+// maxLength — polish-audit chunk 12: a pathological title alone must not blow the invariant.)
 function fit(l: Layout): Layout {
   const avail = H - CONTENT_TOP - BOTTOM_PAD
   const over = () => layoutHeight(l) > avail
+  if (over() && l.titleLines.length > 3) l.titleLines = clampLines(l.titleLines, 3)
   if (over() && l.showSkills) l.showSkills = false
   if (over() && l.cuesLines.length > 2) l.cuesLines = clampLines(l.cuesLines, 2)
   if (over()) l.steps = l.steps.map((s) => ({ ...s, lines: clampLines(s.lines, 2) }))
