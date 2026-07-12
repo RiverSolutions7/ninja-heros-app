@@ -406,11 +406,34 @@ function LogFlow() {
   )
 
   // Back ‹ mid-run (confirmed) → exit the run, return to the normal capture with the original photos
-  // intact. Earlier stations stay saved as library rows (forward-only). Note reset.
+  // intact. Earlier stations stay saved as library rows (forward-only). Note reset. Only reached when
+  // NO station is saved yet (bailing on station 1) — the plain leave-confirm's path.
   const exitRun = useCallback(() => {
     setRun(null)
     setSorting(false)
     setNote('')
+  }, [])
+
+  // Chunk 13 ① — graceful early exit: end the run NOW keeping every already-saved station. Flipping
+  // `done` drops the current (unsaved) draft — Capture unmounts, its develop state goes with it — and
+  // renders the celebrate for the saved cards (plural at 2+, singular at 1). Only offered when ≥1
+  // station is saved (Capture gates it on run.savedCount), so the celebrate always has ≥1 card.
+  const finishRunEarly = useCallback(() => {
+    setRun((r) => (r && !r.done ? { ...r, done: true, saving: false, saveError: false } : r))
+  }, [])
+
+  // Rename on the SINGULAR early-finish celebrate (exactly one saved station). Persists to the saved
+  // row and updates the card title so the celebrate's title prop (derived from the card) stays in sync.
+  // The plural celebrate offers no rename (parity with 13b), so this only ever touches the lone card.
+  const renameFinishedStation = useCallback((next: string) => {
+    setRun((r) => {
+      if (!r) return r
+      const idx = r.stations.findIndex((s) => s.card)
+      if (idx < 0) return r
+      const st = r.stations[idx]
+      if (st.savedRowId) updateComponentTitle(st.savedRowId, next).catch((e) => console.warn('[run] rename failed', e))
+      return { ...r, stations: r.stations.map((s, i) => (i === idx && s.card ? { ...s, card: { ...s.card, title: next } } : s)) }
+    })
   }, [])
 
   // Continue on the plural celebrate → reset the WHOLE flow (revoke every owned URL, fresh empty
@@ -477,16 +500,39 @@ function LogFlow() {
     ? runStation.photoIds.map((id) => photoById.get(id)).filter((p): p is Photo => !!p)
     : photos
   const captureRun: CaptureRun | null = runStation && run
-    ? { index: run.current, total: run.stations.length, saving: run.saving, saveError: run.saveError, onStationSave: saveStation }
+    ? {
+        index: run.current,
+        total: run.stations.length,
+        saving: run.saving,
+        saveError: run.saveError,
+        onStationSave: saveStation,
+        // Forward-only ⇒ every station before `current` is saved with a card. Count cards for robustness.
+        savedCount: run.stations.filter((s) => s.card !== null).length,
+        onFinishRun: finishRunEarly,
+      }
     : null
 
   // Plural celebrate (13b) — every station saved. Page-owned (the single-card grow-morph is skipped in
   // run mode: a morph has one target, the plural screen has N cards). Arrives as its own screen.
   if (run?.done) {
     const cards = run.stations.map((s) => s.card).filter((c): c is CelebrateCard => !!c)
+    // 1 saved station (early-finish with a single save) → the SINGULAR settled celebrate ("Logged.
+    // Forever." + that card's thumb/title, rename live); 2+ → the plural stacked celebrate (13b, no
+    // rename). Both reuse the same Celebrate component + the run's Continue/Share.
+    const single = cards.length === 1 ? cards[0] : null
     return (
       <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgb(8,12,26)', overflow: 'hidden', fontFamily: 'var(--font-inter), system-ui, sans-serif' }}>
-        <Celebrate eyebrow={eyebrow} title="" photoUrl="" cards={cards} onShare={handleRunShare} onContinue={continueAfterRun} onRename={() => {}} />
+        <Celebrate
+          eyebrow={single ? single.eyebrow : eyebrow}
+          title={single ? single.title : ''}
+          photoUrl={single ? single.photoUrl : ''}
+          staged={false}
+          showThumbPhoto
+          cards={single ? undefined : cards}
+          onShare={handleRunShare}
+          onContinue={continueAfterRun}
+          onRename={single ? renameFinishedStation : () => {}}
+        />
       </div>
     )
   }

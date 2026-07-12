@@ -92,6 +92,13 @@ export interface CaptureRun {
    *  photos only). page.tsx runs the pipeline, ticks the segment, swaps to the next station (or shows
    *  the plural celebrate on the last). */
   onStationSave: (kind: 'structured' | 'photo', card: DevelopResult | null) => void
+  /** How many stations are ALREADY saved (forward-only ⇒ stations 1…savedCount). Drives the graceful
+   *  early-exit confirm (chunk 13 ①): ≥1 → "Finish with N stations" (end the run now, celebrate the
+   *  saved ones); 0 → the plain leave-confirm (nothing to finish with). */
+  savedCount: number
+  /** End the run NOW, keeping the already-saved stations: discards only the current draft and jumps to
+   *  the plural/singular celebrate for the saved cards. page.tsx owns it (flips run.done). */
+  onFinishRun: () => void
 }
 
 // Fallback eyebrow — used only if the parent hasn't wired the live one. NEVER shows duration.
@@ -182,12 +189,18 @@ function DiscardConfirm({
   title = 'Discard this draft?',
   body = 'Your note and the structured card won’t be saved.',
   confirmLabel = 'Discard',
+  cancelLabel = 'Keep editing',
+  ariaTitle,
 }: {
   onDiscard: () => void
   onCancel: () => void
   title?: string
   body?: string
   confirmLabel?: string
+  cancelLabel?: string
+  /** Accessible name for the dialog when the visible title carries typography a screen reader may
+   *  mis-speak (e.g. a "1–N" en-dash range). Defaults to `title`. */
+  ariaTitle?: string
 }) {
   const discardRef = useRef<HTMLButtonElement | null>(null)
   const cancelRef = useRef<HTMLButtonElement | null>(null)
@@ -223,7 +236,7 @@ function DiscardConfirm({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={title}
+      aria-label={ariaTitle ?? title}
       onClick={onCancel}
       style={{ position: 'absolute', inset: 0, zIndex: 60, background: 'rgba(8,12,26,0.72)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
     >
@@ -249,7 +262,7 @@ function DiscardConfirm({
           className="transition-transform active:scale-[0.98]"
           style={{ minHeight: 44, border: '1px solid rgb(42,52,80)', borderRadius: 14, background: 'transparent', cursor: 'pointer', fontFamily: INTER, fontWeight: 600, fontSize: 14, color: 'rgb(231,238,250)' }}
         >
-          Keep editing
+          {cancelLabel}
         </button>
       </div>
     </div>
@@ -1219,14 +1232,17 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
             ))}
           </div>
 
-          {/* frosted stack-count chip (2+ photos) — static blur. ONE tap opens the PhotoSheet in BOTH
-              modes (chunk 10 item ⑤ — River's gate-B fix: the chip was a dead static indicator mid-run;
-              now the /log route scopes the sheet to the CURRENT station's photos in run mode). */}
-          {photos.length >= 2 && (
+          {/* frosted stack-count chip — static blur. ONE tap opens the PhotoSheet in BOTH modes (chunk
+              10 item ⑤). CHUNK 13 ②: mid-run the chip appears at ≥1 photo (not ≥2). River hit a dead end
+              on a 1-photo station — the only in-Capture add affordances were the 0-photo empty button and
+              the 2+ chip, so a single-photo station could never reach the tray's "+". The single flow
+              keeps ≥2 (unchanged — a latent 1-photo gap there is flagged, not touched). The tray's "+"
+              adds station-scoped (route → addStationPhotos: new files join the global pool + this station). */}
+          {photos.length >= (runMode ? 1 : 2) && (
             <button
               type="button"
               onClick={() => { if (!locked) onManagePhotos?.() }}
-              aria-label={runMode ? `Manage this station's ${photos.length} photos` : `Manage ${photos.length} photos`}
+              aria-label={runMode ? `Manage this station's ${photos.length} ${photos.length === 1 ? 'photo' : 'photos'}` : `Manage ${photos.length} photos`}
               aria-disabled={locked}
               aria-haspopup="dialog"
               className="transition-transform active:scale-[0.96]"
@@ -1420,17 +1436,32 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
       )}
 
       {confirmDiscard && (
-        <DiscardConfirm
-          onDiscard={() => { abortDevelop(); setConfirmDiscard(false); onBack() }}
-          onCancel={() => setConfirmDiscard(false)}
-          {...(runMode
-            ? {
-                title: 'Leave this station?',
-                body: run.index > 0 ? 'Only this station’s draft is lost — your saved stations stay in your library.' : 'This station’s draft is lost.',
-                confirmLabel: 'Leave',
-              }
-            : {})}
-        />
+        runMode && run.savedCount >= 1 ? (
+          // Chunk 13 ① — the honest early-exit choice. Station data already persists per-station, so a
+          // mid-run bail with ≥1 saved station isn't "lose everything": it FINISHES the run with what's
+          // saved. Primary = end now + celebrate the saved stations; cancel = keep logging. Copy strings
+          // UNAUTHORED (no export frame covers this confirm) — flagged for River.
+          <DiscardConfirm
+            onDiscard={() => { abortDevelop(); setConfirmDiscard(false); run.onFinishRun() }}
+            onCancel={() => setConfirmDiscard(false)}
+            title={run.savedCount === 1 ? 'Station 1 is saved' : `Stations 1–${run.savedCount} are saved`}
+            // Spoken name uses "to" not the en dash so screen readers read the range, not "1 dash N".
+            ariaTitle={run.savedCount === 1 ? 'Station 1 is saved' : `Stations 1 to ${run.savedCount} are saved`}
+            body="Only this station’s draft will be discarded."
+            confirmLabel={run.savedCount === 1 ? 'Finish with 1 station' : `Finish with ${run.savedCount} stations`}
+            cancelLabel="Keep logging"
+          />
+        ) : (
+          // No saved stations yet (bailing on station 1 of a fresh run) OR the single flow → the plain
+          // discard-confirm (nothing to finish with; back-out drops the current draft only).
+          <DiscardConfirm
+            onDiscard={() => { abortDevelop(); setConfirmDiscard(false); onBack() }}
+            onCancel={() => setConfirmDiscard(false)}
+            {...(runMode
+              ? { title: 'Leave this station?', body: 'This station’s draft is lost.', confirmLabel: 'Leave' }
+              : {})}
+          />
+        )
       )}
     </div>
   )
