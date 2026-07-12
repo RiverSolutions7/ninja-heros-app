@@ -41,7 +41,8 @@
 // area scrolls (overflow-y:auto) when photos exceed the 548px panel — the frame's overflow:hidden is a
 // 3-photo snapshot; N photos need a scroll region.
 //
-// EMPTY STATE (intentional): the sheet opens from the 2+/3+ stack-chip or the whisper, but a coach can
+// EMPTY STATE (intentional): the sheet opens from the 1/2+/3+ stack-chip (cutover: the chip shows at
+// >=1 photo, reading "+ photo" at exactly 1) or the whisper, but a coach can
 // ✕ every tile while it's open. At 0 photos the tiles region collapses to just the "+" add tile — that
 // standalone tile IS the "add your first photo" affordance; no separate empty copy is authored (the
 // frame has none) and the sheet does not auto-close (surprising). The ⊟ row correctly hides below 2.
