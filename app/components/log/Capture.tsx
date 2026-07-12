@@ -421,6 +421,16 @@ function StackCountGlyph() {
   )
 }
 
+// "+ photo" chip glyph (single mode at exactly 1 photo — the add affordance). Unauthored by any frame;
+// ledger-authored in words. Matches StackCountGlyph's 14px box + 1.3px #e7eefa stroke language.
+function PlusGlyph() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path d="M7 2.6 V11.4 M2.6 7 H11.4" stroke="#e7eefa" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 // Empty-state photo-stack button glyph (8b) — two offset photo frames, custom 1.5px rounded strokes.
 function PhotoStackGlyph() {
   return (
@@ -1309,16 +1319,22 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
           </div>
 
           {/* frosted stack-count chip — static blur. ONE tap opens the PhotoSheet in BOTH modes (chunk
-              10 item ⑤). CHUNK 13 ②: mid-run the chip appears at ≥1 photo (not ≥2). River hit a dead end
-              on a 1-photo station — the only in-Capture add affordances were the 0-photo empty button and
-              the 2+ chip, so a single-photo station could never reach the tray's "+". The single flow
-              keeps ≥2 (unchanged — a latent 1-photo gap there is flagged, not touched). The tray's "+"
-              adds station-scoped (route → addStationPhotos: new files join the global pool + this station). */}
-          {photos.length >= (runMode ? 1 : 2) && (
+              10 item ⑤). CHUNK 13 ② made the RUN chip appear at ≥1. CUTOVER closes the last gap: the chip
+              now shows at ≥1 in BOTH modes, and at exactly 1 photo it reads "+ photo" (an add affordance)
+              instead of a bare count — so a single-photo station can always reach the tray's "+". At 2+ it
+              stays the fanned count. The tray's "+" adds station-scoped (route → addStationPhotos: new
+              files join the global pool + this station). */}
+          {photos.length >= 1 && (
             <button
               type="button"
               onClick={() => { if (!locked) onManagePhotos?.() }}
-              aria-label={runMode ? `Manage this station's ${photos.length} ${photos.length === 1 ? 'photo' : 'photos'}` : `Manage ${photos.length} photos`}
+              aria-label={
+                photos.length === 1
+                  ? 'Add a photo'
+                  : runMode
+                    ? `Manage this station's ${photos.length} photos`
+                    : `Manage ${photos.length} photos`
+              }
               aria-disabled={locked}
               aria-haspopup="dialog"
               className="transition-transform active:scale-[0.96]"
@@ -1342,10 +1358,23 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
             >
               {/* invisible hit-slop → ≥44px tap target without growing the compact chip */}
               <span aria-hidden="true" style={{ position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', width: '100%', minWidth: 44, height: 44 }} />
-              <StackCountGlyph />
-              <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontWeight: 600, fontSize: 12, color: 'rgb(231,238,250)' }}>
-                {photos.length}
-              </span>
+              {/* At exactly 1 photo the chip is an add affordance reading "+ photo" (ledger-authored in
+                  words; no frame drew it). At 2+ it stays the fanned count. Surface/position identical. */}
+              {photos.length === 1 ? (
+                <>
+                  <PlusGlyph />
+                  <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontWeight: 600, fontSize: 12, color: 'rgb(231,238,250)' }}>
+                    photo
+                  </span>
+                </>
+              ) : (
+                <>
+                  <StackCountGlyph />
+                  <span style={{ fontFamily: 'var(--font-inter), sans-serif', fontWeight: 600, fontSize: 12, color: 'rgb(231,238,250)' }}>
+                    {photos.length}
+                  </span>
+                </>
+              )}
             </button>
           )}
         </div>

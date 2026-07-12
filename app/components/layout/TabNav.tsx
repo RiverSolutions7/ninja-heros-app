@@ -46,7 +46,7 @@ export default function TabNav() {
     } else if (pathname === '/library' || pathname.startsWith('/library/')) {
       router.push('/library?choice=open')
     } else {
-      router.push('/library/log-component')
+      router.push('/log')
     }
   }
 

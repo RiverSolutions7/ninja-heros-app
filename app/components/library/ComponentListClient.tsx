@@ -170,7 +170,7 @@ export default function ComponentListClient({ components }: ComponentListClientP
             {/* Log One Component */}
             <button
               type="button"
-              onClick={() => router.push('/library/log-component')}
+              onClick={() => router.push('/log')}
               className="w-full text-left px-5 py-5 rounded-2xl bg-bg-card border border-white/[0.08] active:bg-white/[0.06] transition-colors"
             >
               <p className="font-heading text-text-primary text-[15px] tracking-wide uppercase">Log One Component</p>
