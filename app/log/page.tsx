@@ -278,6 +278,12 @@ function LogFlow() {
     if (savedToastTimer.current) window.clearTimeout(savedToastTimer.current)
     savedToastTimer.current = window.setTimeout(() => setSavedToast(null), STATION_TOAST_MS)
   }, [])
+  // Drop any pending toast (+ its timer) the moment the run completes — the celebrate screen doesn't
+  // render the toast layer, so a still-pending fade timer would otherwise fire a stale no-op setState.
+  const clearStationToast = useCallback(() => {
+    if (savedToastTimer.current) { window.clearTimeout(savedToastTimer.current); savedToastTimer.current = null }
+    setSavedToast(null)
+  }, [])
   // Dedup cache: a photo dropped into 2 bins uploads ONCE — the first station that saves it caches the
   // storage URL here (keyed by photo id); later stations reuse it (saveComponent's `uploadedUrl`).
   const uploadedUrlsRef = useRef<Map<string, string>>(new Map())
@@ -385,6 +391,7 @@ function LogFlow() {
         await new Promise((res) => window.setTimeout(res, 260))
         finishStationSave(celebrateCard, null)
         if (!isLastStation) showStationSavedToast(stationNumber)
+        else clearStationToast() // last station → celebrate; drop any prior station's pending toast
         return
       }
 
@@ -416,6 +423,7 @@ function LogFlow() {
         }
         finishStationSave(celebrateCard, res.id)
         if (!isLastStation) showStationSavedToast(stationNumber) // CHUNK 15 ③ — mid-run reassurance only
+        else clearStationToast() // last station → celebrate; drop any prior station's pending toast
       } catch (e) {
         // Chunk 9 — a failed station save must NOT advance the stepper: hold on the current station,
         // flag the error (Capture shows the retry toast + re-enables the CTA). The draft (this
@@ -424,7 +432,7 @@ function LogFlow() {
         setRun((prev) => (prev ? { ...prev, saving: false, saveError: true } : prev))
       }
     },
-    [run, photoById, saveType, saveCurriculums, eyebrow, note, devRunMock, finishStationSave, showStationSavedToast],
+    [run, photoById, saveType, saveCurriculums, eyebrow, note, devRunMock, finishStationSave, showStationSavedToast, clearStationToast],
   )
 
   // Back ‹ mid-run (confirmed) → exit the run, return to the normal capture with the original photos
@@ -434,7 +442,8 @@ function LogFlow() {
     setRun(null)
     setSorting(false)
     setNote('')
-  }, [])
+    clearStationToast()
+  }, [clearStationToast])
 
   // Chunk 13 ① — graceful early exit: end the run NOW keeping every already-saved station. Flipping
   // `done` drops the current (unsaved) draft — Capture unmounts, its develop state goes with it — and
@@ -442,7 +451,8 @@ function LogFlow() {
   // station is saved (Capture gates it on run.savedCount), so the celebrate always has ≥1 card.
   const finishRunEarly = useCallback(() => {
     setRun((r) => (r && !r.done ? { ...r, done: true, saving: false, saveError: false } : r))
-  }, [])
+    clearStationToast() // CHUNK 15 ③ — early exit flows to celebrate; drop any pending mid-run toast
+  }, [clearStationToast])
 
   // Rename on the SINGULAR early-finish celebrate (exactly one saved station). Persists to the saved
   // row and updates the card title so the celebrate's title prop (derived from the card) stays in sync.
@@ -470,10 +480,11 @@ function LogFlow() {
     whisperFiredRef.current = false
     setWhisper(false)
     if (whisperTimerRef.current) { window.clearTimeout(whisperTimerRef.current); whisperTimerRef.current = null }
+    clearStationToast()
     setPhotoSheetOpen(false)
     setSorting(false)
     setRun(null)
-  }, [])
+  }, [clearStationToast])
 
   // Share on the plural celebrate → share the FIRST logged station's card (a single-image share of the
   // run's opening cover). CHOICE flagged for River (13b authors one Share for the whole run).
@@ -606,10 +617,10 @@ function LogFlow() {
           onSortIntoStations={run ? undefined : handleSortIntoStations}
         />
       )}
-      {/* CHUNK 15 ③ — mid-run "Station N saved to your library" toast. Fixed layer above Capture
-          (zIndex 100), pointerEvents:none end-to-end so it never blocks the station swap; GracefulToast
-          sits at bottom 120 (matching where the whisper lozenge / save-fail toast float above the dock).
-          role=status (polite). Never shown on the last station's save (that flows into the celebrate). */}
+      {/* CHUNK 15 ③ — mid-run "Station N saved to your library" toast. Fixed layer at zIndex 150 (above
+          Capture's zIndex-100 screen), pointerEvents:none end-to-end so it never blocks the station swap;
+          GracefulToast sits at bottom 120 (matching where the whisper lozenge / save-fail toast float
+          above the dock). role=status (polite). Never shown on the last station's save (→ celebrate). */}
       {savedToast && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 150, pointerEvents: 'none' }}>
           <GracefulToast text={savedToast} bottom={120} />
