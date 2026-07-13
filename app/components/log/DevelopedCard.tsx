@@ -36,7 +36,9 @@ export interface DevelopCascadeRefs {
   title: RefObject<HTMLDivElement>
   step1: RefObject<HTMLDivElement>
   step2: RefObject<HTMLDivElement>
-  more: RefObject<HTMLButtonElement>
+  /** CHUNK N1: the "Review & edit ›" + "✦ Critique" row (was the bare Review button). The cascade
+   *  reveals the whole row as one beat, so both affordances resolve together. */
+  more: RefObject<HTMLDivElement>
   chips: RefObject<HTMLDivElement>
 }
 
@@ -48,6 +50,9 @@ export interface DevelopedCardProps {
   refs: DevelopCascadeRefs
   /** "Review & edit ›" — opens the notes doc (chunk 4). No-op stub until then. */
   onExpand: () => void
+  /** CHUNK N1: "✦ Critique" — opens the notes doc WITH the mini-dock focused (the AI critique door).
+   *  Undefined = the chip is hidden (e.g. a card with no revisable content). */
+  onCritique?: () => void
   /** CHUNK 11.5 (River ✎ note, 2026-07-11): tap the photo area → open the full-screen PhotoViewer at
    *  the cover. Undefined = tap-to-view disabled (no photo, OR the parent is mid-cascade / saving — the
    *  photo is not a control then). When set, a transparent hit layer covers the card BELOW the text/CTA
@@ -89,7 +94,7 @@ function StepRow({ n, text, settleRef }: { n: number; text: string; settleRef: R
   )
 }
 
-export default function DevelopedCard({ photoUrl, eyebrow, data, refs, onExpand, onViewPhoto, blend = true, cardRef, overlayRef, zIndex = 30, top = 92 }: DevelopedCardProps) {
+export default function DevelopedCard({ photoUrl, eyebrow, data, refs, onExpand, onCritique, onViewPhoto, blend = true, cardRef, overlayRef, zIndex = 30, top = 92 }: DevelopedCardProps) {
   const steps = data.setup_steps.slice(0, 2)
   const skills = data.skills.slice(0, 3)
 
@@ -182,32 +187,61 @@ export default function DevelopedCard({ photoUrl, eyebrow, data, refs, onExpand,
             {steps[0] !== undefined && <StepRow n={1} text={steps[0]} settleRef={refs.step1} />}
             {steps[1] !== undefined && <StepRow n={2} text={steps[1]} settleRef={refs.step2} />}
           </div>
-          {/* "Review & edit ›" — real button (opens notes doc, chunk 4). pointerEvents restored on it
-              only (the overlay above is pointerEvents:none). */}
-          <button
-            ref={refs.more}
-            type="button"
-            onClick={onExpand}
-            aria-label="Review and edit the full card"
-            style={{
-              alignSelf: 'flex-start',
-              border: 'none',
-              background: 'transparent',
-              // Invisible hit-slop → ≥44px tap target: the negative margin cancels the padding so
-              // the visible 12px text keeps the frame's stack rhythm. Not a design value.
-              padding: '16px 10px',
-              margin: '-16px -10px',
-              cursor: 'pointer',
-              pointerEvents: 'auto',
-              fontFamily: INTER,
-              fontWeight: 400,
-              fontSize: 12,
-              color: 'rgb(159,176,200)',
-              opacity: 0,
-            }}
-          >
-            Review &amp; edit ›
-          </button>
+          {/* "Review & edit ›" + "✦ Critique" row (chunk N1). The row is the cascade beat (refs.more);
+              both buttons re-enable pointerEvents (the overlay above is pointerEvents:none). */}
+          <div ref={refs.more} style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 4, opacity: 0 }}>
+            <button
+              type="button"
+              onClick={onExpand}
+              aria-label="Review and edit the full card"
+              style={{
+                border: 'none',
+                background: 'transparent',
+                // Invisible hit-slop → ≥44px tap target: the negative margin cancels the padding so
+                // the visible 12px text keeps the frame's stack rhythm. Not a design value.
+                padding: '16px 10px',
+                margin: '-16px -10px',
+                cursor: 'pointer',
+                pointerEvents: 'auto',
+                fontFamily: INTER,
+                fontWeight: 400,
+                fontSize: 12,
+                color: 'rgb(159,176,200)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Review &amp; edit ›
+            </button>
+            {/* "✦ Critique" — the AI door (chunk N1). UNAUTHORED (no frame drew it) — text-chip language,
+                ✦ in the accent, "Critique" in the muted CTA ink; hit-slop padded to ≥44px. FLAGGED for
+                River (exact treatment: bordered pill vs bare text, mark glyph, placement). */}
+            {onCritique && (
+              <button
+                type="button"
+                onClick={onCritique}
+                aria-label="Critique this card with AI"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  border: 'none',
+                  background: 'transparent',
+                  padding: '16px 10px',
+                  margin: '-16px -10px',
+                  cursor: 'pointer',
+                  pointerEvents: 'auto',
+                  fontFamily: INTER,
+                  fontWeight: 600,
+                  fontSize: 12,
+                  color: 'rgb(159,176,200)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <span aria-hidden="true" style={{ color: ACCENT, fontSize: 12, lineHeight: 1 }}>✦</span>
+                Critique
+              </button>
+            )}
+          </div>
           {skills.length > 0 && (
             <div ref={refs.chips} style={{ display: 'flex', gap: 6, marginTop: 3, opacity: 0 }}>
               {skills.map((s) => (

@@ -39,12 +39,33 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import type { DevelopResult } from './DevelopedCard'
+import MiniDock from './MiniDock'
+import UndoLozenge from './UndoLozenge'
 
 const INTER = 'var(--font-inter), sans-serif'
 const ACCENT = 'rgb(255,90,31)'
 const TEXT = 'rgb(231,238,250)'
 const NUMERAL = 'rgb(91,107,134)'
 const CARET = 'rgb(42,107,219)'
+// CHUNK N1 — the warm revise-glow tint (grill: rgba(255,90,31,0.10)), fading to transparent over ~2s.
+const GLOW_TINT = 'rgba(255,90,31,0.10)'
+const GLOW_CLEAR = 'rgba(255,90,31,0)'
+const GLOW_MS = 2000
+
+/** The outcome of an /api/revise round-trip. Capture owns the network + returns this to NotesDoc. */
+export type ReviseOutcome = { ok: true; result: DevelopResult } | { ok: false; reason: 'offline' | 'failed' }
+
+// CHUNK N1 — index+text diff (grill: "compare old/new steps by index+text to pick glow rows"). Returns
+// a status per NEW step: 'same' (identical text at the same index → no glow, keep the id) · 'changed'
+// (different text at that index) · 'added' (index beyond the old list). Removed rows (old beyond new)
+// just leave — no glow. Reorders aren't tracked (pure index diff, per the grill).
+type StepDiff = 'same' | 'changed' | 'added'
+function diffSteps(oldSteps: string[], newSteps: string[]): StepDiff[] {
+  return newSteps.map((t, i) => {
+    if (i >= oldSteps.length) return 'added'
+    return oldSteps[i] === t ? 'same' : 'changed'
+  })
+}
 
 export interface NotesDocProps {
   photoUrl: string
@@ -55,12 +76,19 @@ export interface NotesDocProps {
   onChange: (next: DevelopResult) => void
   /** Back to the developed glimpse (edits already live in flow state — nothing is lost). */
   onBack: () => void
-  /** "↺ try again" — re-record the voice note (returns to capture). */
-  onTryAgain: () => void
-  /** "Save to library" — launches the save morph (chunk 5 stub for now). */
+  /** "Save to library" — launches the save morph. CHUNK N1: moved to the header (the mini-dock owns
+   *  the doc's bottom now); re-record stays at the glimpse's develop dock. */
   onSave: () => void
   /** Header chip tap → open the TypeAgeSheet (chunk 6). */
   onEditTypeAge?: () => void
+  /** CHUNK N1 — opened via the "✦ Critique" chip → focus the mini-dock's typing door on mount. */
+  focusCritique?: boolean
+  /** CHUNK N1 — offline (owned by Capture): the mini-dock shows the 15d reassurance; apply is blocked. */
+  offline?: boolean
+  /** CHUNK N1 — apply the critique to the current card. Capture owns the network (mirrors /api/develop). */
+  onRevise: (critique: string) => Promise<ReviseOutcome>
+  /** CHUNK N1 — a 'network' recognition error in the mini-dock → Capture flips `offline`. */
+  onNetworkError?: () => void
   /** CHUNK 11.5 (River ✎ note, 2026-07-11): tap the photo band → open the full-screen PhotoViewer at the
    *  cover. Undefined = no photo (voice-only) → no tap layer. The header (back · type chip, zIndex 3)
    *  paints above the band, so those controls keep their taps. */
@@ -284,6 +312,8 @@ function StepRow({
   menuOpen,
   menuActive,
   dimmed,
+  glow,
+  glowKey,
   onStartEdit,
   onCommit,
   onOpenMenu,
@@ -299,6 +329,10 @@ function StepRow({
   /** True while ANY row's menu is open — bystander rows go inert (no drag, no tap-through). */
   menuActive: boolean
   dimmed: boolean
+  /** CHUNK N1 — this row was changed/added by the last revise → resolve-in + warm tint fade (~2s). */
+  glow: boolean
+  /** Increments per revise so the glow animation re-fires even if the id/glow flag are unchanged. */
+  glowKey: number
   onStartEdit: () => void
   onCommit: (text: string) => void
   onOpenMenu: () => void
@@ -314,6 +348,9 @@ function StepRow({
   })
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const optionsRef = useRef<HTMLButtonElement | null>(null)
+  const rowRef = useRef<HTMLDivElement | null>(null)
+  // Compose the dnd-kit node ref with a local ref so the glow effect can drive the same element.
+  const setRow = useCallback((el: HTMLDivElement | null) => { setNodeRef(el); rowRef.current = el }, [setNodeRef])
 
   useEffect(() => {
     if (editing && inputRef.current) {
@@ -326,6 +363,27 @@ function StepRow({
     }
   }, [editing])
 
+  // CHUNK N1 — the revise glow: the row resolves in with the develop-cascade's settle language and a
+  // warm tint that fades ~2s. Reduced motion = a plain tint fade (no settle). WAAPI so it survives
+  // re-renders; keyed on glowKey so each revise re-fires.
+  useEffect(() => {
+    if (!glow || !rowRef.current) return
+    const el = rowRef.current
+    if (prefersReduced()) {
+      el.animate([{ backgroundColor: GLOW_TINT }, { backgroundColor: GLOW_CLEAR }], { duration: 1200, easing: 'ease', fill: 'both' })
+      return
+    }
+    el.animate(
+      [
+        { opacity: 0.5, transform: 'translateY(6px)', backgroundColor: GLOW_TINT },
+        { opacity: 1, transform: 'translateY(0px)', backgroundColor: GLOW_TINT, offset: 0.32 },
+        { opacity: 1, transform: 'translateY(0px)', backgroundColor: GLOW_CLEAR },
+      ],
+      { duration: GLOW_MS, easing: 'cubic-bezier(0.22,0.61,0.36,1)', fill: 'both' },
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [glow, glowKey])
+
   const commit = (raw: string) => {
     const t = raw.trim()
     // empty commit = unchanged (deleting a step is the menu's job, not an empty field)
@@ -334,7 +392,7 @@ function StepRow({
 
   return (
     <div
-      ref={setNodeRef}
+      ref={setRow}
       style={{
         position: 'relative',
         display: 'grid',
@@ -350,8 +408,13 @@ function StepRow({
         opacity: dimmed ? 0.5 : 1,
         zIndex: isDragging ? 40 : menuOpen ? 20 : 1,
         boxShadow: isDragging ? 'rgba(0,0,0,0.55) 0px 14px 30px' : 'none',
+        // The glow's warm tint rides a WAAPI backgroundColor animation (see the glow effect) — the row's
+        // resting background stays transparent (drag override kept). A soft radius so the tint reads as a
+        // band, and horizontal padding pulled back by negative margin so the grid columns don't shift.
         background: isDragging ? 'rgb(17,26,48)' : 'transparent',
-        borderRadius: isDragging ? 10 : 0,
+        borderRadius: isDragging ? 10 : glow ? 8 : 0,
+        padding: glow ? '2px 8px' : 0,
+        margin: glow ? '-2px -8px' : 0,
         // Only lock touch-action once the reorder is actually active — at rest the row must let the doc
         // scroll (item ⑥). TouchSensor's long-press owns the reorder gesture; preventDefault stops any
         // residual scroll during the drag.
@@ -477,56 +540,10 @@ function StepRow({
   )
 }
 
-// ── the develop-state dock (solid lit-navy divergence — see header note) ───────────────────────────
-function Dock({ onTryAgain, onSave }: { onTryAgain: () => void; onSave: () => void }) {
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        left: 12,
-        right: 12,
-        bottom: 46,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 12,
-        height: 52,
-        padding: '0px 6px 0px 18px',
-        borderRadius: 26,
-        background: 'rgb(12,19,34)',
-        boxShadow: 'rgba(255,255,255,0.14) 0px 0px 0px 1px inset, rgba(0,0,0,0.45) 0px 14px 30px',
-        zIndex: 5,
-      }}
-    >
-      <button
-        type="button"
-        onClick={onTryAgain}
-        aria-label="Try again — re-record the voice note"
-        className="transition-transform active:scale-[0.96]"
-        style={{ display: 'flex', alignItems: 'center', gap: 7, minHeight: 44, border: 'none', background: 'transparent', padding: '0 6px', margin: '0 -6px', cursor: 'pointer', fontFamily: INTER, fontWeight: 500, fontSize: 13, color: 'rgb(159,176,200)' }}
-      >
-        <span aria-hidden="true" style={{ fontSize: 15, lineHeight: 1 }}>↺</span>
-        <span>try again</span>
-      </button>
-      <button
-        type="button"
-        onClick={onSave}
-        aria-label="Save to library"
-        className="transition-transform active:scale-[0.96]"
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 44, border: 'none', background: 'transparent', padding: 0, cursor: 'pointer' }}
-      >
-        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 40, padding: '0px 20px', borderRadius: 20, background: 'rgb(42,107,219)', fontFamily: INTER, fontWeight: 700, fontSize: 13.5, color: 'rgb(255,255,255)' }}>
-          Save to library
-        </span>
-      </button>
-    </div>
-  )
-}
-
 let notesSeq = 0
 const nextStepId = () => `st${(notesSeq++).toString(36)}`
 
-export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, onTryAgain, onSave, onEditTypeAge, onViewPhoto }: NotesDocProps) {
+export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, onSave, onEditTypeAge, onViewPhoto, focusCritique = false, offline = false, onRevise, onNetworkError }: NotesDocProps) {
   // NotesDoc owns step IDENTITY while mounted (dnd-kit needs stable ids across reorders). It re-inits
   // from flow state on mount (Capture unmounts it on collapse), and every mutation is pushed straight
   // up via emit() so flow state stays the single source of truth for chunk 5's save.
@@ -539,9 +556,25 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
   const [menuId, setMenuId] = useState<string | null>(null)
   const [cuesMenuOpen, setCuesMenuOpen] = useState(false)
 
+  // ── CHUNK N1: the critique loop state ────────────────────────────────────────────────────────────
+  const [critique, setCritique] = useState('')
+  const [critiqueTyping, setCritiqueTyping] = useState(false)
+  const [revising, setRevising] = useState(false)
+  const [reviseError, setReviseError] = useState(false)
+  // Glow: the set of step ids changed/added by the last revise + whether the cues glow; glowKey re-fires
+  // the animation each revise. Cleared ~GLOW_MS after it lands (the WAAPI fill holds the transparent end).
+  const [glowIds, setGlowIds] = useState<Set<string>>(() => new Set())
+  const [glowCues, setGlowCues] = useState(false)
+  const [glowKey, setGlowKey] = useState(0)
+  const glowClearRef = useRef<number | null>(null)
+  // The undo lozenge: a re-keyed single lozenge (newest replaces). `snapshot` restores the pre-revision
+  // card exactly. `undoable` false = a message-only lozenge (e.g. "No changes made").
+  const [lozenge, setLozenge] = useState<{ key: number; text: string; snapshot: DevelopResult | null } | null>(null)
+
   const bodyRef = useRef<HTMLDivElement | null>(null)
   const cuesInputRef = useRef<HTMLTextAreaElement | null>(null)
   const cuesOptionsRef = useRef<HTMLButtonElement | null>(null)
+  const cuesRowRef = useRef<HTMLDivElement | null>(null)
 
   const emit = useCallback(
     (nextItems: StepItem[], nextCues: string | null) => {
@@ -647,6 +680,117 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
     setEditingCues(false)
   }
 
+  // ── CHUNK N1: apply the critique (revise) ────────────────────────────────────────────────────────
+  // Cleanup the glow-clear timer on unmount.
+  useEffect(() => () => { if (glowClearRef.current) window.clearTimeout(glowClearRef.current) }, [])
+
+  // Cues glow — same resolve-in + tint fade as a step row. The callout has a SOLID navy bg (rgb(20,28,50)),
+  // so (unlike the transparent step rows) the tint is pre-blended over navy: GLOW_TINT (0.10 accent) over
+  // navy ≈ rgb(44,34,48), fading back to the callout's own navy — keeps it opaque, reads as a warm pulse.
+  useEffect(() => {
+    if (!glowCues || !cuesRowRef.current) return
+    const el = cuesRowRef.current
+    const on = 'rgb(44,34,48)'
+    const off = 'rgb(20,28,50)'
+    if (prefersReduced()) {
+      el.animate([{ backgroundColor: on }, { backgroundColor: off }], { duration: 1200, easing: 'ease', fill: 'both' })
+      return
+    }
+    el.animate(
+      [
+        { opacity: 0.5, transform: 'translateY(6px)', backgroundColor: on },
+        { opacity: 1, transform: 'translateY(0px)', backgroundColor: on, offset: 0.32 },
+        { opacity: 1, transform: 'translateY(0px)', backgroundColor: off },
+      ],
+      { duration: GLOW_MS, easing: 'cubic-bezier(0.22,0.61,0.36,1)', fill: 'both' },
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [glowCues, glowKey])
+
+  // A normalized cues compare (null/'' both mean "no cues") for the no-changes / glow decision.
+  const cuesEq = (a: string | null, b: string | null) => (a ?? '').trim() === (b ?? '').trim()
+
+  const applyCritique = useCallback(async () => {
+    const text = critique.trim()
+    if (!text || revising) return
+    // Offline: the mini-dock already shows the 15d reassurance; don't spin a doomed request.
+    if (offline) return
+    setReviseError(false)
+    setRevising(true)
+    const outcome = await onRevise(text)
+    setRevising(false)
+    if (!outcome.ok) {
+      // Offline routes to the mini-dock's reassurance (Capture flipped `offline`); a plain failure lands
+      // in the label slot as "Couldn't revise — try again". Either way the critique text is preserved.
+      if (outcome.reason === 'failed') setReviseError(true)
+      return
+    }
+    const revised = outcome.result
+    // Snapshot the pre-revision card (exactly what Undo restores).
+    const snapshot: DevelopResult = { ...data, setup_steps: items.map((i) => i.text), cues }
+
+    const oldSteps = items.map((i) => i.text)
+    const newSteps = revised.setup_steps
+    const status = diffSteps(oldSteps, newSteps)
+    const changedCount = status.filter((s) => s === 'changed').length
+    const addedCount = status.filter((s) => s === 'added').length
+    const nSteps = changedCount + addedCount
+    const cuesChanged = !cuesEq(cues, revised.cues)
+    const titleChanged = (data.title ?? '').trim() !== (revised.title ?? '').trim()
+    const skillsChanged = JSON.stringify(data.skills) !== JSON.stringify(revised.skills)
+    const anyChange = nSteps > 0 || status.length !== oldSteps.length || cuesChanged || titleChanged || skillsChanged
+
+    // No-changes: a message-only lozenge, NO glow, keep the critique so the coach can refine it.
+    if (!anyChange) {
+      setLozenge({ key: Date.now(), text: 'No changes made', snapshot: null })
+      return
+    }
+
+    // Build the new items: keep the id (and NO glow) for a 'same' step at the same index; new id + glow
+    // for 'changed'/'added'. Removed rows just drop.
+    const nextGlow = new Set<string>()
+    const nextItems: StepItem[] = newSteps.map((t, i) => {
+      if (status[i] === 'same' && items[i]) return items[i]
+      const id = items[i] && status[i] === 'changed' ? items[i].id : nextStepId()
+      nextGlow.add(id)
+      return { id, text: t }
+    })
+
+    setItems(nextItems)
+    setCues(revised.cues)
+    onChange(revised) // push the FULL revised card up (title/skills/equipment too)
+
+    setGlowIds(nextGlow)
+    setGlowCues(cuesChanged)
+    setGlowKey((k) => k + 1)
+    if (glowClearRef.current) window.clearTimeout(glowClearRef.current)
+    glowClearRef.current = window.setTimeout(() => { setGlowIds(new Set()); setGlowCues(false) }, GLOW_MS + 250)
+
+    // Clear the input, close the typing door, and raise the undo lozenge.
+    setCritique('')
+    setCritiqueTyping(false)
+    const label = nSteps > 0 ? `Changed ${nSteps} step${nSteps === 1 ? '' : 's'}` : cuesChanged ? 'Updated the cues' : 'Updated the card'
+    setLozenge({ key: Date.now(), text: label, snapshot })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [critique, revising, offline, onRevise, data, items, cues, onChange])
+
+  // Undo → restore the exact pre-revision card (steps + cues + the full result up to flow state). The
+  // restored steps get fresh ids (identity is disposable here); no glow on an undo.
+  const handleUndo = useCallback(() => {
+    setLozenge((l) => {
+      const snap = l?.snapshot
+      if (snap) {
+        setItems(snap.setup_steps.map((t) => ({ id: nextStepId(), text: t })))
+        setCues(snap.cues)
+        onChange(snap)
+        setGlowIds(new Set())
+        setGlowCues(false)
+        if (glowClearRef.current) { window.clearTimeout(glowClearRef.current); glowClearRef.current = null }
+      }
+      return null
+    })
+  }, [onChange])
+
   const menuActive = menuId !== null || cuesMenuOpen
 
   return (
@@ -707,7 +851,20 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
             <TypeChevron />
           </button>
         </div>
-        <div />
+        {/* CHUNK N1 — "Save to library" moved here from the bottom dock (the mini-dock owns the bottom
+            now). Capture-header Save language (white Inter 600 15px). UNAUTHORED relocation — FLAGGED for
+            River (the old bottom dock's blue "Save to library" pill / the "↺ try again" are dropped from
+            this screen; re-record still lives at the glimpse's develop dock). */}
+        <div style={{ justifySelf: 'end', display: 'flex', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={onSave}
+            aria-label="Save to library"
+            style={{ minHeight: 44, margin: '-12px -14px', padding: '12px 14px', border: 'none', background: 'transparent', fontFamily: INTER, fontWeight: 600, fontSize: 15, color: 'rgb(255,255,255)', cursor: 'pointer' }}
+          >
+            Save
+          </button>
+        </div>
       </div>
 
       {/* doc body — inset 236 / 118, gap 18. CHUNK 10 gate-B (item ⑥): was `overflow:hidden` (the
@@ -741,6 +898,8 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
                   menuOpen={menuId === item.id}
                   menuActive={menuActive}
                   dimmed={menuActive && menuId !== item.id}
+                  glow={glowIds.has(item.id)}
+                  glowKey={glowKey}
                   onStartEdit={() => { setMenuId(null); setCuesMenuOpen(false); setEditingId(item.id) }}
                   onCommit={(text) => commitStep(item.id, text)}
                   onOpenMenu={() => { setEditingId(null); setCuesMenuOpen(false); setMenuId(item.id) }}
@@ -757,7 +916,7 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
             ⋯ → anchored menu (single red "Delete"); deleted (null) = the callout is GONE. The invoked
             callout stays bright while its own menu is open (only a STEP menu dims it). */}
         {(cues !== null || editingCues) && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '16px 18px', borderRadius: 14, background: 'rgb(20,28,50)', border: '1px solid rgb(42,52,80)', opacity: menuId !== null ? 0.5 : 1, transition: 'opacity 150ms ease', pointerEvents: menuId !== null ? 'none' : undefined }}>
+        <div ref={cuesRowRef} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '16px 18px', borderRadius: 14, background: 'rgb(20,28,50)', border: '1px solid rgb(42,52,80)', opacity: menuId !== null ? 0.5 : 1, transition: 'opacity 150ms ease', pointerEvents: menuId !== null ? 'none' : undefined }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div role="heading" aria-level={2} style={{ fontFamily: INTER, fontWeight: 700, fontSize: 10, letterSpacing: '1.8px', textTransform: 'uppercase', color: 'rgb(255,171,125)' }}>Coach&rsquo;s cues</div>
             <button
@@ -853,7 +1012,33 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
         )}
       </div>
 
-      <Dock onTryAgain={onTryAgain} onSave={onSave} />
+      {/* CHUNK N1 — the critique mini-dock (bottom, floats like the capture dock). tap words = type,
+          mic = speak, ↑ = apply the critique via /api/revise. */}
+      <MiniDock
+        critique={critique}
+        onCritiqueChange={(v) => { setCritique(v); if (reviseError) setReviseError(false) }}
+        typing={critiqueTyping}
+        onOpenTyping={() => setCritiqueTyping(true)}
+        onCloseTyping={() => setCritiqueTyping(false)}
+        onApply={applyCritique}
+        revising={revising}
+        reviseError={reviseError}
+        offline={offline}
+        focusOnMount={focusCritique}
+        onNetworkError={onNetworkError}
+      />
+
+      {/* CHUNK N1 — the shared undo lozenge (re-keyed so the newest revise REPLACES the last). "No
+          changes made" is message-only (snapshot null → no Undo button). Floats above the mini-dock. */}
+      {lozenge && (
+        <UndoLozenge
+          key={lozenge.key}
+          text={lozenge.text}
+          onAction={lozenge.snapshot ? handleUndo : undefined}
+          onExpire={() => setLozenge((l) => (l && l.key === lozenge.key ? null : l))}
+          bottom={116}
+        />
+      )}
     </div>
   )
 }

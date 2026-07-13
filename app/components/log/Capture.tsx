@@ -20,7 +20,7 @@ import IdleDock from './IdleDock'
 import GracefulToast from './GracefulToast'
 import WhisperLozenge from './WhisperLozenge'
 import DevelopedCard, { type DevelopResult, type DevelopCascadeRefs } from './DevelopedCard'
-import NotesDoc from './NotesDoc'
+import NotesDoc, { type ReviseOutcome } from './NotesDoc'
 import PhotoViewer from './PhotoViewer'
 import Celebrate, { type CelebrateRefs } from './Celebrate'
 import { saveComponent, updateComponentTitle, type SaveCardInput } from '@/app/lib/saveComponent'
@@ -581,6 +581,9 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
   const showOffline = offline || devForceState === '15d'
   // Expanded editorial notes doc (chunk 4). Opened by "Review & edit ›"; back returns to the glimpse.
   const [expanded, setExpanded] = useState(false)
+  // CHUNK N1: true when the notes doc was opened via the "✦ Critique" chip (vs "Review & edit ›") →
+  // NotesDoc focuses the mini-dock's typing door on mount ("the critique input ready").
+  const [critiqueOnOpen, setCritiqueOnOpen] = useState(false)
   const isDeveloped = phase === 'developed'
 
   // ── save + celebrate (chunk 5) ──────────────────────────────────────────────────────────────────
@@ -600,7 +603,7 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
   const dvTitle = useRef<HTMLDivElement | null>(null)
   const dvStep1 = useRef<HTMLDivElement | null>(null)
   const dvStep2 = useRef<HTMLDivElement | null>(null)
-  const dvMore = useRef<HTMLButtonElement | null>(null)
+  const dvMore = useRef<HTMLDivElement | null>(null) // CHUNK N1: now the Review+Critique row
   const dvChips = useRef<HTMLDivElement | null>(null)
   const cascade: DevelopCascadeRefs = { scrim: dvScrim, label: dvLabel, title: dvTitle, step1: dvStep1, step2: dvStep2, more: dvMore, chips: dvChips }
 
@@ -772,6 +775,70 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
       if (developAbortRef.current === ac) developAbortRef.current = null
     }
   }, [phase, note, devMockDevelop, abortDevelop])
+
+  // ── CHUNK N1: the AI critique loop (revise) ──────────────────────────────────────────────────────
+  // NotesDoc owns the critique input + the glow/undo; Capture owns the network (mirrors how it owns
+  // /api/develop). `revise` applies the coach's critique to the CURRENT developed card and returns the
+  // revised result (or a reason). Offline short-circuits (no doomed fetch); a bad/failed response is a
+  // clean 'failed' the mini-dock surfaces without dead-ending (the critique text is preserved upstream).
+  const revise = useCallback(
+    async (critique: string): Promise<ReviseOutcome> => {
+      const card = developed
+      if (!card) return { ok: false, reason: 'failed' }
+      if (!devMockDevelop && typeof navigator !== 'undefined' && !navigator.onLine) {
+        setOffline(true)
+        return { ok: false, reason: 'offline' }
+      }
+      try {
+        let result: DevelopResult
+        if (devMockDevelop) {
+          // Abortless mock — dev doors exercise the paths by KEYWORD in the critique: "fail" → 500,
+          // "same"/"nothing" → no-changes, else → a deterministic revision (edit step 1 + append a step).
+          await new Promise((r) => window.setTimeout(r, 550))
+          const c = critique.toLowerCase()
+          if (c.includes('fail')) throw new Error('mock revise fail')
+          if (c.includes('same') || c.includes('nothing')) result = card
+          else
+            result = {
+              ...card,
+              setup_steps: [
+                card.setup_steps[0] ? `${card.setup_steps[0]} — slow and controlled` : 'Start the station',
+                ...card.setup_steps.slice(1),
+                'Land softly in the pit',
+              ],
+              cues: card.cues && card.cues.trim() ? card.cues : 'Spot every kid on the landing.',
+            }
+        } else {
+          const res = await fetch('/api/revise', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ currentCard: card, critique, rawNote: note.trim() || undefined }),
+          })
+          if (!res.ok) throw new Error(`revise ${res.status}`)
+          const raw = (await res.json()) as Partial<DevelopResult>
+          if (typeof raw.title !== 'string' || !Array.isArray(raw.setup_steps) || !Array.isArray(raw.skills)) {
+            throw new Error('revise bad shape')
+          }
+          result = {
+            title: raw.title,
+            setup_steps: raw.setup_steps.filter((s): s is string => typeof s === 'string'),
+            cues: typeof raw.cues === 'string' ? raw.cues : (card.cues ?? ''),
+            skills: raw.skills.filter((s): s is string => typeof s === 'string'),
+            equipment: Array.isArray(raw.equipment) ? raw.equipment.filter((s): s is string => typeof s === 'string') : [],
+            duration_minutes: typeof raw.duration_minutes === 'number' ? raw.duration_minutes : null,
+          }
+        }
+        return { ok: true, result }
+      } catch {
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          setOffline(true)
+          return { ok: false, reason: 'offline' }
+        }
+        return { ok: false, reason: 'failed' }
+      }
+    },
+    [developed, devMockDevelop, note],
+  )
 
   // ── Save pipeline (chunk 9 rework — the insert is now AWAITED before the celebrate) ─────────────
   // The silent-save-failure gap is closed here: the insert must SUCCEED before "Logged. Forever." can
@@ -1129,13 +1196,18 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
           eyebrow={eyebrow}
           data={developed ?? MOCK_DEVELOP}
           onChange={setDeveloped}
-          onBack={() => setExpanded(false)}
-          onTryAgain={() => { setExpanded(false); setPhase('capture'); setDeveloped(null); setDevelopError(false) }}
+          onBack={() => { setExpanded(false); setCritiqueOnOpen(false) }}
           // Run mode: a Save from the expanded notes doc must delegate to the stepper pipeline (not the
           // single-flow beginSave/Celebrate), same as the developed dock — else it desyncs the run.
           onSave={() => { if (runMode) run.onStationSave('structured', developed); else void beginSave('arrive', 'structured', developed) }}
           onEditTypeAge={onEditTypeAge}
           onViewPhoto={cover ? () => openViewerAt(0) : undefined}
+          // CHUNK N1 — the critique loop. focusCritique opens the mini-dock typing door when arrived via
+          // the ✦ chip; onRevise runs the network (Capture owns it, threading `note` as rawNote context).
+          focusCritique={critiqueOnOpen}
+          offline={showOffline}
+          onRevise={revise}
+          onNetworkError={() => setOffline(true)}
         />
       )}
 
@@ -1172,7 +1244,8 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
             eyebrow={eyebrow}
             data={developed ?? MOCK_DEVELOP}
             refs={cascade}
-            onExpand={() => setExpanded(true)}
+            onExpand={() => { setCritiqueOnOpen(false); setExpanded(true) }}
+            onCritique={() => { setCritiqueOnOpen(true); setExpanded(true) }}
             onViewPhoto={cover && !saving && !cascadeActive ? () => openViewerAt(0) : undefined}
             // CHUNK 12 ⑤: the 11.5 blend mask must not ride the morphing card (iOS re-raster hazard +
             // a corrupted landed thumb) — dropped for the whole save, restored at rest.

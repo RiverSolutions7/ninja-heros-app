@@ -217,8 +217,10 @@ function LogFlow() {
   // Recording motion door: fake-voice loop drives the full beatIn/recording/beatOut cycle.
   const devFakeRecording = devMockEnabled && (dev === 'rec' || dev === 'state15d')
   // Develop doors: ?dev=rec flows into the opt-in path with a MOCKED /api/develop (no API-key burn);
-  // ?dev=developed jumps straight into the developed card + cascade.
-  const devMockDevelop = devMockEnabled && (dev === 'rec' || dev === 'developed' || dev === 'stepper')
+  // ?dev=developed jumps straight into the developed card + cascade. CHUNK N1: 'notes' + 'developed'
+  // also mock /api/revise (the critique loop) so the glow/undo verify without an API-key burn — the
+  // mock keys off the critique text ("fail" → 500, "same"/"nothing" → no-changes, else → a revision).
+  const devMockDevelop = devMockEnabled && (dev === 'rec' || dev === 'developed' || dev === 'notes' || dev === 'stepper')
   const startDeveloped = devMockEnabled
     ? dev === 'developed'
       ? MOCK_DEVELOPED
