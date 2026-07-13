@@ -270,8 +270,13 @@ export default function Celebrate({
               ref={refs?.thumbSlot}
               style={{ width: 96, height: 64, borderRadius: 10, overflow: 'hidden', flex: '0 0 auto', background: 'rgb(12,19,34)' }}
             >
+              {/* Once the screen is LIVE (staged=false — the morph is done or never ran), the slot
+                  always shows the cover so the 13b-style card row is guaranteed complete, even if
+                  the landed morph card failed to paint on-device (River's report, 2026-07-13). The
+                  landed card overlaying the slot renders the same photo at the same geometry, so
+                  double-render is invisible. Mid-morph (staged) the slot stays empty as authored. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              {showThumbPhoto && photoUrl && (
+              {(showThumbPhoto || !staged) && photoUrl && (
                 <img src={photoUrl} alt="Saved station thumbnail" style={{ display: 'block', width: 96, height: 64, borderRadius: 10, objectFit: 'cover' }} />
               )}
             </div>
