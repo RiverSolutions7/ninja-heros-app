@@ -80,6 +80,9 @@ export interface NotesDocProps {
   onSave: () => void
   /** Header chip tap → open the TypeAgeSheet (chunk 6). */
   onEditTypeAge?: () => void
+  /** CHUNK 16 ① (N4): tap any skill pill in the footer → open the SkillsSheet. Undefined = static pills.
+   *  Pill visuals unchanged; the tappable version wraps each in a ≥44px-tall transparent hit target. */
+  onEditSkills?: () => void
   /** CHUNK N1 — opened via the "✦ Critique" chip → focus the mini-dock's typing door on mount. */
   focusCritique?: boolean
   /** CHUNK N1 — offline (owned by Capture): the mini-dock shows the 15d reassurance; apply is blocked. */
@@ -552,7 +555,7 @@ function StepRow({
 let notesSeq = 0
 const nextStepId = () => `st${(notesSeq++).toString(36)}`
 
-export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, onSave, onEditTypeAge, onViewPhoto, focusCritique = false, offline = false, onRevise, onNetworkError }: NotesDocProps) {
+export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, onSave, onEditTypeAge, onEditSkills, onViewPhoto, focusCritique = false, offline = false, onRevise, onNetworkError }: NotesDocProps) {
   // NotesDoc owns step IDENTITY while mounted (dnd-kit needs stable ids across reorders). It re-inits
   // from flow state on mount (Capture unmounts it on collapse), and every mutation is pushed straight
   // up via emit() so flow state stays the single source of truth for chunk 5's save.
@@ -1012,14 +1015,31 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
         </div>
         )}
 
-        {/* skills micro-pill footer */}
+        {/* skills micro-pill footer — CHUNK 16 ①: pills become tappable (open the SkillsSheet) when
+            onEditSkills is wired. The exact visual span is wrapped in a ≥44px-tall transparent hit
+            target (vertical hit-slop only); pill visuals are untouched. */}
         {data.skills.length > 0 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', opacity: menuActive ? 0.5 : 1, transition: 'opacity 150ms ease' }}>
-            {data.skills.map((s) => (
-              <span key={s} style={{ fontFamily: INTER, fontWeight: 600, fontSize: 10, color: 'rgb(159,176,200)', padding: '4px 8px', border: '1px solid rgb(42,52,80)', borderRadius: 9 }}>
-                {s}
-              </span>
-            ))}
+            {data.skills.map((s) => {
+              const pill = (
+                <span style={{ fontFamily: INTER, fontWeight: 600, fontSize: 10, color: 'rgb(159,176,200)', padding: '4px 8px', border: '1px solid rgb(42,52,80)', borderRadius: 9 }}>
+                  {s}
+                </span>
+              )
+              return onEditSkills ? (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={onEditSkills}
+                  aria-label={`${s}. Edit skills`}
+                  style={{ display: 'inline-flex', alignItems: 'center', border: 'none', background: 'transparent', padding: '12px 0', margin: '-12px 0', cursor: 'pointer' }}
+                >
+                  {pill}
+                </button>
+              ) : (
+                <span key={s}>{pill}</span>
+              )
+            })}
           </div>
         )}
       </div>

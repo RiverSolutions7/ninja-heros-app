@@ -53,6 +53,11 @@ export interface DevelopedCardProps {
   /** CHUNK N1: "✦ Critique" — opens the notes doc WITH the mini-dock focused (the AI critique door).
    *  Undefined = the chip is hidden (e.g. a card with no revisable content). */
   onCritique?: () => void
+  /** CHUNK 16 ① (N4): tap any skill pill → open the SkillsSheet. Undefined = pills stay static (e.g.
+   *  mid-cascade / saving — a morphing card's chips are not controls). Pill visuals are unchanged; the
+   *  tappable version wraps each pill in a ≥44px-tall transparent hit target (pointerEvents re-enabled,
+   *  the overlay above is pointerEvents:none). */
+  onEditSkills?: () => void
   /** CHUNK 11.5 (River ✎ note, 2026-07-11): tap the photo area → open the full-screen PhotoViewer at
    *  the cover. Undefined = tap-to-view disabled (no photo, OR the parent is mid-cascade / saving — the
    *  photo is not a control then). When set, a transparent hit layer covers the card BELOW the text/CTA
@@ -94,7 +99,7 @@ function StepRow({ n, text, settleRef }: { n: number; text: string; settleRef: R
   )
 }
 
-export default function DevelopedCard({ photoUrl, eyebrow, data, refs, onExpand, onCritique, onViewPhoto, blend = true, cardRef, overlayRef, zIndex = 30, top = 92 }: DevelopedCardProps) {
+export default function DevelopedCard({ photoUrl, eyebrow, data, refs, onExpand, onCritique, onEditSkills, onViewPhoto, blend = true, cardRef, overlayRef, zIndex = 30, top = 92 }: DevelopedCardProps) {
   const steps = data.setup_steps.slice(0, 2)
   const skills = data.skills.slice(0, 3)
 
@@ -246,14 +251,31 @@ export default function DevelopedCard({ photoUrl, eyebrow, data, refs, onExpand,
           </div>
           {skills.length > 0 && (
             <div ref={refs.chips} style={{ display: 'flex', gap: 6, marginTop: 3, opacity: 0 }}>
-              {skills.map((s) => (
-                <span
-                  key={s}
-                  style={{ fontFamily: INTER, fontWeight: 600, fontSize: 10, color: 'rgb(159,176,200)', padding: '4px 8px', border: '1px solid rgb(42,52,80)', borderRadius: 9 }}
-                >
-                  {s}
-                </span>
-              ))}
+              {skills.map((s) => {
+                const pill = (
+                  <span
+                    style={{ fontFamily: INTER, fontWeight: 600, fontSize: 10, color: 'rgb(159,176,200)', padding: '4px 8px', border: '1px solid rgb(42,52,80)', borderRadius: 9 }}
+                  >
+                    {s}
+                  </span>
+                )
+                // CHUNK 16 ① — tappable pill: the exact visual span wrapped in a transparent ≥44px-tall
+                // hit target (vertical hit-slop only — no horizontal expansion so adjacent chips can't
+                // steal each other's taps). pointerEvents re-enabled (the overlay above is none).
+                return onEditSkills ? (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={onEditSkills}
+                    aria-label={`${s}. Edit skills`}
+                    style={{ display: 'inline-flex', alignItems: 'center', border: 'none', background: 'transparent', padding: '12px 0', margin: '-12px 0', cursor: 'pointer', pointerEvents: 'auto' }}
+                  >
+                    {pill}
+                  </button>
+                ) : (
+                  <span key={s}>{pill}</span>
+                )
+              })}
             </div>
           )}
         </div>

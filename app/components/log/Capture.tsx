@@ -21,6 +21,7 @@ import GracefulToast from './GracefulToast'
 import WhisperLozenge from './WhisperLozenge'
 import DevelopedCard, { type DevelopResult, type DevelopCascadeRefs } from './DevelopedCard'
 import NotesDoc, { type ReviseOutcome } from './NotesDoc'
+import SkillsSheet from './SkillsSheet'
 import PhotoViewer from './PhotoViewer'
 import Celebrate, { type CelebrateRefs } from './Celebrate'
 import { saveComponent, updateComponentTitle, type SaveCardInput } from '@/app/lib/saveComponent'
@@ -584,6 +585,14 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
   // CHUNK N1: true when the notes doc was opened via the "✦ Critique" chip (vs "Review & edit ›") →
   // NotesDoc focuses the mini-dock's typing door on mount ("the critique input ready").
   const [critiqueOnOpen, setCritiqueOnOpen] = useState(false)
+  // CHUNK 16 ① (N4): the skills picker sheet. Opened by tapping a skill pill on the glimpse OR the notes
+  // footer; commit-on-close writes back into `developed.skills` (the single source chunk 5 saves).
+  const [skillsSheetOpen, setSkillsSheetOpen] = useState(false)
+  const openSkillsSheet = useCallback(() => setSkillsSheetOpen(true), [])
+  const commitSkills = useCallback((skills: string[]) => {
+    setDeveloped((d) => (d ? { ...d, skills } : d))
+    setSkillsSheetOpen(false)
+  }, [])
   const isDeveloped = phase === 'developed'
 
   // ── save + celebrate (chunk 5) ──────────────────────────────────────────────────────────────────
@@ -1202,6 +1211,7 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
           // single-flow beginSave/Celebrate), same as the developed dock — else it desyncs the run.
           onSave={() => { if (runMode) run.onStationSave('structured', developed); else void beginSave('arrive', 'structured', developed) }}
           onEditTypeAge={onEditTypeAge}
+          onEditSkills={openSkillsSheet}
           onViewPhoto={cover ? () => openViewerAt(0) : undefined}
           // CHUNK N1 — the critique loop. focusCritique opens the mini-dock typing door when arrived via
           // the ✦ chip; onRevise runs the network (Capture owns it, threading `note` as rawNote context).
@@ -1247,6 +1257,9 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
             refs={cascade}
             onExpand={() => { setCritiqueOnOpen(false); setExpanded(true) }}
             onCritique={() => { setCritiqueOnOpen(true); setExpanded(true) }}
+            // CHUNK 16 ① — tappable skill pills; withheld mid-cascade / during the save morph (the card's
+            // chips are not controls then, mirroring onViewPhoto's gate).
+            onEditSkills={!saving && !cascadeActive ? openSkillsSheet : undefined}
             onViewPhoto={cover && !saving && !cascadeActive ? () => openViewerAt(0) : undefined}
             // CHUNK 12 ⑤: the 11.5 blend mask must not ride the morphing card (iOS re-raster hazard +
             // a corrupted landed thumb) — dropped for the whole save, restored at rest.
@@ -1643,6 +1656,16 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
           />
         )
       )}
+
+      {/* CHUNK 16 ① (N4) — the skills picker sheet. Opened by tapping a skill pill on the DevelopedCard
+          glimpse OR the NotesDoc footer; filtered to the selected curriculums; commit-on-close writes
+          `developed.skills` back so both surfaces re-render with the new pills immediately. */}
+      <SkillsSheet
+        open={skillsSheetOpen}
+        curriculums={saveCurriculums}
+        selected={developed?.skills ?? []}
+        onDone={commitSkills}
+      />
     </div>
   )
 }

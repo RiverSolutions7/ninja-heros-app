@@ -9,11 +9,16 @@
 // CHUNK 11 (River, 2026-07-11, ⑤): the monogram letter-tile is DEAD — removed from the custom-type
 // pill AND the add-form field preview; the `monogram` DB column is no longer written (it stays for
 // back-compat). Custom types now render exactly like defaults.
-// CHUNK 15 ① (River, 2026-07-13): chunk-12's always-visible ✕ discs are VETOED. The ✕s now live behind
-// an "Edit" TEXT toggle in the sheet's top-LEFT corner (mirrors "Done" top-right): tap Edit → ✕ discs
-// appear on custom types + deletable curriculums + the label becomes "Done editing"; tap again to hide.
-// Edit mode is sheet-session-local (reset on every open) and the "Edit" action is hidden entirely when
-// nothing is deletable. Pill/chip TAPS still select normally in edit mode — only the ✕ deletes.
+// CHUNK 15 ① (River, 2026-07-13): chunk-12's always-visible ✕ discs are VETOED. The ✕s live behind an
+// edit toggle; pill/chip TAPS still select normally in edit mode — only the ✕ deletes.
+// CHUNK 16 ② (River, 2026-07-13, resolves dev_note f17c46ed — his ✎ note called the top-left placement a
+// bug): the top-left "Edit" toggle is REMOVED. The edit affordance is now a bottom-center text door
+// **"✎ Edit list"** (footer-door pattern, Inter 600 ~12.5px #9fb0c8, 44px hit-slop, no container). The
+// "+ New type" / "+ Add" add-affordances move BEHIND the door too: the DEFAULT sheet is PURE PICKING —
+// type pills + curriculum chips + Done only. Edit-list mode reveals the ✕ delete discs AND the add
+// mini-forms; the door label flips to "Done editing" (brightens dim→white). Mode still resets on close.
+// The door always shows (add-forms always exist ⇒ there is always something to reveal — this supersedes
+// chunk 15's `hasDeletable` gate). aria-pressed announces the door state.
 // UNAUTHORED, screen-local (flagged in the chunk report): (a) custom-type pills — no frame shows one;
 // rendered as a plain text pill, identical to a default. (b) the "add age group" mini-form — no frame;
 // modeled on 8h. (c) the D2 spring-settle arrival motion — named in the ledger, no rig in
@@ -215,9 +220,9 @@ export default function TypeAgeSheet({ open, type, ages, onDone }: TypeAgeSheetP
   // confirm. null = no confirm up.
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null)
 
-  // CHUNK 15 ① (River, 2026-07-13: chunk-12's always-on ✕s VETOED): edit mode is off by default; the
-  // top-left "Edit" text action flips it on to reveal the ✕ delete discs. Sheet-session-local — reset
-  // to false on every (re)open below (closing the sheet forgets it).
+  // CHUNK 16 ② (River, 2026-07-13): edit mode is off by default; the bottom-center "✎ Edit list" door
+  // flips it on to reveal BOTH the ✕ delete discs AND the "+ New type" / "+ Add" mini-form doors.
+  // Sheet-session-local — reset to false on every (re)open below (closing the sheet forgets it).
   const [editMode, setEditMode] = useState(false)
 
   const scrimRef = useRef<HTMLDivElement | null>(null)
@@ -263,7 +268,7 @@ export default function TypeAgeSheet({ open, type, ages, onDone }: TypeAgeSheetP
     setNewTypeName('')
     setNewAgeName('')
     setPendingDelete(null)
-    setEditMode(false) // CHUNK 15 ① — edit mode is sheet-session-local: every open starts un-edited
+    setEditMode(false) // CHUNK 16 ② — edit mode is sheet-session-local: every open starts un-edited (pure picking)
     restoreFocus.current = (document.activeElement as HTMLElement) ?? null
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
@@ -652,40 +657,8 @@ function MainContent({
   onHandleMove: (e: React.PointerEvent) => void
   onHandleUp: (e: React.PointerEvent) => void
 }) {
-  // CHUNK 15 ① — the "Edit" toggle only exists when something can actually be deleted: any CUSTOM type
-  // (defaults are never deletable), OR any curriculum (curriculums carry no default marker — every chip
-  // is deletable, chunk 12 ② note). All-defaults / no-curriculum ⇒ no ✕ would ever render, so no toggle.
-  const hasDeletable = types.some((t) => !t.is_default) || ageOpts.length > 0
   return (
     <>
-      {/* CHUNK 15 ① — "Edit" toggle: text-only, top-LEFT (mirrors Done), Inter 600 16px, muted vs Done's
-          white; brightens to white + "Done editing" while active. Reveals/hides the ✕ delete discs.
-          Hidden entirely when nothing is deletable. aria-pressed announces the toggle state. */}
-      {hasDeletable && (
-        <button
-          type="button"
-          onClick={onToggleEdit}
-          aria-pressed={editMode}
-          aria-label={editMode ? 'Done editing' : 'Edit types and curriculums'}
-          style={{
-            position: 'absolute',
-            top: 16,
-            left: 24,
-            minHeight: 44,
-            padding: '0 4px',
-            border: 'none',
-            background: 'transparent',
-            cursor: 'pointer',
-            fontFamily: INTER,
-            fontWeight: 600,
-            fontSize: 16,
-            color: editMode ? 'rgb(255,255,255)' : 'rgb(159,176,200)',
-          }}
-        >
-          {editMode ? 'Done editing' : 'Edit'}
-        </button>
-      )}
-
       {/* Done (tpl416) — text-only, top-right, Inter 600 16px white */}
       <button
         type="button"
@@ -754,14 +727,16 @@ function MainContent({
           )
         })}
       </div>
-      {/* "+ New type" (tpl422) */}
-      <button
-        type="button"
-        onClick={onNewType}
-        style={{ alignSelf: 'flex-start', minHeight: 44, padding: '11px 4px', margin: '3px 0 0', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: INTER, fontWeight: 600, fontSize: 13, color: 'rgb(159,176,200)' }}
-      >
-        + New type
-      </button>
+      {/* "+ New type" (tpl422) — CHUNK 16 ②: revealed only in edit-list mode (default = pure picking). */}
+      {editMode && (
+        <button
+          type="button"
+          onClick={onNewType}
+          style={{ alignSelf: 'flex-start', minHeight: 44, padding: '11px 4px', margin: '3px 0 0', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: INTER, fontWeight: 600, fontSize: 13, color: 'rgb(159,176,200)' }}
+        >
+          + New type
+        </button>
+      )}
 
       {/* CURRICULUM (tpl423) — River's gate-B override of the frame's "Age groups": the section
           holds age bands AND whole curriculums. Data model unchanged (still the curriculums table). */}
@@ -806,18 +781,45 @@ function MainContent({
             </span>
           )
         })}
-        {/* "+ Add" (tpl429) */}
-        <button
-          type="button"
-          onClick={onNewAge}
-          aria-label="Add a curriculum"
-          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minHeight: 44, padding: '8px 10px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: INTER, fontWeight: 600, fontSize: 13, color: 'rgb(159,176,200)' }}
-        >
-          + Add
-        </button>
+        {/* "+ Add" (tpl429) — CHUNK 16 ②: revealed only in edit-list mode (default = pure picking). */}
+        {editMode && (
+          <button
+            type="button"
+            onClick={onNewAge}
+            aria-label="Add a curriculum"
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minHeight: 44, padding: '8px 10px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: INTER, fontWeight: 600, fontSize: 13, color: 'rgb(159,176,200)' }}
+          >
+            + Add
+          </button>
+        )}
       </div>
 
       <div style={{ flex: '1 1 0%' }} />
+
+      {/* CHUNK 16 ② — the "✎ Edit list" door: bottom-center, footer-door pattern (Inter 600 12.5px
+          #9fb0c8, 44px hit-slop, no container). Toggles edit-list mode: reveals the ✕ delete discs + the
+          "+ New type" / "+ Add" mini-form doors. Label flips to "Done editing" (brightens dim→white).
+          Always shown (add-forms always exist ⇒ always something to reveal). aria-pressed = the state. */}
+      <button
+        type="button"
+        onClick={onToggleEdit}
+        aria-pressed={editMode}
+        aria-label={editMode ? 'Done editing the list' : 'Edit the list — add or remove types and curriculums'}
+        style={{
+          alignSelf: 'center',
+          minHeight: 44,
+          padding: '0 12px',
+          border: 'none',
+          background: 'transparent',
+          cursor: 'pointer',
+          fontFamily: INTER,
+          fontWeight: 600,
+          fontSize: 12.5,
+          color: editMode ? 'rgb(255,255,255)' : 'rgb(159,176,200)',
+        }}
+      >
+        {editMode ? 'Done editing' : '✎ Edit list'}
+      </button>
     </>
   )
 }
