@@ -1031,8 +1031,14 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
                   key={s}
                   type="button"
                   onClick={onEditSkills}
+                  // Inert while ANY row/cues menu is open (mirrors StepRow's `disabled: menuActive`): the
+                  // footer already dims to 0.5 then, so a dimmed pill must not steal a tap or Tab focus.
+                  disabled={menuActive}
                   aria-label={`${s}. Edit skills`}
-                  style={{ display: 'inline-flex', alignItems: 'center', border: 'none', background: 'transparent', padding: '12px 0', margin: '-12px 0', cursor: 'pointer' }}
+                  // Hit-slop: 12px vertical → ≥44px tall; 2px horizontal (padding cancelled 1:1 by the
+                  // negative margin → the flex footprint + visible pill are unchanged, only the tap area
+                  // grows 2px into the 6px chip gap, clearing adjacent chips by 2px). Not a design value.
+                  style={{ display: 'inline-flex', alignItems: 'center', border: 'none', background: 'transparent', padding: '12px 2px', margin: '-12px -2px', cursor: menuActive ? 'default' : 'pointer' }}
                 >
                   {pill}
                 </button>

@@ -268,7 +268,10 @@ export default function DevelopedCard({ photoUrl, eyebrow, data, refs, onExpand,
                     type="button"
                     onClick={onEditSkills}
                     aria-label={`${s}. Edit skills`}
-                    style={{ display: 'inline-flex', alignItems: 'center', border: 'none', background: 'transparent', padding: '12px 0', margin: '-12px 0', cursor: 'pointer', pointerEvents: 'auto' }}
+                    // Hit-slop: 12px vertical → ≥44px tall; 2px horizontal (padding cancelled 1:1 by the
+                    // negative margin → the flex footprint + visible pill stay put, only the tap area grows
+                    // 2px into the 6px chip gap, clearing neighbors by 2px). Not a design value.
+                    style={{ display: 'inline-flex', alignItems: 'center', border: 'none', background: 'transparent', padding: '12px 2px', margin: '-12px -2px', cursor: 'pointer', pointerEvents: 'auto' }}
                   >
                     {pill}
                   </button>

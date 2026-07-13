@@ -272,8 +272,11 @@ export default function SkillsSheet({ open, curriculums, selected, onDone }: Ski
       // age_group = the first selected curriculum (grill). No curriculum selected → null (still usable).
       const { error } = await supabase.from('skills').insert({ name, age_group: curriculums[0] ?? null })
       if (error && error.code !== '23505') throw error
-    } catch {
-      // DB unreachable → keep the skill in-memory so the flow proceeds (won't persist; flagged).
+    } catch (e) {
+      // DB unreachable → keep the skill in-memory so the flow proceeds (lands on this card, but won't
+      // reach the shared skills table, so it won't show in other curriculum clouds later). Warn so a
+      // "missing skill" ghost is debuggable rather than silent (polish-audit chunk 16 warning 2).
+      console.warn('[SkillsSheet] skill insert failed — kept in-memory this session only', e)
     } finally {
       setBusy(false)
     }
@@ -441,8 +444,11 @@ function MainContent({
         {title}
       </div>
 
-      {/* chip cloud — scrolls if it overflows; empty result → just "+ New skill" (never a dead end) */}
-      <div role="group" aria-label="Skills" style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', overflowY: 'auto', overscrollBehavior: 'contain' }}>
+      {/* chip cloud — scrolls if it overflows; empty result → just "+ New skill" (never a dead end).
+          flex:'1 1 auto' + minHeight:0 makes the flex "min-content = 0" scroll behavior EXPLICIT (not
+          reliant on the implicit overflow exception) so a large curriculum's cloud reliably scrolls
+          inside the fixed 464 sheet on iOS/WebKit instead of spilling Done/"+ New skill" off-canvas. */}
+      <div role="group" aria-label="Skills" style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-start', alignContent: 'flex-start', flex: '1 1 auto', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
         {skillNames.map((name) => {
           const sel = workSkills.includes(name)
           // Curriculum-chip language (verbatim from TypeAgeSheet's age chips): selected = fill
@@ -486,8 +492,8 @@ function MainContent({
           + New skill
         </button>
       </div>
-
-      <div style={{ flex: '1 1 0%' }} />
+      {/* No trailing spacer: the chip cloud above is now `flex:1` and owns the remaining height (chips
+          pack top-left via alignContent:flex-start), so a spacer would only steal scroll space. */}
     </>
   )
 }
