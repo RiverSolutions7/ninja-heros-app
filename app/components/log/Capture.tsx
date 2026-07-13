@@ -806,7 +806,7 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
                 ...card.setup_steps.slice(1),
                 'Land softly in the pit',
               ],
-              cues: card.cues && card.cues.trim() ? card.cues : 'Spot every kid on the landing.',
+              cues: card.cues, // preserve the coach's cues verbatim (incl. null = deleted)
             }
         } else {
           const res = await fetch('/api/revise', {
@@ -822,7 +822,8 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
           result = {
             title: raw.title,
             setup_steps: raw.setup_steps.filter((s): s is string => typeof s === 'string'),
-            cues: typeof raw.cues === 'string' ? raw.cues : (card.cues ?? ''),
+            // null = the route preserved a DELETED callout (tri-state) — keep it null, don't coerce to ''.
+            cues: raw.cues === null ? null : typeof raw.cues === 'string' ? raw.cues : (card.cues ?? ''),
             skills: raw.skills.filter((s): s is string => typeof s === 'string'),
             equipment: Array.isArray(raw.equipment) ? raw.equipment.filter((s): s is string => typeof s === 'string') : [],
             duration_minutes: typeof raw.duration_minutes === 'number' ? raw.duration_minutes : null,

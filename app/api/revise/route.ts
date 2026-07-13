@@ -59,6 +59,9 @@ export async function POST(request: NextRequest) {
   // Normalize the incoming card so the model always sees a clean, predictable shape.
   const cleanList = (v: unknown): string[] =>
     Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string' && s.trim().length > 0).map((s) => s.trim()) : []
+  // cues null = the coach DELETED the callout (DevelopResult contract). Track it so a revise that
+  // doesn't touch cues doesn't RESURRECT a deleted callout (polish blocker 3).
+  const cuesWasDeleted = currentCard.cues === null
   const current = {
     title: typeof currentCard.title === 'string' ? currentCard.title.trim() : '',
     setup_steps: cleanList(currentCard.setup_steps),
@@ -115,20 +118,26 @@ Rules:
       duration_minutes?: number | null
     }
 
-    const duration =
+    const parsedDuration =
       typeof parsed.duration_minutes === 'number' && Number.isInteger(parsed.duration_minutes) && parsed.duration_minutes > 0
         ? parsed.duration_minutes
         : null
+    const parsedSkills = cleanList(parsed.skills).map((s) => s.toLowerCase())
+    const parsedEquip = cleanList(parsed.equipment).map((s) => s.toLowerCase())
+    const parsedCues = typeof parsed.cues === 'string' ? parsed.cues.trim() : null
 
+    // A revise must NEVER blank a field the coach didn't ask to clear (polish blocker 2). For every
+    // field, fall back to the CURRENT value when the model dropped/emptied it. skills/equipment can be
+    // legitimately cleared by an explicit critique, but the model omitting them (far more common) must
+    // not silently wipe them — the honest default is "keep what was there". cues keeps its tri-state:
+    // a non-empty model cue wins; else a deleted (null) callout stays deleted; else the current cue.
     const result: DevelopResult = {
-      // Fall back to the current value for any field the model dropped — a revise must never blank a
-      // field the coach didn't ask to clear.
       title: typeof parsed.title === 'string' && parsed.title.trim() ? parsed.title.trim() : current.title,
       setup_steps: cleanList(parsed.setup_steps),
-      cues: typeof parsed.cues === 'string' ? parsed.cues.trim() : current.cues,
-      skills: cleanList(parsed.skills).map((s) => s.toLowerCase()),
-      equipment: cleanList(parsed.equipment).map((s) => s.toLowerCase()),
-      duration_minutes: duration,
+      cues: parsedCues ? parsedCues : cuesWasDeleted ? null : current.cues,
+      skills: parsedSkills.length ? parsedSkills : current.skills,
+      equipment: parsedEquip.length ? parsedEquip : current.equipment,
+      duration_minutes: parsedDuration ?? current.duration_minutes,
     }
 
     return NextResponse.json(result)

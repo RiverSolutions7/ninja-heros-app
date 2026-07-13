@@ -189,7 +189,9 @@ export default function DevelopedCard({ photoUrl, eyebrow, data, refs, onExpand,
           </div>
           {/* "Review & edit ›" + "✦ Critique" row (chunk N1). The row is the cascade beat (refs.more);
               both buttons re-enable pointerEvents (the overlay above is pointerEvents:none). */}
-          <div ref={refs.more} style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 4, opacity: 0 }}>
+          {/* gap 14 with 6px horizontal hit-slop each: the two invisible tap-boxes clear by ~2px (no
+              overlap → no mis-tap; polish blocker 4). Vertical slop (16px) still gives ≥44px height. */}
+          <div ref={refs.more} style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 14, opacity: 0 }}>
             <button
               type="button"
               onClick={onExpand}
@@ -199,8 +201,8 @@ export default function DevelopedCard({ photoUrl, eyebrow, data, refs, onExpand,
                 background: 'transparent',
                 // Invisible hit-slop → ≥44px tap target: the negative margin cancels the padding so
                 // the visible 12px text keeps the frame's stack rhythm. Not a design value.
-                padding: '16px 10px',
-                margin: '-16px -10px',
+                padding: '16px 6px',
+                margin: '-16px -6px',
                 cursor: 'pointer',
                 pointerEvents: 'auto',
                 fontFamily: INTER,
@@ -226,8 +228,8 @@ export default function DevelopedCard({ photoUrl, eyebrow, data, refs, onExpand,
                   gap: 5,
                   border: 'none',
                   background: 'transparent',
-                  padding: '16px 10px',
-                  margin: '-16px -10px',
+                  padding: '16px 6px',
+                  margin: '-16px -6px',
                   cursor: 'pointer',
                   pointerEvents: 'auto',
                   fontFamily: INTER,

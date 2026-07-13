@@ -269,6 +269,7 @@ export default function MiniDock({
               onChange={(e) => { onCritiqueChange(e.target.value); autoGrow(e.currentTarget) }}
               onBlur={onCloseTyping}
               rows={1}
+              maxLength={1000}
               placeholder={COPY_LABEL}
               aria-label="Tell it what to change"
               style={{

@@ -49,7 +49,6 @@ const NUMERAL = 'rgb(91,107,134)'
 const CARET = 'rgb(42,107,219)'
 // CHUNK N1 — the warm revise-glow tint (grill: rgba(255,90,31,0.10)), fading to transparent over ~2s.
 const GLOW_TINT = 'rgba(255,90,31,0.10)'
-const GLOW_CLEAR = 'rgba(255,90,31,0)'
 const GLOW_MS = 2000
 
 /** The outcome of an /api/revise round-trip. Capture owns the network + returns this to NotesDoc. */
@@ -349,6 +348,7 @@ function StepRow({
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const optionsRef = useRef<HTMLButtonElement | null>(null)
   const rowRef = useRef<HTMLDivElement | null>(null)
+  const glowRef = useRef<HTMLDivElement | null>(null)
   // Compose the dnd-kit node ref with a local ref so the glow effect can drive the same element.
   const setRow = useCallback((el: HTMLDivElement | null) => { setNodeRef(el); rowRef.current = el }, [setNodeRef])
 
@@ -364,23 +364,25 @@ function StepRow({
   }, [editing])
 
   // CHUNK N1 — the revise glow: the row resolves in with the develop-cascade's settle language and a
-  // warm tint that fades ~2s. Reduced motion = a plain tint fade (no settle). WAAPI so it survives
-  // re-renders; keyed on glowKey so each revise re-fires.
+  // warm tint that fades ~2s. COMPOSITOR-SAFE (polish blocker 1): the row animates opacity+transform
+  // only; the warm tint is a separate absolutely-positioned overlay that fades its OPACITY 1→0 (never an
+  // animated background/backgroundColor). Reduced motion = the tint fade only (no settle). WAAPI so it
+  // survives re-renders; keyed on glowKey so each revise re-fires.
   useEffect(() => {
-    if (!glow || !rowRef.current) return
-    const el = rowRef.current
-    if (prefersReduced()) {
-      el.animate([{ backgroundColor: GLOW_TINT }, { backgroundColor: GLOW_CLEAR }], { duration: 1200, easing: 'ease', fill: 'both' })
-      return
+    if (!glow) return
+    const reduced = prefersReduced()
+    if (glowRef.current) {
+      glowRef.current.animate([{ opacity: 1 }, { opacity: 1, offset: 0.25 }, { opacity: 0 }], { duration: GLOW_MS, easing: 'ease', fill: 'both' })
     }
-    el.animate(
-      [
-        { opacity: 0.5, transform: 'translateY(6px)', backgroundColor: GLOW_TINT },
-        { opacity: 1, transform: 'translateY(0px)', backgroundColor: GLOW_TINT, offset: 0.32 },
-        { opacity: 1, transform: 'translateY(0px)', backgroundColor: GLOW_CLEAR },
-      ],
-      { duration: GLOW_MS, easing: 'cubic-bezier(0.22,0.61,0.36,1)', fill: 'both' },
-    )
+    if (rowRef.current && !reduced) {
+      rowRef.current.animate(
+        [
+          { opacity: 0.5, transform: 'translateY(6px)' },
+          { opacity: 1, transform: 'translateY(0px)' },
+        ],
+        { duration: 520, easing: 'cubic-bezier(0.22,0.61,0.36,1)', fill: 'both' },
+      )
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [glow, glowKey])
 
@@ -408,13 +410,10 @@ function StepRow({
         opacity: dimmed ? 0.5 : 1,
         zIndex: isDragging ? 40 : menuOpen ? 20 : 1,
         boxShadow: isDragging ? 'rgba(0,0,0,0.55) 0px 14px 30px' : 'none',
-        // The glow's warm tint rides a WAAPI backgroundColor animation (see the glow effect) — the row's
-        // resting background stays transparent (drag override kept). A soft radius so the tint reads as a
-        // band, and horizontal padding pulled back by negative margin so the grid columns don't shift.
+        // The revise glow's warm tint is a separate opacity-faded OVERLAY (see the glow effect + the
+        // glowRef div below) — the row's own background never animates (compositor-safe).
         background: isDragging ? 'rgb(17,26,48)' : 'transparent',
-        borderRadius: isDragging ? 10 : glow ? 8 : 0,
-        padding: glow ? '2px 8px' : 0,
-        margin: glow ? '-2px -8px' : 0,
+        borderRadius: isDragging ? 10 : 0,
         // Only lock touch-action once the reorder is actually active — at rest the row must let the doc
         // scroll (item ⑥). TouchSensor's long-press owns the reorder gesture; preventDefault stops any
         // residual scroll during the drag.
@@ -432,6 +431,16 @@ function StepRow({
       {...attributes}
       {...(editing || menuActive ? {} : listeners)}
     >
+      {/* revise-glow tint — opacity-faded overlay (compositor-safe; never an animated background). The
+          row is a stacking context (position:relative + zIndex), so zIndex:-1 sits the tint behind the
+          numeral/text/⋯ but inside the row box. */}
+      {glow && (
+        <div
+          ref={glowRef}
+          aria-hidden="true"
+          style={{ position: 'absolute', top: -2, bottom: -2, left: -8, right: -8, borderRadius: 8, background: GLOW_TINT, opacity: 0, pointerEvents: 'none', zIndex: -1 }}
+        />
+      )}
       <span aria-hidden="true" style={{ fontWeight: 200, fontSize: 22, lineHeight: 1, color: NUMERAL }}>{index + 1}</span>
 
       {editing ? (
@@ -575,6 +584,7 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
   const cuesInputRef = useRef<HTMLTextAreaElement | null>(null)
   const cuesOptionsRef = useRef<HTMLButtonElement | null>(null)
   const cuesRowRef = useRef<HTMLDivElement | null>(null)
+  const cuesGlowRef = useRef<HTMLDivElement | null>(null)
 
   const emit = useCallback(
     (nextItems: StepItem[], nextCues: string | null) => {
@@ -684,26 +694,23 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
   // Cleanup the glow-clear timer on unmount.
   useEffect(() => () => { if (glowClearRef.current) window.clearTimeout(glowClearRef.current) }, [])
 
-  // Cues glow — same resolve-in + tint fade as a step row. The callout has a SOLID navy bg (rgb(20,28,50)),
-  // so (unlike the transparent step rows) the tint is pre-blended over navy: GLOW_TINT (0.10 accent) over
-  // navy ≈ rgb(44,34,48), fading back to the callout's own navy — keeps it opaque, reads as a warm pulse.
+  // Cues glow — same compositor-safe treatment (polish blocker 1): an opacity-faded tint overlay inside
+  // the callout (never an animated background), plus the callout's own opacity/transform resolve.
   useEffect(() => {
-    if (!glowCues || !cuesRowRef.current) return
-    const el = cuesRowRef.current
-    const on = 'rgb(44,34,48)'
-    const off = 'rgb(20,28,50)'
-    if (prefersReduced()) {
-      el.animate([{ backgroundColor: on }, { backgroundColor: off }], { duration: 1200, easing: 'ease', fill: 'both' })
-      return
+    if (!glowCues) return
+    const reduced = prefersReduced()
+    if (cuesGlowRef.current) {
+      cuesGlowRef.current.animate([{ opacity: 1 }, { opacity: 1, offset: 0.25 }, { opacity: 0 }], { duration: GLOW_MS, easing: 'ease', fill: 'both' })
     }
-    el.animate(
-      [
-        { opacity: 0.5, transform: 'translateY(6px)', backgroundColor: on },
-        { opacity: 1, transform: 'translateY(0px)', backgroundColor: on, offset: 0.32 },
-        { opacity: 1, transform: 'translateY(0px)', backgroundColor: off },
-      ],
-      { duration: GLOW_MS, easing: 'cubic-bezier(0.22,0.61,0.36,1)', fill: 'both' },
-    )
+    if (cuesRowRef.current && !reduced) {
+      cuesRowRef.current.animate(
+        [
+          { opacity: 0.5, transform: 'translateY(6px)' },
+          { opacity: 1, transform: 'translateY(0px)' },
+        ],
+        { duration: 520, easing: 'cubic-bezier(0.22,0.61,0.36,1)', fill: 'both' },
+      )
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [glowCues, glowKey])
 
@@ -916,7 +923,12 @@ export default function NotesDoc({ photoUrl, eyebrow, data, onChange, onBack, on
             ⋯ → anchored menu (single red "Delete"); deleted (null) = the callout is GONE. The invoked
             callout stays bright while its own menu is open (only a STEP menu dims it). */}
         {(cues !== null || editingCues) && (
-        <div ref={cuesRowRef} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '16px 18px', borderRadius: 14, background: 'rgb(20,28,50)', border: '1px solid rgb(42,52,80)', opacity: menuId !== null ? 0.5 : 1, transition: 'opacity 150ms ease', pointerEvents: menuId !== null ? 'none' : undefined }}>
+        <div ref={cuesRowRef} style={{ position: 'relative', zIndex: 0, display: 'flex', flexDirection: 'column', gap: 6, padding: '16px 18px', borderRadius: 14, background: 'rgb(20,28,50)', border: '1px solid rgb(42,52,80)', opacity: menuId !== null ? 0.5 : 1, transition: 'opacity 150ms ease', pointerEvents: menuId !== null ? 'none' : undefined }}>
+          {/* revise-glow tint — opacity-faded overlay behind the callout content (zIndex:-1, inside the
+              callout's own stacking context so it sits above the navy bg, below the text). */}
+          {glowCues && (
+            <div ref={cuesGlowRef} aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: 14, background: GLOW_TINT, opacity: 0, pointerEvents: 'none', zIndex: -1 }} />
+          )}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div role="heading" aria-level={2} style={{ fontFamily: INTER, fontWeight: 700, fontSize: 10, letterSpacing: '1.8px', textTransform: 'uppercase', color: 'rgb(255,171,125)' }}>Coach&rsquo;s cues</div>
             <button

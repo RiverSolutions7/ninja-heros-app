@@ -90,6 +90,7 @@ export default function UndoLozenge({ text, actionLabel = 'Undo', onAction, onEx
             onClick={onAction}
             className="transition-transform active:scale-[0.94]"
             style={{
+              position: 'relative',
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -106,6 +107,8 @@ export default function UndoLozenge({ text, actionLabel = 'Undo', onAction, onEx
               color: 'rgb(255,122,47)',
             }}
           >
+            {/* invisible hit-slop → ≥44px tap height without growing the compact 32px visible pill. */}
+            <span aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, top: '50%', transform: 'translateY(-50%)', height: 44 }} />
             {actionLabel}
           </button>
         )}
