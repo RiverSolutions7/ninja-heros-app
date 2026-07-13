@@ -9,6 +9,11 @@
 // CHUNK 11 (River, 2026-07-11, ⑤): the monogram letter-tile is DEAD — removed from the custom-type
 // pill AND the add-form field preview; the `monogram` DB column is no longer written (it stays for
 // back-compat). Custom types now render exactly like defaults.
+// CHUNK 15 ① (River, 2026-07-13): chunk-12's always-visible ✕ discs are VETOED. The ✕s now live behind
+// an "Edit" TEXT toggle in the sheet's top-LEFT corner (mirrors "Done" top-right): tap Edit → ✕ discs
+// appear on custom types + deletable curriculums + the label becomes "Done editing"; tap again to hide.
+// Edit mode is sheet-session-local (reset on every open) and the "Edit" action is hidden entirely when
+// nothing is deletable. Pill/chip TAPS still select normally in edit mode — only the ✕ deletes.
 // UNAUTHORED, screen-local (flagged in the chunk report): (a) custom-type pills — no frame shows one;
 // rendered as a plain text pill, identical to a default. (b) the "add age group" mini-form — no frame;
 // modeled on 8h. (c) the D2 spring-settle arrival motion — named in the ledger, no rig in
@@ -210,6 +215,11 @@ export default function TypeAgeSheet({ open, type, ages, onDone }: TypeAgeSheetP
   // confirm. null = no confirm up.
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null)
 
+  // CHUNK 15 ① (River, 2026-07-13: chunk-12's always-on ✕s VETOED): edit mode is off by default; the
+  // top-left "Edit" text action flips it on to reveal the ✕ delete discs. Sheet-session-local — reset
+  // to false on every (re)open below (closing the sheet forgets it).
+  const [editMode, setEditMode] = useState(false)
+
   const scrimRef = useRef<HTMLDivElement | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
   const dialogRef = useRef<HTMLDivElement | null>(null)
@@ -253,6 +263,7 @@ export default function TypeAgeSheet({ open, type, ages, onDone }: TypeAgeSheetP
     setNewTypeName('')
     setNewAgeName('')
     setPendingDelete(null)
+    setEditMode(false) // CHUNK 15 ① — edit mode is sheet-session-local: every open starts un-edited
     restoreFocus.current = (document.activeElement as HTMLElement) ?? null
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
@@ -508,6 +519,8 @@ export default function TypeAgeSheet({ open, type, ages, onDone }: TypeAgeSheetP
             ageOpts={ageOpts}
             workType={workType}
             workAges={workAges}
+            editMode={editMode}
+            onToggleEdit={() => setEditMode((v) => !v)}
             onPickType={setWorkType}
             onToggleAge={toggleAge}
             onNewType={() => setMode('addType')}
@@ -609,6 +622,8 @@ function MainContent({
   ageOpts,
   workType,
   workAges,
+  editMode,
+  onToggleEdit,
   onPickType,
   onToggleAge,
   onNewType,
@@ -624,6 +639,8 @@ function MainContent({
   ageOpts: AgeOption[]
   workType: string
   workAges: string[]
+  editMode: boolean
+  onToggleEdit: () => void
   onPickType: (name: string) => void
   onToggleAge: (ag: string) => void
   onNewType: () => void
@@ -635,8 +652,40 @@ function MainContent({
   onHandleMove: (e: React.PointerEvent) => void
   onHandleUp: (e: React.PointerEvent) => void
 }) {
+  // CHUNK 15 ① — the "Edit" toggle only exists when something can actually be deleted: any CUSTOM type
+  // (defaults are never deletable), OR any curriculum (curriculums carry no default marker — every chip
+  // is deletable, chunk 12 ② note). All-defaults / no-curriculum ⇒ no ✕ would ever render, so no toggle.
+  const hasDeletable = types.some((t) => !t.is_default) || ageOpts.length > 0
   return (
     <>
+      {/* CHUNK 15 ① — "Edit" toggle: text-only, top-LEFT (mirrors Done), Inter 600 16px, muted vs Done's
+          white; brightens to white + "Done editing" while active. Reveals/hides the ✕ delete discs.
+          Hidden entirely when nothing is deletable. aria-pressed announces the toggle state. */}
+      {hasDeletable && (
+        <button
+          type="button"
+          onClick={onToggleEdit}
+          aria-pressed={editMode}
+          aria-label={editMode ? 'Done editing' : 'Edit types and curriculums'}
+          style={{
+            position: 'absolute',
+            top: 16,
+            left: 24,
+            minHeight: 44,
+            padding: '0 4px',
+            border: 'none',
+            background: 'transparent',
+            cursor: 'pointer',
+            fontFamily: INTER,
+            fontWeight: 600,
+            fontSize: 16,
+            color: editMode ? 'rgb(255,255,255)' : 'rgb(159,176,200)',
+          }}
+        >
+          {editMode ? 'Done editing' : 'Edit'}
+        </button>
+      )}
+
       {/* Done (tpl416) — text-only, top-right, Inter 600 16px white */}
       <button
         type="button"
@@ -671,7 +720,8 @@ function MainContent({
           // River (2026-07-11, chunk 11 ⑤): custom types render as TEXT-ONLY pills, exactly like
           // defaults — the monogram letter-tile is gone from the pill row.
           // CHUNK 12 ②: custom (is_default=false) pills carry the corner ✕ delete disc; defaults NEVER
-          // show it. The wrapper span only hosts the absolutely-positioned disc — zero layout delta.
+          // show it. CHUNK 15 ①: the disc only renders in edit mode. The wrapper span only hosts the
+          // absolutely-positioned disc — zero layout delta whether or not the disc is shown.
           return (
             <span key={t.name} style={{ position: 'relative', display: 'inline-flex' }}>
               <button
@@ -699,7 +749,7 @@ function MainContent({
               >
                 {displayType(t.name)}
               </button>
-              {!t.is_default && <DeleteDisc label={`Delete the ${displayType(t.name)} type`} onTap={() => onDeleteType(t.name)} />}
+              {editMode && !t.is_default && <DeleteDisc label={`Delete the ${displayType(t.name)} type`} onTap={() => onDeleteType(t.name)} />}
             </span>
           )
         })}
@@ -752,7 +802,7 @@ function MainContent({
               >
                 {a.label}
               </button>
-              <DeleteDisc label={`Delete the ${a.label} curriculum`} onTap={() => onDeleteAge(a.age_group, a.label)} />
+              {editMode && <DeleteDisc label={`Delete the ${a.label} curriculum`} onTap={() => onDeleteAge(a.age_group, a.label)} />}
             </span>
           )
         })}

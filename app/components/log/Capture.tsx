@@ -1120,7 +1120,8 @@ export default function Capture({ photos, note, onNoteChange, onAddPhotos, onBac
         fontFamily: 'var(--font-inter), system-ui, sans-serif',
       }}
     >
-      <input ref={fileRef} type="file" accept="image/*,video/*" multiple onChange={handleFiles} style={{ display: 'none' }} />
+      {/* CHUNK 15 ② — images only: the new flow can't process a picked video (it saves a broken card). Video returns with the Import feature. */}
+      <input ref={fileRef} type="file" accept="image/*" multiple onChange={handleFiles} style={{ display: 'none' }} />
 
       {showNotes && (
         <NotesDoc

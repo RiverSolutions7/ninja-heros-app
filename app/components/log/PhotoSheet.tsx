@@ -474,7 +474,8 @@ export default function PhotoSheet({ open, photos, onClose, onReorder, onRemove,
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 200, fontFamily: 'var(--font-inter), system-ui, sans-serif' }}>
-      <input ref={fileRef} type="file" accept="image/*,video/*" multiple onChange={handleFiles} style={{ display: 'none' }} />
+      {/* CHUNK 15 ② — images only: the new flow can't process a picked video (it saves a broken card). Video returns with the Import feature. */}
+      <input ref={fileRef} type="file" accept="image/*" multiple onChange={handleFiles} style={{ display: 'none' }} />
 
       {/* scrim (tpl480) — plain rgba, tap to close */}
       <div ref={scrimRef} onClick={onClose} aria-hidden="true" style={{ position: 'absolute', inset: 0, background: 'rgba(4,7,16,0.62)' }} />
