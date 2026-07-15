@@ -1,0 +1,102 @@
+[
+  {
+    "label": "8a Photo-loaded",
+    "file": "frames/8a-photo-loaded.html",
+    "bytes": 5613
+  },
+  {
+    "label": "8a-w Sort whisper",
+    "file": "frames/8a-w-sort-whisper.html",
+    "bytes": 6510
+  },
+  {
+    "label": "8b Empty",
+    "file": "frames/8b-empty.html",
+    "bytes": 5728
+  },
+  {
+    "label": "8c Recording",
+    "file": "frames/8c-recording.html",
+    "bytes": 14073
+  },
+  {
+    "label": "8d Develop reveal",
+    "file": "frames/8d-develop-reveal.html",
+    "bytes": 10770
+  },
+  {
+    "label": "8e Notes expanded",
+    "file": "frames/8e-notes-expanded.html",
+    "bytes": 8648
+  },
+  {
+    "label": "8e-edit Notes editing",
+    "file": "frames/8e-edit-notes-editing.html",
+    "bytes": 10131
+  },
+  {
+    "label": "8f Saved celebration",
+    "file": "frames/8f-saved-celebration.html",
+    "bytes": 3943
+  },
+  {
+    "label": "8g Type-age sheet",
+    "file": "frames/8g-type-age-sheet.html",
+    "bytes": 6652
+  },
+  {
+    "label": "8h Add type form",
+    "file": "frames/8h-add-type-form.html",
+    "bytes": 5228
+  },
+  {
+    "label": "8i Photo manage sheet",
+    "file": "frames/8i-photo-manage-sheet.html",
+    "bytes": 8939
+  },
+  {
+    "label": "8j Sort into stations",
+    "file": "frames/8j-sort-into-stations.html",
+    "bytes": 7122
+  },
+  {
+    "label": "13a-1 Station 1 active",
+    "file": "frames/13a-1-station-1-active.html",
+    "bytes": 6730
+  },
+  {
+    "label": "13a-2 Station 2 active",
+    "file": "frames/13a-2-station-2-active.html",
+    "bytes": 6611
+  },
+  {
+    "label": "13b Plural celebrate",
+    "file": "frames/13b-plural-celebrate.html",
+    "bytes": 4843
+  },
+  {
+    "label": "13c Developed card mid-run",
+    "file": "frames/13c-developed-card-mid-run.html",
+    "bytes": 7992
+  },
+  {
+    "label": "15a Mic denied",
+    "file": "frames/15a-mic-denied.html",
+    "bytes": 5987
+  },
+  {
+    "label": "15b No speech heard",
+    "file": "frames/15b-no-speech-heard.html",
+    "bytes": 6419
+  },
+  {
+    "label": "15c AI couldn&#39;t parse",
+    "file": "frames/15c-ai-couldn-39-t-parse.html",
+    "bytes": 4968
+  },
+  {
+    "label": "15d Offline",
+    "file": "frames/15d-offline.html",
+    "bytes": 8811
+  }
+]

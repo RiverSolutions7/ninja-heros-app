@@ -100,7 +100,7 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
             {/* CTAs */}
             <div className="w-full max-w-sm space-y-3 text-center">
               <Link
-                href="/library/log-component"
+                href="/log"
                 className="block w-full bg-accent-fire text-white font-heading text-base px-4 py-3.5 rounded-xl active:scale-95 transition-all shadow-glow-fire text-center min-h-[52px]"
               >
                 Log Your First Component
